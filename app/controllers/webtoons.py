@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import copy
+import os
+import tempfile
 from typing import TYPE_CHECKING
 from dataclasses import dataclass
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSettings, QTimer
+import numpy as np
+import cv2
+import imkit as imk
+from PySide6 import QtGui
 
 
 if TYPE_CHECKING:
@@ -19,11 +26,22 @@ class LazyLoadingConfig:
 
 class WebtoonController:
     """Webtoon controller with lazy loading support."""
-    
+
+    # Above this strip height (px) we stop stitching everything into a single
+    # image and instead split into contiguous page-height chunks so we never
+    # blow up memory or hit image/viewer dimension limits.
+    MAX_STRIP_H = 24000
+    CHUNK_H = 6000
+
     def __init__(self, main: ComicTranslate):
         self.main = main
         self._initialization_complete = False  # Track initialization state
-        
+
+        # Stitched-webtoon (single-image) mode bookkeeping
+        self._stitch_temp: str | None = None
+        self._webtoon_source_files: list[str] | None = None
+        self._webtoon_source_states: dict | None = None
+
         # Load lazy loading configuration
         config = LazyLoadingConfig()
         self.lazy_config = config
@@ -241,26 +259,232 @@ class WebtoonController:
         self._initialization_complete = True
 
     def toggle_webtoon_mode(self):
-        """Toggle between regular image viewer and webtoon mode."""
+        """Toggle between regular image viewer and webtoon mode.
+
+        When the "stitch webtoon into a single image" setting is enabled,
+        webtoon mode stitches all loaded pages into one (or a few) tall
+        image(s) and processes them through the regular single-image
+        pipeline instead of the lazy continuous-scene webtoon manager. This
+        reuses the working detect/OCR/translate/render code paths and avoids
+        the fragile viewport-fragment webtoon logic.
+        """
         requested_mode = self.main.webtoon_toggle.isChecked()
-        
-        # Don't do anything if we're already in the requested mode
-        if self.main.webtoon_mode == requested_mode:
+        current_mode = bool(
+            getattr(self.main, "webtoon_mode", False)
+            or getattr(self.main, "webtoon_strip", False)
+        )
+        if current_mode == requested_mode:
             return
-            
+
         if requested_mode:
-            # Switch to webtoon mode
-            success = self.switch_to_webtoon_mode()
+            if self._stitch_enabled():
+                success = self._switch_to_stitched_webtoon_mode()
+                if success:
+                    self.main.webtoon_mode = False
+                    self.main.webtoon_strip = True
+            else:
+                success = self.switch_to_webtoon_mode()
+                if success:
+                    self.main.webtoon_mode = True
+                    self.main.webtoon_strip = False
             if success:
-                self.main.webtoon_mode = True
                 self.main.mark_project_dirty()
             else:
-                # Failed to switch, revert toggle
                 self.main.webtoon_toggle.blockSignals(True)
                 self.main.webtoon_toggle.setChecked(False)
                 self.main.webtoon_toggle.blockSignals(False)
         else:
-            # Switch back to regular mode
-            self.main.webtoon_mode = False
-            self.switch_to_regular_mode()
+            if getattr(self.main, "webtoon_strip", False):
+                self._switch_from_stitched_to_regular()
+            else:
+                self.switch_to_regular_mode()
+            self.main.webtoon_strip = False
             self.main.mark_project_dirty()
+
+    # ------------------------------------------------------------------
+    # Stitched (single-image) webtoon mode
+    # ------------------------------------------------------------------
+    def _stitch_enabled(self) -> bool:
+        try:
+            return bool(
+                QSettings("ComicLabs", "ComicTranslate").value(
+                    "webtoon_stitch_mode", True, type=bool
+                )
+            )
+        except Exception:
+            return True
+
+    def _stitch_temp_dir(self) -> str:
+        if self._stitch_temp is None:
+            self._stitch_temp = tempfile.mkdtemp(prefix="ct_webtoon_stitch_")
+        return self._stitch_temp
+
+    @staticmethod
+    def _normalize_channels(arr: np.ndarray) -> np.ndarray:
+        if arr.ndim == 2:
+            arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+        elif arr.ndim == 3 and arr.shape[2] == 4:
+            arr = arr[:, :, :3].copy()
+        return arr
+
+    def _switch_to_stitched_webtoon_mode(self) -> bool:
+        """Stitch all loaded pages into one tall image and load it as a
+        regular page so the normal pipeline processes the whole webtoon."""
+        if not self.image_files:
+            print("No images loaded, cannot switch to stitched webtoon mode")
+            return False
+
+        # Preserve the original (per-page) project so we can switch back.
+        self._webtoon_source_files = list(self.image_files)
+        self._webtoon_source_states = {
+            k: copy.deepcopy(v) for k, v in self.main.image_states.items()
+        }
+
+        # Read every page and stitch them vertically into one tall image.
+        pages = []
+        target_w = None
+        for fp in self._webtoon_source_files:
+            arr = self.main.image_ctrl.load_image(fp)
+            if arr is None:
+                continue
+            arr = self._normalize_channels(arr)
+            if target_w is None:
+                target_w = arr.shape[1]
+            elif arr.shape[1] != target_w:
+                # Keep a consistent width so the pages tile cleanly.
+                h = int(round(arr.shape[0] * target_w / arr.shape[1]))
+                arr = cv2.resize(arr, (target_w, h), interpolation=cv2.INTER_AREA)
+            pages.append(arr)
+        if not pages:
+            return False
+
+        stitched = np.concatenate(pages, axis=0)
+
+        # Safety valve: a single image taller than MAX_STRIP_H is split into
+        # contiguous page-height chunks so we never blow up memory / export.
+        paths: list[str] = []
+        if stitched.shape[0] > self.MAX_STRIP_H:
+            step = self.CHUNK_H
+            idx = 0
+            i = 0
+            while i < stitched.shape[0]:
+                j = min(i + step, stitched.shape[0])
+                chunk = stitched[i:j]
+                p = os.path.join(self._stitch_temp_dir(), f"webtoon_chunk_{idx:04d}.png")
+                imk.write_image(p, chunk)
+                paths.append(p)
+                idx += 1
+                i = j
+        else:
+            p = os.path.join(self._stitch_temp_dir(), "webtoon_stitched.png")
+            imk.write_image(p, stitched)
+            paths = [p]
+
+        # Load the stitched image(s) as regular page(s). webtoon_mode stays
+        # False so the battle-tested single-image pipeline (detect/OCR/
+        # translate/render, manual/semi-auto/retouch, export) is used unchanged.
+        # Note: image_viewer.webtoon_mode is a read-only proxy of
+        # webtoon_manager.is_active(); since we never activate the manager in
+        # this mode it already reports False.
+        self.main.webtoon_mode = False
+        self._init_stitched_files(paths)
+        return True
+
+    def _init_stitched_files(self, paths: list[str]):
+        """Replace the loaded project with the stitched image(s) as regular
+        page(s), rebuilding all per-image bookkeeping from scratch."""
+        self.main.image_files = list(paths)
+        self.main.image_states.clear()
+        self.main.image_data.clear()
+        self.main.image_history.clear()
+        self.main.in_memory_history.clear()
+        self.main.current_history_index.clear()
+        self.main.undo_stacks.clear()
+        self.main.undo_group = QtGui.QUndoGroup(self.main)
+        self.main.image_patches.clear()
+        self.main.in_memory_patches.clear()
+        self.main.displayed_images.clear()
+        self.main.loaded_images = []
+        self.main.curr_img_idx = -1
+        self.main.blk_list = []
+        self.main.image_viewer.clear_scene()
+        self.main.image_viewer.clear_rectangles(page_switch=True)
+        self.main.image_viewer.clear_brush_strokes(page_switch=True)
+        self.main.image_viewer.clear_text_items()
+
+        for fp in paths:
+            arr = self.main.image_ctrl.load_image(fp)
+            self.main.image_data[fp] = arr
+            self.main.image_history[fp] = [fp]
+            self.main.in_memory_history[fp] = [arr.copy()] if arr is not None else []
+            self.main.current_history_index[fp] = 0
+            self.main.image_states[fp] = self.main.image_ctrl._build_image_state(
+                fp, {}, [], [], False
+            )
+            stack = QtGui.QUndoStack(self.main)
+            stack.cleanChanged.connect(self.main._update_window_modified)
+            stack.indexChanged.connect(self.main._bump_dirty_revision)
+            self.main.undo_stacks[fp] = stack
+            self.main.undo_group.addStack(stack)
+
+        self.main.page_list.blockSignals(True)
+        self.main.image_ctrl.refresh_page_list()
+        self.main.page_list.blockSignals(False)
+        self.main.page_list.setCurrentRow(0)
+        self.main.image_viewer.resetTransform()
+        self.main.image_viewer.fitInView()
+        self.main.mark_project_dirty()
+        if self.main.image_files:
+            self.main.image_ctrl.display_image(0, switch_page=True)
+
+    def _switch_from_stitched_to_regular(self):
+        """Restore the original per-page project that was preserved when we
+        entered stitched webtoon mode."""
+        src_files = getattr(self, "_webtoon_source_files", None)
+        src_states = getattr(self, "_webtoon_source_states", None)
+        if not src_files or src_states is None:
+            self.main.image_ctrl.clear_state()
+            return
+
+        self.main.webtoon_mode = False
+        self.main.image_files = list(src_files)
+        self.main.image_states = {k: copy.deepcopy(v) for k, v in src_states.items()}
+
+        self.main.image_data.clear()
+        self.main.image_history.clear()
+        self.main.in_memory_history.clear()
+        self.main.current_history_index.clear()
+        self.main.undo_stacks.clear()
+        self.main.undo_group = QtGui.QUndoGroup(self.main)
+        self.main.image_patches.clear()
+        self.main.in_memory_patches.clear()
+        self.main.displayed_images.clear()
+        self.main.loaded_images = []
+        self.main.curr_img_idx = -1
+        self.main.blk_list = []
+        self.main.image_viewer.clear_scene()
+        self.main.image_viewer.clear_rectangles(page_switch=True)
+        self.main.image_viewer.clear_brush_strokes(page_switch=True)
+        self.main.image_viewer.clear_text_items()
+
+        for fp in self.main.image_files:
+            arr = self.main.image_ctrl.load_image(fp)
+            self.main.image_data[fp] = arr
+            self.main.image_history[fp] = [fp]
+            self.main.in_memory_history[fp] = [arr.copy()] if arr is not None else []
+            self.main.current_history_index[fp] = 0
+            stack = QtGui.QUndoStack(self.main)
+            stack.cleanChanged.connect(self.main._update_window_modified)
+            stack.indexChanged.connect(self.main._bump_dirty_revision)
+            self.main.undo_stacks[fp] = stack
+            self.main.undo_group.addStack(stack)
+
+        self.main.page_list.blockSignals(True)
+        self.main.image_ctrl.refresh_page_list()
+        self.main.page_list.blockSignals(False)
+        self.main.page_list.setCurrentRow(0)
+        self.main.image_viewer.resetTransform()
+        self.main.image_viewer.fitInView()
+        self.main.mark_project_dirty()
+        if self.main.image_files:
+            self.main.image_ctrl.display_image(0, switch_page=True)

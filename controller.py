@@ -291,6 +291,7 @@ class ComicTranslate(ComicTranslateUI):
         if self.webtoon_mode:
             self.webtoon_toggle.setChecked(False)
         self.webtoon_mode = False
+        self.webtoon_strip = False
 
     # Home screen helper methods
 
