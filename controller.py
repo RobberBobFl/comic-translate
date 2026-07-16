@@ -110,6 +110,7 @@ class ComicTranslate(ComicTranslateUI):
         self.current_worker = None
         self._batch_active = False
         self._batch_cancel_requested = False
+        self.semi_auto_mode = False
 
         self.image_ctrl = ImageStateController(self)
         self.rect_item_ctrl = RectItemController(self)
@@ -178,6 +179,7 @@ class ComicTranslate(ComicTranslateUI):
        
         self.manual_radio.clicked.connect(self.manual_mode_selected)
         self.automatic_radio.clicked.connect(self.batch_mode_selected)
+        self.semi_auto_radio.clicked.connect(self.semi_auto_mode_selected)
         
         # Webtoon mode toggle
         self.webtoon_toggle.clicked.connect(self.webtoon_ctrl.toggle_webtoon_mode)
@@ -313,6 +315,10 @@ class ComicTranslate(ComicTranslateUI):
     def render_settings(self): return self.text_ctrl.render_settings()
     def load_image(self, file_path: str) -> np.ndarray: return self.image_ctrl.load_image(file_path)
     def get_selected_page_paths(self) -> list[str]:
+        if getattr(self, "semi_auto_mode", False):
+            # In semi-automatic mode every manual step runs across all pages,
+            # so the per-page multiselect in the page list is irrelevant.
+            return list(self.image_files)
         selected_paths: list[str] = []
         seen: set[str] = set()
         for item in self.page_list.selectedItems():
@@ -471,11 +477,19 @@ class ComicTranslate(ComicTranslateUI):
                 stack.endMacro()
 
     def batch_mode_selected(self):
+        self.semi_auto_mode = False
         self.disable_hbutton_group()
         self.translate_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
 
     def manual_mode_selected(self):
+        self.semi_auto_mode = False
+        self.enable_hbutton_group()
+        self.translate_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+
+    def semi_auto_mode_selected(self):
+        self.semi_auto_mode = True
         self.enable_hbutton_group()
         self.translate_button.setEnabled(False)
         self.cancel_button.setEnabled(False)

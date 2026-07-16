@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from PySide6 import QtCore
 
-from modules.detection.processor import TextBlockDetector
+from modules.detection.processor import TextBlockDetector
 from modules.ocr.processor import OCRProcessor
 from modules.rendering.render import pyside_word_wrap, is_vertical_block, get_best_render_area
 from modules.translation.processor import Translator
@@ -530,12 +530,18 @@ class ManualWorkflowController:
 
                 for file_path in selected_paths:
                     state = self.main.image_states.get(file_path, {})
-                    strokes = state.get("brush_strokes", [])
-                    if not strokes:
-                        continue
                     blk_list = state.get("blk_list", [])
                     image = self._load_page_image(file_path)
                     if image is None:
+                        continue
+
+                    if self.main.semi_auto_mode:
+                        # Recompute cleaning masks from the (possibly reviewed)
+                        # blocks so bubbles added/removed during review are respected.
+                        strokes = self._serialize_segmentation_strokes(blk_list, image)
+                    else:
+                        strokes = state.get("brush_strokes", [])
+                    if not strokes:
                         continue
 
                     patches = self.main.pipeline.inpainting.inpaint_page_from_saved_strokes(

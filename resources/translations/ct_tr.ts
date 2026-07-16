@@ -1780,6 +1780,11 @@ sonra yeniden boyutlandırılmış görselde boyama işlemi yapın.</translation
         <translation>Otomatik</translation>
     </message>
     <message>
+        <location filename="../../app/ui/main_window/builders/workspace.py" line="61"/>
+        <source>Semi-Auto</source>
+        <translation>Yarı Otomatik</translation>
+    </message>
+    <message>
         <location filename="../../app/ui/main_window/builders/workspace.py" line="71"/>
         <source>Toggle Webtoon Mode. For comics that are read in long vertical strips</source>
         <translation>Webtoon Modunu Aç/Kapat. Uzun dikey şeritlerde okunan çizgi romanlar için</translation>

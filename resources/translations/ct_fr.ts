@@ -1780,6 +1780,11 @@ puis effectuer l&apos;inpainting sur l&apos;image redimensionnée.</translation>
         <translation>Automatique</translation>
     </message>
     <message>
+        <location filename="../../app/ui/main_window/builders/workspace.py" line="61"/>
+        <source>Semi-Auto</source>
+        <translation>Semi-Automatique</translation>
+    </message>
+    <message>
         <location filename="../../app/ui/main_window/builders/workspace.py" line="71"/>
         <source>Toggle Webtoon Mode. For comics that are read in long vertical strips</source>
         <translation>Activer le mode Webtoon. Pour les bandes dessinées lues en longues bandes verticales</translation>

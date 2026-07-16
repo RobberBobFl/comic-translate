@@ -59,6 +59,9 @@ class WorkspaceMixin:
         self.manual_radio = MRadioButton(self.tr("Manual"))
         self.manual_radio.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
 
+        self.semi_auto_radio = MRadioButton(self.tr("Semi-Auto"))
+        self.semi_auto_radio.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+
         self.automatic_radio = MRadioButton(self.tr("Automatic"))
         self.automatic_radio.setChecked(True)
         self.automatic_radio.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
@@ -87,6 +90,7 @@ class WorkspaceMixin:
         header_layout.addStretch()
         header_layout.addWidget(self.webtoon_toggle)
         header_layout.addWidget(self.manual_radio)
+        header_layout.addWidget(self.semi_auto_radio)
         header_layout.addWidget(self.automatic_radio)
         header_layout.addWidget(self.translate_button)
         header_layout.addWidget(self.cancel_button)
