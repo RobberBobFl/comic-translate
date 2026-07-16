@@ -25,6 +25,7 @@ class ImageViewer(QGraphicsView):
     connect_text_item =  Signal(TextBlockItem)
     page_changed = Signal(int)
     clear_text_edits = Signal()
+    paint_color_changed = Signal(QtGui.QColor)
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -41,6 +42,17 @@ class ImageViewer(QGraphicsView):
         self.webtoon_manager = LazyWebtoonManager(self)
         self.interaction_manager = InteractionManager(self)
         self.event_handler = EventHandler(self)
+
+        # Retouch paint layer (manual color painting over imperfect cleaning)
+        from .paint_manager import PaintManager
+        self.paint_manager = PaintManager(self)
+        self.paint_layer = QtWidgets.QGraphicsPixmapItem()
+        self.paint_layer.setShapeMode(QtWidgets.QGraphicsPixmapItem.BoundingRectShape)
+        self.paint_layer.setZValue(0.6)  # above inpaint patches (0.5), below text (1)
+        self._scene.addItem(self.paint_layer)
+        self.paint_overlay = None
+        self.paint_qimage = None
+        self._eyedropper_cursor = self._make_eyedropper_cursor()
 
         # Viewer Properties
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
@@ -159,6 +171,12 @@ class ImageViewer(QGraphicsView):
             else:
                 cursor =  self.drawing_manager.eraser_cursor
             self.setCursor(cursor)
+        elif tool in ['paint', 'paint_eraser']:
+            self.setDragMode(QGraphicsView.NoDrag)
+            self.setCursor(self.paint_manager.paint_cursor)
+        elif tool == 'eyedropper':
+            self.setDragMode(QGraphicsView.NoDrag)
+            self.setCursor(self._eyedropper_cursor)
         else:
             self.setDragMode(QGraphicsView.NoDrag)
 
@@ -183,6 +201,22 @@ class ImageViewer(QGraphicsView):
             self.drawing_manager.set_eraser_size(size, size)
         except Exception:
             self.drawing_manager.eraser_size = size
+
+    @property
+    def paint_size(self):
+        return self.paint_manager.paint_size
+
+    @paint_size.setter
+    def paint_size(self, size: int):
+        try:
+            self.paint_manager.set_paint_size(size, size)
+        except Exception:
+            self.paint_manager.paint_size = size
+
+    def set_paint_size(self, size: int, scaled_size: int):
+        self.paint_manager.set_paint_size(size, scaled_size)
+        if self.current_tool in ('paint', 'paint_eraser'):
+            self.setCursor(self.paint_manager.paint_cursor)
 
     # Event Handler Methods (Delegated to EventHandler)
     def mousePressEvent(self, event):
@@ -339,17 +373,118 @@ class ImageViewer(QGraphicsView):
         self.photo = QGraphicsPixmapItem()
         self.photo.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
         self._scene.addItem(self.photo)
+        # Re-create the retouch paint layer (scene.clear() removes it).
+        self.paint_layer = QtWidgets.QGraphicsPixmapItem()
+        self.paint_layer.setShapeMode(QtWidgets.QGraphicsPixmapItem.BoundingRectShape)
+        self.paint_layer.setZValue(0.6)  # above inpaint patches (0.5), below text (1)
+        self._scene.addItem(self.paint_layer)
+        self.paint_overlay = None
+        self.paint_qimage = None
 
     def setPhoto(self, pixmap: QtGui.QPixmap = None, fit: bool = True):
         if pixmap and not pixmap.isNull():
             self.empty = False
             self.photo.setPixmap(pixmap)
+            self._init_paint_overlay()
             if fit:
                 self.fitInView()
         else:
             self.empty = True
             self.photo.setPixmap(QtGui.QPixmap())
         self.zoom = 0
+
+    def _make_eyedropper_cursor(self):
+        size = 24
+        pix = QtGui.QPixmap(size, size)
+        pix.fill(Qt.transparent)
+        p = QtGui.QPainter(pix)
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 2))
+        p.drawLine(size // 2, 0, size // 2, size)
+        p.drawLine(0, size // 2, size, size // 2)
+        p.drawEllipse(size // 2 - 4, size // 2 - 4, 8, 8)
+        p.end()
+        return QtGui.QCursor(pix, size // 2, size // 2)
+
+    def _init_paint_overlay(self):
+        """Create a transparent RGBA overlay matching the current photo size."""
+        pix = self.photo.pixmap()
+        if pix is None or pix.isNull():
+            return
+        w, h = pix.width(), pix.height()
+        self.paint_overlay = np.zeros((h, w, 4), dtype=np.uint8)
+        self.paint_qimage = QtGui.QImage(
+            self.paint_overlay.data, w, h, 4 * w, QtGui.QImage.Format.Format_RGBA8888
+        )
+        self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
+
+    def get_paint_overlay(self):
+        """Return a copy of the paint overlay, or None if empty/uninitialised."""
+        if self.paint_overlay is None or not np.any(self.paint_overlay[:, :, 3] > 0):
+            return None
+        return self.paint_overlay.copy()
+
+    def set_paint_overlay(self, arr):
+        if arr is None:
+            self.clear_paint_overlay()
+            return
+        # Store an independent copy so undo/redo snapshots are never aliased
+        # to (and mutated by) the live overlay.
+        arr = np.ascontiguousarray(arr, dtype=np.uint8).copy()
+        if arr.ndim != 3 or arr.shape[2] != 4:
+            return
+        h, w = arr.shape[:2]
+        self.paint_overlay = arr
+        self.paint_qimage = QtGui.QImage(
+            self.paint_overlay.data, w, h, 4 * w, QtGui.QImage.Format.Format_RGBA8888
+        )
+        if self.paint_layer is not None:
+            self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
+
+    def clear_paint_overlay(self):
+        if self.paint_overlay is not None:
+            self.paint_overlay[:] = 0
+            if self.paint_layer is not None:
+                self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
+
+    def is_paint_empty(self):
+        return self.paint_overlay is None or not np.any(self.paint_overlay[:, :, 3] > 0)
+
+    def paint_onto_overlay(self, p0: QPointF, p1: QPointF, color, size: int, erase: bool = False):
+        if self.paint_overlay is None or self.paint_qimage is None:
+            return
+        h, w = self.paint_overlay.shape[:2]
+        x0 = max(0, min(int(round(p0.x())), w - 1))
+        y0 = max(0, min(int(round(p0.y())), h - 1))
+        x1 = max(0, min(int(round(p1.x())), w - 1))
+        y1 = max(0, min(int(round(p1.y())), h - 1))
+        painter = QtGui.QPainter(self.paint_qimage)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        if erase:
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Clear)
+            pen = QtGui.QPen(QtGui.QColor(0, 0, 0, 0), size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        else:
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Source)
+            c = QtGui.QColor(color)
+            c.setAlpha(255)
+            pen = QtGui.QPen(c, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.drawLine(QtCore.QPointF(x0, y0), QtCore.QPointF(x1, y1))
+        painter.end()
+        if self.paint_layer is not None:
+            self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
+
+    def sample_color_at(self, scene_pos: QPointF):
+        """Sample the pixel color under scene_pos from the base image."""
+        arr = self.get_image_array(include_patches=False)
+        if arr is None:
+            return
+        h, w = arr.shape[:2]
+        x = max(0, min(int(round(scene_pos.x())), w - 1))
+        y = max(0, min(int(round(scene_pos.y())), h - 1))
+        r, g, b = arr[y, x]
+        color = QtGui.QColor(int(r), int(g), int(b), 255)
+        self.paint_manager.set_paint_color(color)
+        self.paint_color_changed.emit(color)
 
     def get_mask_for_inpainting(self):
         mask = self.drawing_manager.generate_mask_from_strokes()

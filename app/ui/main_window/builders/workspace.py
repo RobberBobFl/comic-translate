@@ -347,6 +347,50 @@ class WorkspaceMixin:
         inp_tools_lay.addWidget(self.clear_brush_strokes_button)
         inp_tools_lay.addStretch()
 
+        # ---- Retouch (manual paint correction over imperfect cleaning) ----
+        retouch_div = MDivider(self.tr("Retouch (experimental)"))
+        tools_layout.addWidget(retouch_div)
+
+        retouch_tools_lay = QtWidgets.QHBoxLayout()
+        self.eyedropper_button = self.create_tool_button(svg="eyedropper.svg", checkable=True)
+        self.eyedropper_button.setToolTip(self.tr("Pick a color from the image (click to sample)"))
+        self.eyedropper_button.clicked.connect(self.toggle_eyedropper_tool)
+        self.tool_buttons["eyedropper"] = self.eyedropper_button
+
+        self.paint_button = self.create_tool_button(svg="paint-brush.svg", checkable=True)
+        self.paint_button.setToolTip(self.tr("Paint over imperfectly cleaned areas with the sampled color"))
+        self.paint_button.clicked.connect(self.toggle_paint_tool)
+        self.tool_buttons["paint"] = self.paint_button
+
+        self.paint_eraser_button = self.create_tool_button(svg="eraser_fill.svg", checkable=True)
+        self.paint_eraser_button.setToolTip(self.tr("Erase retouch paint strokes"))
+        self.paint_eraser_button.clicked.connect(self.toggle_paint_eraser_tool)
+        self.tool_buttons["paint_eraser"] = self.paint_eraser_button
+
+        self.paint_color_swatch = QtWidgets.QLabel()
+        self.paint_color_swatch.setFixedSize(22, 22)
+        self.paint_color_swatch.setStyleSheet(
+            "border: 1px solid #888; border-radius: 3px; background-color: rgb(255,255,255);"
+        )
+        self.paint_color_swatch.setToolTip(self.tr("Current retouch color (sampled with the eyedropper)"))
+
+        retouch_tools_lay.addWidget(self.eyedropper_button)
+        retouch_tools_lay.addWidget(self.paint_button)
+        retouch_tools_lay.addWidget(self.paint_eraser_button)
+        retouch_tools_lay.addWidget(self.paint_color_swatch)
+        retouch_tools_lay.addStretch()
+        tools_layout.addLayout(retouch_tools_lay)
+
+        self.paint_slider = MSlider()
+        self.paint_slider.setMinimum(1)
+        self.paint_slider.setMaximum(100)
+        self.paint_slider.setValue(25)
+        self.paint_slider.setToolTip(self.tr("Retouch Brush Size"))
+        self.paint_slider.valueChanged.connect(self.set_paint_size)
+        tools_layout.addWidget(self.paint_slider)
+
+        self.webtoon_toggle.toggled.connect(self._on_webtoon_toggled)
+
         self.brush_eraser_slider = MSlider()
         self.brush_eraser_slider.setMinimum(1)
         self.brush_eraser_slider.setMaximum(100)
@@ -413,3 +457,21 @@ class WorkspaceMixin:
         button.setCheckable(True) if checkable else button.setCheckable(False)
 
         return button
+
+    def _update_paint_swatch(self, color):
+        if not hasattr(self, 'paint_color_swatch'):
+            return
+        self.paint_color_swatch.setStyleSheet(
+            "border: 1px solid #888; border-radius: 3px; background-color: rgb({},{},{});".format(
+                color.red(), color.green(), color.blue()
+            )
+        )
+
+    def _on_webtoon_toggled(self, checked: bool):
+        enabled = not checked
+        for btn in (self.eyedropper_button, self.paint_button, self.paint_eraser_button):
+            btn.setEnabled(enabled)
+        self.paint_slider.setEnabled(enabled)
+        self.paint_color_swatch.setEnabled(enabled)
+        if checked and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser'):
+            self.set_tool(None)

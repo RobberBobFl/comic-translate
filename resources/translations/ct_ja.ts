@@ -1951,6 +1951,30 @@ back on the Image (for further editing)</source>
         <source>Inpainting</source>
         <translation>修復</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>リタッチ（実験的）</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>画像から色を取得（クリックでサンプリング）</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>サンプリングした色で不鮮明にきれいにされた領域を塗る</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>リタッチの描画を消す</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>現在のリタッチ色（スポイトで取得）</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>リタッチブラシのサイズ</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

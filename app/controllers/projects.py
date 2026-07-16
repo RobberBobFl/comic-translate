@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+import numpy as np
 from datetime import datetime
 from typing import TYPE_CHECKING
 from dataclasses import asdict, is_dataclass
@@ -914,7 +915,13 @@ class ProjectController:
                     renderer = ImageSaveRenderer(rgb_img)
                     viewer_state = all_pages_current_state[file_path]['viewer_state']
 
-                    renderer.apply_patches(self.main.image_patches.get(file_path, []))
+                    patches = list(self.main.image_patches.get(file_path, []))
+                    paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
+                    if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
+                            and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
+                        h, w = paint_overlay.shape[:2]
+                        patches.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
+                    renderer.apply_patches(patches)
                     if self.main.webtoon_mode and temp_main_page_context is not None:
                         renderer.add_state_to_image(viewer_state, page_idx, temp_main_page_context)
                     else:
@@ -955,6 +962,11 @@ class ProjectController:
                 renderer.add_spanning_text_items(viewer_state, page_idx, temp_main_page_context)
 
             patch_list = copy.deepcopy(self.main.image_patches.get(file_path, []))
+            paint_overlay = self.main.image_states.get(file_path, {}).get('paint_overlay')
+            if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
+                    and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
+                h, w = paint_overlay.shape[:2]
+                patch_list.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
             text_items = viewer_state.get('text_items_state', [])
             logger.info(
                 "PSD page %d (%s): patches=%d, text_items=%d, viewer_state_keys=%s",
@@ -984,12 +996,19 @@ class ProjectController:
                     viewer_state = self._create_text_items_state_from_scene(page_idx)
                 else:
                     viewer_state = self.main.image_states.get(file_path, {}).get('viewer_state', {}).copy()
-                all_pages_current_state[file_path] = {'viewer_state': viewer_state}
+                all_pages_current_state[file_path] = {
+                    'viewer_state': viewer_state,
+                    'paint_overlay': self.main.image_states.get(file_path, {}).get('paint_overlay'),
+                }
             return all_pages_current_state
 
         for file_path in self.main.image_files:
-            viewer_state = self.main.image_states.get(file_path, {}).get('viewer_state', {}).copy()
-            all_pages_current_state[file_path] = {'viewer_state': viewer_state}
+            state = self.main.image_states.get(file_path, {})
+            viewer_state = state.get('viewer_state', {}).copy()
+            all_pages_current_state[file_path] = {
+                'viewer_state': viewer_state,
+                'paint_overlay': state.get('paint_overlay'),
+            }
 
         return all_pages_current_state
 

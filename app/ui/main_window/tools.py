@@ -35,6 +35,41 @@ class ToolStateMixin:
         else:
             self.set_tool(None)
 
+    def toggle_eyedropper_tool(self):
+        if self.eyedropper_button.isChecked():
+            self.set_tool("eyedropper")
+        else:
+            self.set_tool(None)
+
+    def toggle_paint_tool(self):
+        if self.paint_button.isChecked():
+            self.set_tool("paint")
+            self.set_paint_slider_size(self.image_viewer.paint_size)
+        else:
+            self.set_tool(None)
+
+    def toggle_paint_eraser_tool(self):
+        if self.paint_eraser_button.isChecked():
+            self.set_tool("paint_eraser")
+            self.set_paint_slider_size(self.image_viewer.paint_size)
+        else:
+            self.set_tool(None)
+
+    def set_paint_slider_size(self, size: int):
+        self.paint_slider.blockSignals(True)
+        self.paint_slider.setValue(size)
+        self.paint_slider.blockSignals(False)
+
+    def set_paint_size(self, size: int):
+        current_tool = self.image_viewer.current_tool
+        if current_tool in ("paint", "paint_eraser"):
+            if self.image_viewer.hasPhoto():
+                image = self.image_viewer.get_image_array()
+                if image is not None:
+                    h, w = image.shape[:2]
+                    scaled_size = self.scale_size(size, w, h)
+                    self.image_viewer.set_paint_size(size, scaled_size)
+
     def set_slider_size(self, size: int):
         self.brush_eraser_slider.blockSignals(True)
         self.brush_eraser_slider.setValue(size)

@@ -1948,6 +1948,30 @@ back on the Image (for further editing)</source>
         <source>Inpainting</source>
         <translation>修复填充</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>修饰（实验性）</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>从图像中拾取颜色（点击采样）</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>用取样颜色涂抹清理不彻底的区域</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>擦除修饰笔触</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>当前修饰颜色（用吸管取样）</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>修饰画笔大小</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

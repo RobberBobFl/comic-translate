@@ -223,6 +223,8 @@ class ComicTranslate(ComicTranslateUI):
         self.image_viewer.connect_text_item.connect(self.text_ctrl.connect_text_item_signals)
         self.image_viewer.page_changed.connect(self.webtoon_ctrl.on_page_changed)
         self.image_viewer.clear_text_edits.connect(self.text_ctrl.clear_text_edits)
+        self.image_viewer.paint_color_changed.connect(self._update_paint_swatch)
+        self._update_paint_swatch(self.image_viewer.paint_manager.paint_color)
 
         try:
             if self._memlogger is not None:

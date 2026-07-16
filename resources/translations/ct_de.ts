@@ -1950,6 +1950,30 @@ zurück auf das Bild (zur weiteren Bearbeitung)</translation>
         <source>Inpainting</source>
         <translation>Inpainting</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>Retusche (experimentell)</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>Farbe aus dem Bild aufnehmen (Klick zum Abtasten)</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>Ungenau gereinigte Bereiche mit der entnommenen Farbe übermalen</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>Retusch-Pinselstriche löschen</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>Aktuelle Retuschefarbe (mit der Pipette entnommen)</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>Retusche-Pinselgröße</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

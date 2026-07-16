@@ -26,6 +26,17 @@ class EventHandler:
         if self.viewer.webtoon_mode:
             self.viewer.webtoon_manager.update_page_on_click(scene_pos)
 
+        # Retouch tools: intercept the left-click entirely (paint/erase) or sample color.
+        if self.viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser') and event.button() == Qt.LeftButton:
+            if self.viewer.hasPhoto() and self._is_on_image(scene_pos):
+                if self.viewer.current_tool == 'eyedropper':
+                    self.viewer.sample_color_at(scene_pos)
+                else:
+                    self.viewer.paint_manager.start_stroke(
+                        scene_pos, erase=(self.viewer.current_tool == 'paint_eraser')
+                    )
+            return
+
         if isinstance(clicked_item, (TextBlockItem, MoveableRectItem)):
             if isinstance(clicked_item, TextBlockItem):
                 if ctrl_pressed and not clicked_item.editing_mode:
@@ -107,6 +118,12 @@ class EventHandler:
     def handle_mouse_move(self, event: QtGui.QMouseEvent):
         scene_pos = self.viewer.mapToScene(event.position().toPoint())
 
+        # Retouch painting takes precedence over item dragging.
+        if self.viewer.current_tool in ('paint', 'paint_eraser') and self.viewer.paint_manager.painting and self._is_on_image(scene_pos):
+            self.viewer.paint_manager.continue_stroke(scene_pos)
+            self.last_scene_pos = scene_pos
+            return
+
         # Explicitly handle dragging our items first
         if self._move_handle_drag(event, scene_pos):
             self.last_scene_pos = scene_pos
@@ -157,6 +174,10 @@ class EventHandler:
 
         # Let QGraphicsView handle its release events (e.g., for ScrollHandDrag)
         QtWidgets.QGraphicsView.mouseReleaseEvent(self.viewer, event)
+
+        if self.viewer.current_tool in ('paint', 'paint_eraser') and self.viewer.paint_manager.painting:
+            self.viewer.paint_manager.end_stroke()
+            return
 
         if event.button() == Qt.MiddleButton:
             self._release_handle_pan()

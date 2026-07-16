@@ -1951,6 +1951,30 @@ de nuevo en la imagen (para su posterior edición)</translation>
         <source>Inpainting</source>
         <translation>Inpainting</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>Retoque (experimental)</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>Tomar un color de la imagen (clic para muestrear)</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>Pinta las zonas mal limpiadas con el color tomado</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>Borrar trazos de retoque</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>Color de retoque actual (tomado con el cuentagotas)</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>Tamaño del pincel de retoque</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

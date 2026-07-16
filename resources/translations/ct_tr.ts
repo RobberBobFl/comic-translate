@@ -1950,6 +1950,30 @@ back on the Image (for further editing)</source>
         <source>Inpainting</source>
         <translation>Boyama</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>Rötuş (deneysel)</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>Görüntüden renk al (örneklemek için tıkla)</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>Örneklenen renkle eksik temizlenen alanları boya</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>Rötuş boya darbelerini sil</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>Geçerli rötuş rengi (pipet ile örneklenir)</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>Rötuş Fırça Boyutu</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

@@ -1951,6 +1951,30 @@ back on the Image (for further editing)</source>
         <source>Inpainting</source>
         <translation>인페인팅</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>리터치(실험적)</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>이미지에서 색상 추출(클릭하여 샘플링)</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>샘플링한 색으로 제대로 지워지지 않은 부분을 칠하기</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>리터치 획 지우기</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>현재 리터치 색상(스포이드로 추출)</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>리터치 브러시 크기</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

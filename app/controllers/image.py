@@ -69,6 +69,7 @@ class ImageStateController:
         blk_list: list,
         skip_status: bool,
         existing_state: dict | None = None,
+        paint_overlay: "np.ndarray | None" = None,
     ) -> dict:
         state = dict(existing_state or self.main.image_states.get(file_path, {}) or {})
         state.update({
@@ -84,6 +85,7 @@ class ImageStateController:
             "brush_strokes": brush_strokes,
             "blk_list": blk_list,
             "skip": skip_status,
+            "paint_overlay": paint_overlay,
             "export_group_name": str(
                 state.get("export_group_name") or self._default_export_group_name(file_path)
             ),
@@ -1026,6 +1028,7 @@ class ImageStateController:
             self.main.image_viewer.save_brush_strokes(),
             self.main.blk_list.copy(),
             skip_status,
+            paint_overlay=self.main.image_viewer.get_paint_overlay(),
         )
 
     def save_current_image_state(self):
@@ -1083,6 +1086,12 @@ class ImageStateController:
                     self.main.s_combo.blockSignals(False)
                     self.main.t_combo.blockSignals(False)
                     viewer.load_brush_strokes(state['brush_strokes'])
+
+                    paint_overlay = state.get('paint_overlay')
+                    if paint_overlay is not None:
+                        viewer.set_paint_overlay(paint_overlay)
+                    else:
+                        viewer.clear_paint_overlay()
 
                     # add_text_item/add_rectangle used by load_state already emit the
                     # viewer's connect_* signals, so no extra signal wiring is needed here.

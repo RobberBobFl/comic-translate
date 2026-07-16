@@ -1951,6 +1951,30 @@ back on the Image (for further editing)</source>
         <source>Inpainting</source>
         <translation>Восстановление изображения</translation>
     </message>
+    <message>
+        <source>Retouch (experimental)</source>
+        <translation>Ретушь (эксперимент)</translation>
+    </message>
+    <message>
+        <source>Pick a color from the image (click to sample)</source>
+        <translation>Взять цвет с изображения (клик для взятия пробы)</translation>
+    </message>
+    <message>
+        <source>Paint over imperfectly cleaned areas with the sampled color</source>
+        <translation>Закрасьте неидеально очищенные области взятым цветом</translation>
+    </message>
+    <message>
+        <source>Erase retouch paint strokes</source>
+        <translation>Стереть мазки ретуши</translation>
+    </message>
+    <message>
+        <source>Current retouch color (sampled with the eyedropper)</source>
+        <translation>Текущий цвет ретуши (взят пипеткой)</translation>
+    </message>
+    <message>
+        <source>Retouch Brush Size</source>
+        <translation>Размер кисти ретуши</translation>
+    </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>

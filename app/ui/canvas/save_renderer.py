@@ -23,7 +23,11 @@ class ImageSaveRenderer:
 
 
     def img_array_to_qimage(self, rgb_img: np.ndarray) -> QtGui.QImage:
-        height, width, channel = rgb_img.shape
+        height, width = rgb_img.shape[:2]
+        if rgb_img.ndim == 3 and rgb_img.shape[2] == 4:
+            bytes_per_line = 4 * width
+            return QtGui.QImage(rgb_img.data, width, height, bytes_per_line, QtGui.QImage.Format.Format_RGBA8888)
+        channel = rgb_img.shape[2]
         bytes_per_line = channel * width
         return QtGui.QImage(rgb_img.data, width, height, bytes_per_line, QtGui.QImage.Format.Format_RGB888)
 
@@ -236,7 +240,7 @@ class ImageSaveRenderer:
         imk.write_image(output_path, final_rgb)
 
     def apply_patches(self, patches: list[dict]):
-        """Apply inpainting patches to the image."""
+        """Apply inpainting/retouch patches to the image."""
 
         for patch in patches:
             # Extract data from the patch dict
@@ -246,10 +250,10 @@ class ImageSaveRenderer:
                 ensure_path_materialized(patch_path)
                 patch_image = imk.read_image(patch_path)
             else:
-                # Handle direct image data (expected to be RGB format)
+                # Handle direct image data (expected to be RGB or RGBA format)
                 patch_image = patch['image']
             
-            # Convert patch to QImage
+            # Convert patch to QImage (RGBA supported for retouch overlays)
             patch_qimage = self.img_array_to_qimage(patch_image)
             patch_pixmap = QtGui.QPixmap.fromImage(patch_qimage)
             
