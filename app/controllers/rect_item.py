@@ -74,11 +74,13 @@ class RectItemController:
         self.main.blk_list.append(new_blk)
         command = AddRectangleCommand(self.main, rect_item, new_blk, self.main.blk_list)
         self.main.undo_group.activeStack().push(command)
+        self._sync_to_state()
 
     def handle_rectangle_deletion(self, rect: QRectF):
         rect_coords = rect.getCoords()
         current_text_block = self.find_corresponding_text_block(rect_coords, 0.5)
         self.main.blk_list.remove(current_text_block)
+        self._sync_to_state()
 
     def handle_rectangle_change(
             self, 
@@ -92,12 +94,25 @@ class RectItemController:
             if do_rectangles_overlap(blk.xyxy, old_rect_coords, 0.2):
                 # Update the TextBlock coordinates
                 blk.xyxy[:] = [int(new_rect_coords[0]), 
-                               int(new_rect_coords[1]),
+                               int(new_rect_coords[1]), 
                                int(new_rect_coords[2]), 
                                int(new_rect_coords[3])]
                 blk.angle = new_angle if new_angle else 0
                 blk.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
                 break
+        self._sync_to_state()
+
+    def _sync_to_state(self) -> None:
+        """Persist manual block edits back into the page state.
+
+        In webtoon mode ``main.blk_list`` is only a copy of the saved block
+        list, so edits (add / delete / resize) must be written back to
+        ``image_states`` or they are lost on the next state read.
+        """
+        try:
+            self.main.manual_workflow_ctrl.sync_blk_list_to_state()
+        except Exception:
+            pass
 
     def rect_change_undo(self, old_state, new_state):
         command = BoxesChangeCommand(self.main.image_viewer, old_state,

@@ -125,5 +125,14 @@ class OCRHandler:
         
         # The OCR text is already set on the blocks, just restore coordinates
         restore_original_block_coordinates(visible_blocks)
-        
+
+        # Persist the recognized text (and any geometry) back into the page
+        # state. In webtoon mode main.blk_list is only a copy of the saved
+        # block list, so without this the OCR results are lost the next time
+        # the current page is rebuilt from state.
+        try:
+            self.main_page.manual_workflow_ctrl.sync_blk_list_to_state()
+        except Exception:
+            logger.exception("Failed to sync webtoon OCR results to page state")
+
         logger.info(f"OCR completed for {len(visible_blocks)} blocks in visible area")

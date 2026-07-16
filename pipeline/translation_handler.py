@@ -159,5 +159,14 @@ class TranslationHandler:
         
         # Apply upper case if needed
         set_upper_case(visible_blocks, upper_case)
-        
+
+        # Persist the translation back into the page state. In webtoon mode
+        # main.blk_list is only a copy of the saved block list, so without this
+        # the translations are lost the next time the current page is rebuilt
+        # from state.
+        try:
+            self.main_page.manual_workflow_ctrl.sync_blk_list_to_state()
+        except Exception:
+            logger.exception("Failed to sync webtoon translation to page state")
+
         logger.info(f"Translation completed for {len(visible_blocks)} blocks in visible area")

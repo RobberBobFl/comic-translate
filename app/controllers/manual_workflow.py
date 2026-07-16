@@ -118,6 +118,33 @@ class ManualWorkflowController:
 
         self.main.blk_list = self._copy_blocks_for_current_webtoon_page(blk_list)
 
+    def sync_blk_list_to_state(self) -> None:
+        """Persist the current ``main.blk_list`` back into the page's saved state.
+
+        In webtoon mode ``main.blk_list`` is a (deep) copy of the full block list
+        stored under ``image_states[file_path]['blk_list']``. Manual edits
+        (add / delete / resize a block) only mutate that copy, so without this
+        sync the changes are silently discarded the next time the page state is
+        read back -- e.g. when OCR / translate load ``state['blk_list']`` or when
+        the current webtoon page is rebuilt from ``state``. That is what made a
+        manually merged bubble "split into two again".
+        """
+        idx = self.main.curr_img_idx
+        if not (0 <= idx < len(self.main.image_files)):
+            return
+        file_path = self.main.image_files[idx]
+        state = self.main.image_states.get(file_path)
+        if state is None:
+            return
+        blk_list = self.main.blk_list
+        if blk_list is None:
+            return
+        state["blk_list"] = [
+            b.deep_copy() if hasattr(b, "deep_copy") else b
+            for b in blk_list
+        ]
+        self.main.mark_project_dirty()
+
     def _serialize_rectangles_from_blocks(self, blk_list: list[TextBlock]) -> list[dict]:
         rects: list[dict] = []
         for blk in blk_list:
