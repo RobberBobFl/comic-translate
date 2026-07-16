@@ -52,6 +52,7 @@ class CustomOCR(OCREngine):
 
     def process_image(self, img: np.ndarray, blk_list: list[TextBlock]) -> list[TextBlock]:
         """Process an image with the custom OCR by processing individual text regions."""
+        h, w = img.shape[:2]
         for blk in blk_list:
             if blk.bubble_xyxy is not None:
                 x1, y1, x2, y2 = blk.bubble_xyxy
@@ -63,7 +64,17 @@ class CustomOCR(OCREngine):
                     img,
                 )
 
-            if x1 < x2 and y1 < y2 and x1 >= 0 and y1 >= 0 and x2 <= img.shape[1] and y2 <= img.shape[0]:
+            # Bounding boxes may be numpy floats (e.g. from detection / webtoon
+            # coordinate maths). Slicing requires integers, so round + clamp to
+            # the image bounds like the other OCR engines do.
+            x1 = int(round(float(x1)))
+            y1 = int(round(float(y1)))
+            x2 = int(round(float(x2)))
+            y2 = int(round(float(y2)))
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+
+            if x1 < x2 and y1 < y2:
                 cropped_img = img[y1:y2, x1:x2]
                 img_to_ocr = self.encode_image(cropped_img)
                 blk.text = self._get_ocr(img_to_ocr)
