@@ -71,6 +71,7 @@ class RectItemController:
         new_rect_coords = (x1, y1, x1 + w, y1 + h)
 
         new_blk = TextBlock(text_bbox=np.array(new_rect_coords))
+        new_blk.manual = True
         self.main.blk_list.append(new_blk)
         command = AddRectangleCommand(self.main, rect_item, new_blk, self.main.blk_list)
         self.main.undo_group.activeStack().push(command)
@@ -99,6 +100,7 @@ class RectItemController:
                                int(new_rect_coords[3])]
                 blk.angle = new_angle if new_angle else 0
                 blk.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
+                blk.manual = True
                 break
         self._sync_to_state()
 

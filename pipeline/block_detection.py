@@ -4,6 +4,7 @@ from PySide6 import QtCore
 
 from modules.detection.processor import TextBlockDetector
 from modules.detection.script_detection import ScriptDetector
+from modules.detection.utils.geometry import do_rectangles_overlap
 from modules.utils.textblock import TextBlock, sort_blk_list
 from modules.rendering.render import get_best_render_area
 from pipeline.webtoon_utils import get_first_visible_block
@@ -164,24 +165,48 @@ class BlockDetectionHandler:
                 # Get the scene Y range that was detected
                 scene_y_min = min(mapping['scene_y_start'] for mapping in page_mappings)
                 scene_y_max = max(mapping['scene_y_end'] for mapping in page_mappings)
-                
-                # Remove existing blocks that fall within the detected area to avoid duplicates
-                filtered_blocks = []
-                for existing_blk in self.main_page.blk_list:
-                    blk_y = existing_blk.xyxy[1]  # Top Y coordinate
-                    blk_bottom = existing_blk.xyxy[3]  # Bottom Y coordinate
-                    
-                    # Keep blocks that don't overlap with the detected area
+
+                manual_blocks = [b for b in self.main_page.blk_list if getattr(b, 'manual', False)]
+                auto_existing = [b for b in self.main_page.blk_list if not getattr(b, 'manual', False)]
+
+                # Auto blocks inside the detected area are replaced by the new
+                # detections (original de-duplication behaviour).
+                kept_auto = []
+                for eb in auto_existing:
+                    blk_y = eb.xyxy[1]
+                    blk_bottom = eb.xyxy[3]
                     if not (blk_y >= scene_y_min and blk_bottom <= scene_y_max):
-                        filtered_blocks.append(existing_blk)
-                
-                # Add the new blocks to the filtered list
-                self.main_page.blk_list = filtered_blocks + blk_list
+                        kept_auto.append(eb)
+
+                # Never discard manually created/edited blocks, and do not add
+                # freshly detected bubbles that overlap a manual block (this is
+                # what previously re-split a manually merged cross-page bubble).
+                kept_new = []
+                for nb in blk_list:
+                    if any(do_rectangles_overlap(nb.xyxy, mb.xyxy, 0.1) for mb in manual_blocks):
+                        continue
+                    kept_new.append(nb)
+
+                self.main_page.blk_list = manual_blocks + kept_auto + kept_new
+
+                # Persist the manual blocks (and the merged result) back into the
+                # page state so they survive subsequent steps / page rebuilds.
+                try:
+                    self.main_page.manual_workflow_ctrl.sync_blk_list_to_state()
+                except Exception:
+                    logger.exception("Failed to sync detected blocks to page state")
             else:
                 self.main_page.blk_list = blk_list
         else:
-            # In single image mode, replace entirely
-            self.main_page.blk_list = blk_list
+            # Single image mode: re-detect replaces auto blocks, but manually
+            # created/edited blocks are preserved and new detections that overlap
+            # a manual block are dropped (same rationale as webtoon mode above).
+            manual_existing = [b for b in self.main_page.blk_list if getattr(b, 'manual', False)]
+            kept_new = [
+                nb for nb in blk_list
+                if not any(do_rectangles_overlap(nb.xyxy, mb.xyxy, 0.1) for mb in manual_existing)
+            ]
+            self.main_page.blk_list = manual_existing + kept_new
         
         source_lang = self.main_page.s_combo.currentText()
         source_lang_english = self.main_page.lang_mapping.get(source_lang, source_lang)

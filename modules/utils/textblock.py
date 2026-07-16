@@ -58,6 +58,12 @@ class TextBlock(object):
         self.font_color = font_color
         self.direction = direction
 
+        # True for blocks the user created or edited manually (e.g. by drawing
+        # a box or resizing). Detection must preserve these instead of
+        # overwriting them, so a manual merge of cross-page bubbles is not
+        # discarded when detection runs again.
+        self.manual = bool(kwargs.get('manual', False))
+
     @property
     def xywh(self):
         x1, y1, x2, y2 = self.xyxy
@@ -108,6 +114,7 @@ class TextBlock(object):
         new_block.max_font_size = self.max_font_size
         new_block.font_color = self.font_color
         new_block.direction = self.direction
+        new_block.manual = self.manual
         
         return new_block
 
