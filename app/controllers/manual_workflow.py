@@ -143,6 +143,18 @@ class ManualWorkflowController:
             b.deep_copy() if hasattr(b, "deep_copy") else b
             for b in blk_list
         ]
+        # Keep the serialized rectangles in sync with the (edited) blocks.
+        # On the next page reload load_image_state() restores the rectangles
+        # from viewer_state, so if only blk_list were updated the boxes would
+        # visually snap back to their old positions, and manually added /
+        # removed boxes would reappear / vanish.
+        try:
+            saved = self.main.image_viewer.save_state()
+            rects = saved.get("rectangles")
+            if rects is not None:
+                state.setdefault("viewer_state", {})["rectangles"] = rects
+        except Exception:
+            pass
         self.main.mark_project_dirty()
 
     def _serialize_rectangles_from_blocks(self, blk_list: list[TextBlock]) -> list[dict]:

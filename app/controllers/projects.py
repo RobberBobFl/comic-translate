@@ -1423,8 +1423,8 @@ class ProjectController:
 
         settings.beginGroup("main_page")
         # Save languages in English
-        settings.setValue("source_language", self.main.lang_mapping[self.main.s_combo.currentText()])
-        settings.setValue("target_language", self.main.lang_mapping[self.main.t_combo.currentText()])
+        settings.setValue("source_language", self.main.lang_mapping.get(self.main.s_combo.currentText(), self.main.s_combo.currentText()))
+        settings.setValue("target_language", self.main.lang_mapping.get(self.main.t_combo.currentText(), self.main.t_combo.currentText()))
 
         settings.setValue("mode", "manual" if self.main.manual_radio.isChecked() else "automatic")
 
