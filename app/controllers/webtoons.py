@@ -339,6 +339,17 @@ class WebtoonController:
             print("No images loaded, cannot switch to stitched webtoon mode")
             return False
 
+        # TEST BRANCH (unlimited stitching): the entire comic can be stitched
+        # into one image far exceeding PIL's decompression-bomb pixel limit
+        # (~178M px). Lift that limit so the very tall stitched image can be
+        # written and read back at all. This is intentionally relaxed only
+        # here; it disables PIL's DOS protection for the whole session.
+        try:
+            import PIL
+            PIL.Image.MAX_IMAGE_PIXELS = None
+        except Exception:
+            pass
+
         # Preserve the original (per-page) project so we can switch back.
         self._webtoon_source_files = list(self.image_files)
         self._webtoon_source_states = {
