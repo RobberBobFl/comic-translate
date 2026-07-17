@@ -468,10 +468,18 @@ class WorkspaceMixin:
         )
 
     def _on_webtoon_toggled(self, checked: bool):
-        enabled = not checked
+        # Retouch (paint) tools work in regular mode and in the stitched
+        # single-image webtoon mode (which reuses the regular image viewer),
+        # but they are incompatible with the lazy continuous-scene webtoon
+        # manager. Only disable them when entering the lazy webtoon mode.
+        stitch_enabled = bool(
+            QSettings("ComicLabs", "ComicTranslate").value("webtoon_stitch_mode", True, type=bool)
+        )
+        disable_retouch = checked and not stitch_enabled
+        enabled = not disable_retouch
         for btn in (self.eyedropper_button, self.paint_button, self.paint_eraser_button):
             btn.setEnabled(enabled)
         self.paint_slider.setEnabled(enabled)
         self.paint_color_swatch.setEnabled(enabled)
-        if checked and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser'):
+        if disable_retouch and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser'):
             self.set_tool(None)
