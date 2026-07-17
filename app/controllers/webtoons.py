@@ -30,7 +30,12 @@ class WebtoonController:
     # Above this strip height (px) we stop stitching everything into a single
     # image and instead split into contiguous page-height chunks so we never
     # blow up memory or hit image/viewer dimension limits.
-    MAX_STRIP_H = 24000
+    #
+    # In this UNLIMITED test branch the limit is effectively disabled so the
+    # entire comic is stitched into one image regardless of height (to test
+    # how detection / OCR / render / export behave on a single very tall
+    # image). Memory and export-dimension limits may be hit on long webtoons.
+    MAX_STRIP_H = 1_000_000_000
     CHUNK_H = 6000
 
     def __init__(self, main: ComicTranslate):
