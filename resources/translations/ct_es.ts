@@ -121,6 +121,22 @@
         <source>Cancel</source>
         <translation>Cancelar</translation>
     </message>
+    <message>
+        <source>Webtoon mode</source>
+        <translation>Webtoon mode</translation>
+    </message>
+    <message>
+        <source>Choose how to load the webtoon:</source>
+        <translation>Choose how to load the webtoon:</translation>
+    </message>
+    <message>
+        <source>Lightweight (stitch, auto-chunk if very tall)</source>
+        <translation>Lightweight (stitch, auto-chunk if very tall)</translation>
+    </message>
+    <message>
+        <source>Unlimited (stitch entire comic into one image)</source>
+        <translation>Unlimited (stitch entire comic into one image)</translation>
+    </message>
 </context>
 <context>
     <name>ComicTranslateUI</name>

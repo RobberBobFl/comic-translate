@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 import imkit as imk
 from PySide6 import QtGui
+from PySide6 import QtWidgets
 
 
 if TYPE_CHECKING:
@@ -27,15 +28,14 @@ class LazyLoadingConfig:
 class WebtoonController:
     """Webtoon controller with lazy loading support."""
 
-    # Above this strip height (px) we stop stitching everything into a single
-    # image and instead split into contiguous page-height chunks so we never
-    # blow up memory or hit image/viewer dimension limits.
-    #
-    # In this UNLIMITED test branch the limit is effectively disabled so the
-    # entire comic is stitched into one image regardless of height (to test
-    # how detection / OCR / render / export behave on a single very tall
-    # image). Memory and export-dimension limits may be hit on long webtoons.
-    MAX_STRIP_H = 1_000_000_000
+    # Strip height (px) above which a stitched image is split into contiguous
+    # page-height chunks (CHUNK_H) so we never blow up memory or hit image /
+    # viewer / export dimension limits. Used by the "lightweight" mode.
+    LIGHT_MAX_STRIP_H = 24000
+    # Effectively no limit: the entire comic is stitched into one image
+    # ("unlimited" mode). Memory and export-dimension limits may be hit on
+    # very long webtoons.
+    UNLIMITED_MAX_STRIP_H = 1_000_000_000
     CHUNK_H = 6000
 
     def __init__(self, main: ComicTranslate):
@@ -283,7 +283,14 @@ class WebtoonController:
 
         if requested_mode:
             if self._stitch_enabled():
-                success = self._switch_to_stitched_webtoon_mode()
+                choice = self._prompt_stitch_mode()
+                if choice is None:
+                    # User cancelled the dialog: keep webtoon mode off.
+                    self.main.webtoon_toggle.blockSignals(True)
+                    self.main.webtoon_toggle.setChecked(False)
+                    self.main.webtoon_toggle.blockSignals(False)
+                    return
+                success = self._switch_to_stitched_webtoon_mode(choice)
                 if success:
                     self.main.webtoon_mode = False
                     self.main.webtoon_strip = True
@@ -305,6 +312,33 @@ class WebtoonController:
                 self.switch_to_regular_mode()
             self.main.webtoon_strip = False
             self.main.mark_project_dirty()
+
+    def _prompt_stitch_mode(self) -> str | None:
+        """Ask the user how to load the webtoon when entering stitched mode.
+
+        Returns "light", "unlimited", or None if the user cancelled.
+        """
+        msg = QtWidgets.QMessageBox(self.main)
+        msg.setIcon(QtWidgets.QMessageBox.Icon.Question)
+        msg.setWindowTitle(self.main.tr("Webtoon mode"))
+        msg.setText(self.main.tr("Choose how to load the webtoon:"))
+        light_btn = msg.addButton(
+            self.main.tr("Lightweight (stitch, auto-chunk if very tall)"),
+            QtWidgets.QMessageBox.ButtonRole.ActionRole,
+        )
+        unlimited_btn = msg.addButton(
+            self.main.tr("Unlimited (stitch entire comic into one image)"),
+            QtWidgets.QMessageBox.ButtonRole.ActionRole,
+        )
+        msg.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(light_btn)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked is light_btn:
+            return "light"
+        if clicked is unlimited_btn:
+            return "unlimited"
+        return None
 
     # ------------------------------------------------------------------
     # Stitched (single-image) webtoon mode
@@ -332,23 +366,26 @@ class WebtoonController:
             arr = arr[:, :, :3].copy()
         return arr
 
-    def _switch_to_stitched_webtoon_mode(self) -> bool:
+    def _switch_to_stitched_webtoon_mode(self, choice: str = "light") -> bool:
         """Stitch all loaded pages into one tall image and load it as a
-        regular page so the normal pipeline processes the whole webtoon."""
+        regular page so the normal pipeline processes the whole webtoon.
+
+        choice: "light" (auto-chunk the strip if very tall) or "unlimited"
+        (stitch the entire comic into a single image).
+        """
         if not self.image_files:
             print("No images loaded, cannot switch to stitched webtoon mode")
             return False
 
-        # TEST BRANCH (unlimited stitching): the entire comic can be stitched
-        # into one image far exceeding PIL's decompression-bomb pixel limit
-        # (~178M px). Lift that limit so the very tall stitched image can be
-        # written and read back at all. This is intentionally relaxed only
-        # here; it disables PIL's DOS protection for the whole session.
-        try:
-            import PIL
-            PIL.Image.MAX_IMAGE_PIXELS = None
-        except Exception:
-            pass
+        # The "unlimited" mode stitches the entire comic into one image that
+        # can far exceed PIL's decompression-bomb pixel limit (~178M px), so we
+        # lift that limit. This disables PIL's DOS protection for the session.
+        if choice == "unlimited":
+            try:
+                import PIL
+                PIL.Image.MAX_IMAGE_PIXELS = None
+            except Exception:
+                pass
 
         # Preserve the original (per-page) project so we can switch back.
         self._webtoon_source_files = list(self.image_files)
@@ -376,10 +413,11 @@ class WebtoonController:
 
         stitched = np.concatenate(pages, axis=0)
 
-        # Safety valve: a single image taller than MAX_STRIP_H is split into
-        # contiguous page-height chunks so we never blow up memory / export.
+        # Safety valve: a single image taller than the chosen limit is split
+        # into contiguous page-height chunks so we never blow up memory / export.
+        max_strip_h = self.UNLIMITED_MAX_STRIP_H if choice == "unlimited" else self.LIGHT_MAX_STRIP_H
         paths: list[str] = []
-        if stitched.shape[0] > self.MAX_STRIP_H:
+        if stitched.shape[0] > max_strip_h:
             step = self.CHUNK_H
             idx = 0
             i = 0

@@ -121,6 +121,22 @@
         <source>Cancel</source>
         <translation>Отмена</translation>
     </message>
+    <message>
+        <source>Webtoon mode</source>
+        <translation>Режим вебтуна</translation>
+    </message>
+    <message>
+        <source>Choose how to load the webtoon:</source>
+        <translation>Выберите, как загрузить вебтун:</translation>
+    </message>
+    <message>
+        <source>Lightweight (stitch, auto-chunk if very tall)</source>
+        <translation>Облегчённый (склейка, авто-нарезка при большой высоте)</translation>
+    </message>
+    <message>
+        <source>Unlimited (stitch entire comic into one image)</source>
+        <translation>Безлимитный (весь комикс одной картинкой)</translation>
+    </message>
 </context>
 <context>
     <name>ComicTranslateUI</name>
