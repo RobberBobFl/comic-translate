@@ -34,9 +34,10 @@ class OCRHandler:
                 if blk is None:
                     return
                 
-                # Check if block already has text to avoid redundant processing
-                if hasattr(blk, 'text') and blk.text and blk.text.strip():
-                    return
+                # NOTE: we no longer skip blocks that already contain text.
+                # After a manual resize/move the same TextBlock object keeps
+                # its old .text, so skipping it would serve stale recognition.
+                # An explicit per-block OCR should always re-recognize.
                 
                 # Check if we have cached results for this image/model/language
                 if self.cache_manager._is_ocr_cached(cache_key):

@@ -147,6 +147,15 @@ class ResizeBlocksCommand(QUndoCommand):
         for blk, xyxy in zip(self.blocks, coords):
             if blk in self.blk_list:
                 blk.xyxy[:] = xyxy
+                # Geometry changed, so any previously recognized text is stale.
+                blk.text = ''
+                if getattr(blk, 'texts', None) is not None:
+                    blk.texts = []
+                blk.translation = ''
+        try:
+            self.main.invalidate_current_page_cache()
+        except Exception:
+            pass
         self._refresh_rectangles()
 
     def redo(self):

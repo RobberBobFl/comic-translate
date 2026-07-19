@@ -101,6 +101,16 @@ class RectItemController:
                 blk.angle = new_angle if new_angle else 0
                 blk.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
                 blk.manual = True
+                # The block was just reshaped, so any previously recognized
+                # text/translation no longer matches its (edited) region.
+                # Drop it so the side panel / canvas stop showing stale
+                # recognition and so an explicit per-block OCR does not skip
+                # this block (OCR_image returns early when a block already
+                # has text).
+                blk.text = ''
+                if getattr(blk, 'texts', None) is not None:
+                    blk.texts = []
+                blk.translation = ''
                 break
         self._sync_to_state()
 
