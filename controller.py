@@ -4,6 +4,9 @@ import numpy as np
 import shutil
 import tempfile
 from typing import Callable, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QCoreApplication, QThreadPool
@@ -794,16 +797,23 @@ class ComicTranslate(ComicTranslateUI):
         try:
             image = self.image_viewer.get_image_array()
             if image is None:
+                logger.info("[CACHE] invalidate skipped: no image loaded")
                 return
             img_hash = self.pipeline.cache_manager._generate_image_hash(image)
             ocr_cache = self.pipeline.cache_manager.ocr_cache
+            n_ocr = sum(1 for k in ocr_cache if k[0] == img_hash)
             for key in [k for k in ocr_cache if k[0] == img_hash]:
                 del ocr_cache[key]
             tr_cache = self.pipeline.cache_manager.translation_cache
+            n_tr = sum(1 for k in tr_cache if k[0] == img_hash)
             for key in [k for k in tr_cache if k[0] == img_hash]:
                 del tr_cache[key]
-        except Exception:
-            pass
+            logger.info(
+                "[CACHE] invalidate_current_page_cache image_hash=%s removed ocr=%d translation=%d",
+                img_hash, n_ocr, n_tr,
+            )
+        except Exception as e:
+            logger.warning("[CACHE] invalidate_current_page_cache error: %s", e)
 
     def translate_image(self, single_block=False):
         self.manual_workflow_ctrl.translate_image(single_block)

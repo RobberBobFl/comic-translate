@@ -28,7 +28,10 @@ class OCRHandler:
                 self.main_page.settings_page.is_gpu_enabled()
             )
             cache_key = self.cache_manager._get_ocr_cache_key(image, source_lang, ocr_model, device, settings=self.main_page.settings_page)
-            
+            logger.info("[OCR] start single_block=%s model=%s lang=%s blocks=%d", single_block, ocr_model, source_lang, len(self.main_page.blk_list))
+            for _i, _b in enumerate(self.main_page.blk_list):
+                logger.info("[OCR]   block %d xyxy=%s text=%r", _i, list(map(int, _b.xyxy[:4])), getattr(_b, 'text', ''))
+
             if single_block:
                 blk = self.pipeline.get_selected_block()
                 if blk is None:
@@ -85,14 +88,14 @@ class OCRHandler:
                 if self.cache_manager._can_serve_all_blocks_from_ocr_cache(cache_key, self.main_page.blk_list):
                     # All blocks can be served from cache
                     self.cache_manager._apply_cached_ocr_to_blocks(cache_key, self.main_page.blk_list)
-                    logger.info(f"Using cached OCR results for all {len(self.main_page.blk_list)} blocks")
+                    logger.info("[OCR] SERVING ALL BLOCKS FROM CACHE (no re-OCR) for %d blocks", len(self.main_page.blk_list))
                 else:
                     # Need to run OCR and cache results
                     self.ocr.initialize(self.main_page, source_lang)
                     if self.main_page.blk_list:  
                         self.ocr.process(image, self.main_page.blk_list)
                         self.cache_manager._cache_ocr_results(cache_key, self.main_page.blk_list)
-                        logger.info("OCR completed and cached for %d blocks", len(self.main_page.blk_list))
+                        logger.info("[OCR] CACHE MISS -> ran OCR process for %d blocks", len(self.main_page.blk_list))
 
     def OCR_webtoon_visible_area(self, single_block: bool = False):
         """Perform OCR on the visible area in webtoon mode."""
