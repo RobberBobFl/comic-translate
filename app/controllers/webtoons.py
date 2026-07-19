@@ -47,7 +47,7 @@ class WebtoonController:
         self._webtoon_source_files: list[str] | None = None
         self._webtoon_source_states: dict | None = None
         # Stitched-webtoon bookkeeping used to split the export back into the
-        # original pages (see _switch_to_stitched_webtoon_mode / export).
+        # original pages (see _stitch_compute / export).
         self._stitched_orig_heights: list[int] | None = None
         self._stitched_chunk_bounds: list[tuple[int, int]] | None = None
         self._stitch_choice: str | None = None
@@ -291,14 +291,22 @@ class WebtoonController:
                 choice = self._prompt_stitch_mode()
                 if choice is None:
                     # User cancelled the dialog: keep webtoon mode off.
-                    self.main.webtoon_toggle.blockSignals(True)
-                    self.main.webtoon_toggle.setChecked(False)
-                    self.main.webtoon_toggle.blockSignals(False)
+                    self._revert_webtoon_toggle()
                     return
-                success = self._switch_to_stitched_webtoon_mode(choice)
-                if success:
-                    self.main.webtoon_mode = False
-                    self.main.webtoon_strip = True
+                # Run the heavy stitching off the GUI thread so the progress
+                # bar can animate and the UI stays responsive.
+                self.main.webtoon_toggle.blockSignals(True)
+                self.main.progress_bar.setVisible(True)
+                self.main.progress_bar.setValue(0)
+                self.main.progress_bar.setFormat(self.main.tr("Stitching webtoon… %p%"))
+                self.main.run_threaded(
+                    self._stitch_compute,
+                    self._on_stitch_done,
+                    self._on_stitch_error,
+                    None,
+                    choice,
+                )
+                return
             else:
                 success = self.switch_to_webtoon_mode()
                 if success:
@@ -371,16 +379,18 @@ class WebtoonController:
             arr = arr[:, :, :3].copy()
         return arr
 
-    def _switch_to_stitched_webtoon_mode(self, choice: str = "light") -> bool:
-        """Stitch all loaded pages into one tall image and load it as a
-        regular page so the normal pipeline processes the whole webtoon.
+    def _stitch_compute(self, choice: str = "light") -> dict | None:
+        """Heavy stitching work (runs in a background thread). Loads all pages,
+        concatenates them into one tall image and writes the stitched chunk
+        PNG(s). Returns the computed bookkeeping so the GUI can be rebuilt on
+        the main thread. Returns None on failure.
 
         choice: "light" (auto-chunk the strip if very tall) or "unlimited"
         (stitch the entire comic into a single image).
         """
         if not self.image_files:
             print("No images loaded, cannot switch to stitched webtoon mode")
-            return False
+            return None
 
         # The "unlimited" mode stitches the entire comic into one image that
         # can far exceed PIL's decompression-bomb pixel limit (~178M px), so we
@@ -402,7 +412,9 @@ class WebtoonController:
         pages = []
         heights = []
         target_w = None
-        for fp in self._webtoon_source_files:
+        source_files = self._webtoon_source_files
+        load_total = len(source_files)
+        for i, fp in enumerate(source_files):
             arr = self.main.image_ctrl.load_image(fp)
             if arr is None:
                 continue
@@ -415,8 +427,14 @@ class WebtoonController:
                 arr = cv2.resize(arr, (target_w, h), interpolation=cv2.INTER_AREA)
             pages.append(arr)
             heights.append(arr.shape[0])
+            try:
+                self.main.stitch_progress.emit(
+                    i + 1, load_total, self.main.tr("Stitching webtoon…")
+                )
+            except Exception:
+                pass
         if not pages:
-            return False
+            return None
 
         stitched = np.concatenate(pages, axis=0)
 
@@ -427,6 +445,8 @@ class WebtoonController:
         chunk_bounds: list[tuple[int, int]] = []
         if stitched.shape[0] > max_strip_h:
             step = self.CHUNK_H
+            n_chunks = (stitched.shape[0] + step - 1) // step
+            total_steps = load_total + n_chunks
             idx = 0
             i = 0
             while i < stitched.shape[0]:
@@ -438,27 +458,63 @@ class WebtoonController:
                 chunk_bounds.append((i, j))
                 idx += 1
                 i = j
+                try:
+                    self.main.stitch_progress.emit(
+                        load_total + idx, total_steps, self.main.tr("Stitching webtoon…")
+                    )
+                except Exception:
+                    pass
         else:
             p = os.path.join(self._stitch_temp_dir(), "webtoon_stitched.png")
             imk.write_image(p, stitched)
             paths = [p]
             chunk_bounds = [(0, stitched.shape[0])]
 
-        # Load the stitched image(s) as regular page(s). webtoon_mode stays
-        # False so the battle-tested single-image pipeline (detect/OCR/
-        # translate/render, manual/semi-auto/retouch, export) is used unchanged.
-        # Note: image_viewer.webtoon_mode is a read-only proxy of
-        # webtoon_manager.is_active(); since we never activate the manager in
-        # this mode it already reports False.
         # Remember the original per-page heights and the chunk boundaries so we
         # can split the stitched image back into the original pages on export.
-        self._stitched_orig_heights = heights
-        self._stitched_chunk_bounds = chunk_bounds
-        self._stitch_choice = choice
+        return {
+            "paths": paths,
+            "heights": heights,
+            "chunk_bounds": chunk_bounds,
+            "choice": choice,
+        }
 
+    def _on_stitch_done(self, result):
+        """Called on the GUI thread when background stitching finishes."""
+        self.main.webtoon_toggle.blockSignals(False)
+        self.main.progress_bar.setVisible(False)
+        if not result:
+            self._revert_webtoon_toggle()
+            return
+        self._stitched_orig_heights = result["heights"]
+        self._stitched_chunk_bounds = result["chunk_bounds"]
+        self._stitch_choice = result["choice"]
+        self._init_stitched_files(result["paths"])
         self.main.webtoon_mode = False
-        self._init_stitched_files(paths)
-        return True
+        self.main.webtoon_strip = True
+        self.main.mark_project_dirty()
+
+    def _on_stitch_error(self, error_tuple):
+        """Called on the GUI thread if background stitching raises."""
+        self.main.webtoon_toggle.blockSignals(False)
+        self.main.progress_bar.setVisible(False)
+        self._revert_webtoon_toggle()
+        exctype, value, tb = error_tuple
+        print(f"Stitching failed: {value}")
+        try:
+            QtWidgets.QMessageBox.warning(
+                self.main,
+                self.main.tr("Webtoon mode"),
+                self.main.tr("Failed to stitch webtoon:") + f" {value}",
+            )
+        except Exception:
+            pass
+
+    def _revert_webtoon_toggle(self):
+        """Put the webtoon toggle back into the off state safely."""
+        self.main.webtoon_toggle.blockSignals(True)
+        self.main.webtoon_toggle.setChecked(False)
+        self.main.webtoon_toggle.blockSignals(False)
 
     def _init_stitched_files(self, paths: list[str]):
         """Replace the loaded project with the stitched image(s) as regular

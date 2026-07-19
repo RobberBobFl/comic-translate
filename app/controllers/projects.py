@@ -576,11 +576,15 @@ class ProjectController:
             except Exception:
                 split_stitched = True
         self.main.loading.setVisible(True)
+        if split_stitched:
+            self.main.progress_bar.setVisible(True)
+            self.main.progress_bar.setValue(0)
+            self.main.progress_bar.setFormat(self.main.tr("Slicing webtoon… %p%"))
         self.main.run_threaded(
             self.save_and_make_worker,
             None,
             self.main.default_error_handler,
-            lambda: self.main.loading.setVisible(False),
+            lambda: (self.main.loading.setVisible(False), self.main.progress_bar.setVisible(False)),
             export_plan,
             all_pages_current_state,
             split_stitched,
@@ -1020,6 +1024,12 @@ class ProjectController:
             else:
                 renderer.add_state_to_image(viewer_state)
             rendered_chunks.append(renderer.render_to_image())
+            try:
+                self.main.stitch_progress.emit(
+                    page_idx + 1, len(chunk_paths), self.main.tr("Slicing webtoon…")
+                )
+            except Exception:
+                pass
 
         full = rendered_chunks[0]
         for c in rendered_chunks[1:]:
@@ -1041,6 +1051,12 @@ class ProjectController:
             group_name = chunk_to_group.get(chunk_idx, export_plan[0]["group_name"] if export_plan else "")
             pages.append((page_img, group_name))
             y += hgt
+        try:
+            self.main.stitch_progress.emit(
+                len(chunk_paths), len(chunk_paths), self.main.tr("Finalizing export…")
+            )
+        except Exception:
+            pass
         return pages
 
     def _gather_psd_pages(self, all_pages_current_state: dict[str, dict]) -> list[PsdPageData]:

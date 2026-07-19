@@ -46,6 +46,7 @@ class ComicTranslate(ComicTranslateUI):
     image_processed = QtCore.Signal(int, object, str)
     patches_processed = QtCore.Signal(list, str)
     progress_update = QtCore.Signal(int, int, int, int, bool)
+    stitch_progress = QtCore.Signal(int, int, str)
     image_skipped = QtCore.Signal(str, str, str)
     blk_rendered = QtCore.Signal(str, int, object, str)
     render_state_ready = QtCore.Signal(str)
@@ -132,6 +133,7 @@ class ComicTranslate(ComicTranslateUI):
         self.image_processed.connect(self.image_ctrl.on_image_processed)
         self.patches_processed.connect(self.image_ctrl.on_inpaint_patches_processed)
         self.progress_update.connect(self.update_progress)
+        self.stitch_progress.connect(self.on_stitch_progress)
         self.blk_rendered.connect(self.text_ctrl.on_blk_rendered)
         self.render_state_ready.connect(self.image_ctrl.on_render_state_ready)
         self.render_state_ready.connect(self.project_ctrl._on_batch_page_done)
@@ -811,6 +813,15 @@ class ComicTranslate(ComicTranslateUI):
 
         progress = (task_progress + step_progress) * 100 
         self.progress_bar.setValue(int(progress))
+
+    def on_stitch_progress(self, current: int, total: int, label: str):
+        """Update the determinate progress bar for webtoon stitching/slicing
+        (driven from background worker threads via the stitch_progress signal)."""
+        if total <= 0:
+            self.progress_bar.setValue(0)
+            return
+        self.progress_bar.setFormat(f"{label} %p%")
+        self.progress_bar.setValue(int(round(current / total * 100)))
 
     def on_download_event(self, status: str, name: str):
         """Show a loading-type MMessage while models/files are being downloaded."""

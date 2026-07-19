@@ -137,6 +137,22 @@
         <source>Unlimited (stitch entire comic into one image)</source>
         <translation>Безлимитный (весь комикс одной картинкой)</translation>
     </message>
+    <message>
+        <source>Stitching webtoon…</source>
+        <translation>Склейка вебтуна…</translation>
+    </message>
+    <message>
+        <source>Slicing webtoon…</source>
+        <translation>Разрезка вебтуна…</translation>
+    </message>
+    <message>
+        <source>Finalizing export…</source>
+        <translation>Финализация экспорта…</translation>
+    </message>
+    <message>
+        <source>Failed to stitch webtoon:</source>
+        <translation>Не удалось склеить вебтун:</translation>
+    </message>
 </context>
 <context>
     <name>ComicTranslateUI</name>
