@@ -30,7 +30,9 @@ class OCRHandler:
             cache_key = self.cache_manager._get_ocr_cache_key(image, source_lang, ocr_model, device, settings=self.main_page.settings_page)
             logger.info("[OCR] start single_block=%s model=%s lang=%s blocks=%d", single_block, ocr_model, source_lang, len(self.main_page.blk_list))
             for _i, _b in enumerate(self.main_page.blk_list):
-                logger.info("[OCR]   block %d xyxy=%s text=%r", _i, list(map(int, _b.xyxy[:4])), getattr(_b, 'text', ''))
+                _bxy = getattr(_b, 'bubble_xyxy', None)
+                _bxy_s = list(map(int, _bxy[:4])) if _bxy is not None else None
+                logger.info("[OCR]   block %d xyxy=%s bubble_xyxy=%s text=%r", _i, list(map(int, _b.xyxy[:4])), _bxy_s, getattr(_b, 'text', ''))
 
             if single_block:
                 blk = self.pipeline.get_selected_block()

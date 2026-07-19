@@ -147,6 +147,9 @@ class ResizeBlocksCommand(QUndoCommand):
         for blk, xyxy in zip(self.blocks, coords):
             if blk in self.blk_list:
                 blk.xyxy[:] = xyxy
+                # OCR engines crop via blk.bubble_xyxy when present; keep it
+                # in sync with the resized geometry so recognition follows.
+                blk.bubble_xyxy = [int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])]
                 # Geometry changed, so any previously recognized text is stale.
                 blk.text = ''
                 if getattr(blk, 'texts', None) is not None:

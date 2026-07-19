@@ -131,6 +131,16 @@ class RectItemController:
                               int(new_rect_coords[1]),
                               int(new_rect_coords[2]),
                               int(new_rect_coords[3])]
+            # OCR engines crop the block using blk.bubble_xyxy when present
+            # (every engine falls back to xyxy only if bubble_xyxy is None).
+            # Detected blocks carry the *original* bubble box in bubble_xyxy,
+            # so without syncing it here the OCR would still crop the old
+            # region after a resize. Mirror the edited geometry into
+            # bubble_xyxy so the crop follows the resize.
+            target.bubble_xyxy = [int(new_rect_coords[0]),
+                                 int(new_rect_coords[1]),
+                                 int(new_rect_coords[2]),
+                                 int(new_rect_coords[3])]
             target.angle = new_angle if new_angle else 0
             target.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
             target.manual = True
@@ -145,8 +155,9 @@ class RectItemController:
                 target.texts = []
             target.translation = ''
             logger.info(
-                "[RECT] change -> TARGET FOUND xyxy updated to %s (text cleared)",
+                "[RECT] change -> TARGET FOUND xyxy updated to %s bubble_xyxy=%s (text cleared)",
                 list(map(int, target.xyxy[:4])),
+                list(map(int, target.bubble_xyxy[:4])),
             )
         else:
             logger.warning(
