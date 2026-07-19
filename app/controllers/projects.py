@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 import numpy as np
+import imkit as imk
 from datetime import datetime
 from typing import TYPE_CHECKING
 from dataclasses import asdict, is_dataclass
@@ -562,6 +563,18 @@ class ProjectController:
     def _run_export_plan(self, export_plan: list[dict]) -> None:
         self.main.image_ctrl.save_current_image_state()
         all_pages_current_state = self._build_all_pages_current_state()
+        # Split the stitched webtoon back into the original pages on export,
+        # but only when we are actually in stitched mode and the option is on.
+        split_stitched = bool(getattr(self.main, "webtoon_strip", False))
+        if split_stitched:
+            try:
+                split_stitched = bool(
+                    self.main.settings_page.get_export_settings().get(
+                        "webtoon_stitch_split_export", True
+                    )
+                )
+            except Exception:
+                split_stitched = True
         self.main.loading.setVisible(True)
         self.main.run_threaded(
             self.save_and_make_worker,
@@ -570,6 +583,7 @@ class ProjectController:
             lambda: self.main.loading.setVisible(False),
             export_plan,
             all_pages_current_state,
+            split_stitched,
         )
 
     def _prompt_for_partition(
@@ -882,7 +896,12 @@ class ProjectController:
             groups.setdefault(group_name, []).append(page_index)
         return groups
 
-    def save_and_make_worker(self, export_plan: list[dict], all_pages_current_state: dict[str, dict]):
+    def save_and_make_worker(
+        self,
+        export_plan: list[dict],
+        all_pages_current_state: dict[str, dict],
+        split_stitched: bool = False,
+    ):
         try:
             if self.main.file_handler.should_pre_materialize(self.main.image_files):
                 count = self.main.file_handler.pre_materialize(self.main.image_files)
@@ -898,43 +917,131 @@ class ProjectController:
                     'image_states': all_pages_current_state
                 })()
 
+            # When exporting a stitched webtoon, optionally render the long image
+            # and slice it back into the original separate pages.
+            all_split_pages: list[tuple[np.ndarray, str]] = []
+            if split_stitched:
+                all_split_pages = self._build_split_stitched_pages(
+                    export_plan, all_pages_current_state, temp_main_page_context
+                )
+
             for group_index, group in enumerate(export_plan, start=1):
                 group_dir = os.path.join(temp_dir, f"group_{group_index:03d}")
                 os.makedirs(group_dir, exist_ok=True)
-                for page_number, page_idx in enumerate(group["page_indices"], start=1):
-                    file_path = self.main.image_files[page_idx]
-                    
-                    # Try to load the image with error handling
-                    try:
-                        rgb_img = self.main.load_image(file_path)
-                    except Exception as e:
-                        print(f"Warning: Could not load image for page {page_idx} ({file_path}): {e}")
-                        print(f"  Skipping this page in export")
-                        continue
-                    
-                    renderer = ImageSaveRenderer(rgb_img)
-                    viewer_state = all_pages_current_state[file_path]['viewer_state']
+                if split_stitched and all_split_pages:
+                    page_number = 0
+                    for page_img, grp in all_split_pages:
+                        if grp != group["group_name"]:
+                            continue
+                        page_number += 1
+                        sv_pth = os.path.join(group_dir, f"page_{page_number:04d}.png")
+                        imk.write_image(sv_pth, page_img)
+                else:
+                    for page_number, page_idx in enumerate(group["page_indices"], start=1):
+                        file_path = self.main.image_files[page_idx]
+                        
+                        # Try to load the image with error handling
+                        try:
+                            rgb_img = self.main.load_image(file_path)
+                        except Exception as e:
+                            print(f"Warning: Could not load image for page {page_idx} ({file_path}): {e}")
+                            print(f"  Skipping this page in export")
+                            continue
+                        
+                        renderer = ImageSaveRenderer(rgb_img)
+                        viewer_state = all_pages_current_state[file_path]['viewer_state']
 
-                    patches = list(self.main.image_patches.get(file_path, []))
-                    paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
-                    if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
-                            and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
-                        h, w = paint_overlay.shape[:2]
-                        patches.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
-                    renderer.apply_patches(patches)
-                    if self.main.webtoon_mode and temp_main_page_context is not None:
-                        renderer.add_state_to_image(viewer_state, page_idx, temp_main_page_context)
-                    else:
-                        renderer.add_state_to_image(viewer_state)
+                        patches = list(self.main.image_patches.get(file_path, []))
+                        paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
+                        if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
+                                and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
+                            h, w = paint_overlay.shape[:2]
+                            patches.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
+                        renderer.apply_patches(patches)
+                        if self.main.webtoon_mode and temp_main_page_context is not None:
+                            renderer.add_state_to_image(viewer_state, page_idx, temp_main_page_context)
+                        else:
+                            renderer.add_state_to_image(viewer_state)
 
-                    sv_pth = os.path.join(group_dir, self._build_export_page_name(page_number, file_path))
-                    renderer.save_image(sv_pth)
+                        sv_pth = os.path.join(group_dir, self._build_export_page_name(page_number, file_path))
+                        renderer.save_image(sv_pth)
 
                 os.makedirs(os.path.dirname(group["output_path"]) or ".", exist_ok=True)
                 make(group_dir, group["output_path"])
         finally:
             # Clean up temp directory
             shutil.rmtree(temp_dir)
+
+    def _build_split_stitched_pages(
+        self,
+        export_plan: list[dict],
+        all_pages_current_state: dict[str, dict],
+        temp_main_page_context,
+    ) -> list[tuple[np.ndarray, str]]:
+        """Render the stitched webtoon and slice it back into the original
+        pages using the boundaries captured at stitch time.
+
+        Returns a list of (page_image, group_name) tuples in original order.
+        Returns an empty list if splitting is not applicable.
+        """
+        ctrl = getattr(self.main, "webtoon_ctrl", None)
+        heights = getattr(ctrl, "_stitched_orig_heights", None) if ctrl else None
+        chunk_bounds = getattr(ctrl, "_stitched_chunk_bounds", None) if ctrl else None
+        chunk_paths = list(self.main.image_files)
+        if not heights or not chunk_bounds or not chunk_paths:
+            return []
+
+        # Map each chunk (page index) to its export group name.
+        chunk_to_group: dict[int, str] = {}
+        for group in export_plan:
+            for page_idx in group["page_indices"]:
+                chunk_to_group[page_idx] = group["group_name"]
+
+        # Render each chunk exactly like a normal export page (text/paint
+        # baked in), then concatenate into the full stitched image.
+        rendered_chunks: list[np.ndarray] = []
+        for page_idx, file_path in enumerate(chunk_paths):
+            try:
+                rgb_img = self.main.load_image(file_path)
+            except Exception as e:
+                print(f"Warning: could not load stitched chunk {page_idx} ({file_path}): {e}")
+                return []
+            renderer = ImageSaveRenderer(rgb_img)
+            viewer_state = all_pages_current_state[file_path]['viewer_state']
+            patches = list(self.main.image_patches.get(file_path, []))
+            paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
+            if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
+                    and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
+                h, w = paint_overlay.shape[:2]
+                patches.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
+            renderer.apply_patches(patches)
+            if self.main.webtoon_mode and temp_main_page_context is not None:
+                renderer.add_state_to_image(viewer_state, page_idx, temp_main_page_context)
+            else:
+                renderer.add_state_to_image(viewer_state)
+            rendered_chunks.append(renderer.render_to_image())
+
+        full = rendered_chunks[0]
+        for c in rendered_chunks[1:]:
+            full = np.concatenate([full, c], axis=0)
+
+        # Slice the full image back into the original pages by their heights.
+        pages: list[tuple[np.ndarray, str]] = []
+        y = 0
+        for hgt in heights:
+            if y + hgt > full.shape[0]:
+                # Heights drifted from the rendered height; stop safely.
+                break
+            page_img = full[y:y + hgt]
+            chunk_idx = 0
+            for k, (cs, ce) in enumerate(chunk_bounds):
+                if cs <= y < ce:
+                    chunk_idx = k
+                    break
+            group_name = chunk_to_group.get(chunk_idx, export_plan[0]["group_name"] if export_plan else "")
+            pages.append((page_img, group_name))
+            y += hgt
+        return pages
 
     def _gather_psd_pages(self, all_pages_current_state: dict[str, dict]) -> list[PsdPageData]:
         """Collect PSD page data from the captured viewer state."""

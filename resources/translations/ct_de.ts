@@ -460,6 +460,14 @@
         <source>Export Inpainted Image</source>
         <translation>Inpainted-Bild exportieren</translation>
     </message>
+    <message>
+        <source>Разбить склеенный вебтун на исходные страницы при экспорте</source>
+        <translation>Разбить склеенный вебтун на исходные страницы при экспорте</translation>
+    </message>
+    <message>
+        <source>Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</source>
+        <translation>Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</translation>
+    </message>
 </context>
 <context>
     <name>LlmsPage</name>

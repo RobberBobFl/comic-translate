@@ -46,6 +46,11 @@ class WebtoonController:
         self._stitch_temp: str | None = None
         self._webtoon_source_files: list[str] | None = None
         self._webtoon_source_states: dict | None = None
+        # Stitched-webtoon bookkeeping used to split the export back into the
+        # original pages (see _switch_to_stitched_webtoon_mode / export).
+        self._stitched_orig_heights: list[int] | None = None
+        self._stitched_chunk_bounds: list[tuple[int, int]] | None = None
+        self._stitch_choice: str | None = None
 
         # Load lazy loading configuration
         config = LazyLoadingConfig()
@@ -395,6 +400,7 @@ class WebtoonController:
 
         # Read every page and stitch them vertically into one tall image.
         pages = []
+        heights = []
         target_w = None
         for fp in self._webtoon_source_files:
             arr = self.main.image_ctrl.load_image(fp)
@@ -408,6 +414,7 @@ class WebtoonController:
                 h = int(round(arr.shape[0] * target_w / arr.shape[1]))
                 arr = cv2.resize(arr, (target_w, h), interpolation=cv2.INTER_AREA)
             pages.append(arr)
+            heights.append(arr.shape[0])
         if not pages:
             return False
 
@@ -417,6 +424,7 @@ class WebtoonController:
         # into contiguous page-height chunks so we never blow up memory / export.
         max_strip_h = self.UNLIMITED_MAX_STRIP_H if choice == "unlimited" else self.LIGHT_MAX_STRIP_H
         paths: list[str] = []
+        chunk_bounds: list[tuple[int, int]] = []
         if stitched.shape[0] > max_strip_h:
             step = self.CHUNK_H
             idx = 0
@@ -427,12 +435,14 @@ class WebtoonController:
                 p = os.path.join(self._stitch_temp_dir(), f"webtoon_chunk_{idx:04d}.png")
                 imk.write_image(p, chunk)
                 paths.append(p)
+                chunk_bounds.append((i, j))
                 idx += 1
                 i = j
         else:
             p = os.path.join(self._stitch_temp_dir(), "webtoon_stitched.png")
             imk.write_image(p, stitched)
             paths = [p]
+            chunk_bounds = [(0, stitched.shape[0])]
 
         # Load the stitched image(s) as regular page(s). webtoon_mode stays
         # False so the battle-tested single-image pipeline (detect/OCR/
@@ -440,6 +450,12 @@ class WebtoonController:
         # Note: image_viewer.webtoon_mode is a read-only proxy of
         # webtoon_manager.is_active(); since we never activate the manager in
         # this mode it already reports False.
+        # Remember the original per-page heights and the chunk boundaries so we
+        # can split the stitched image back into the original pages on export.
+        self._stitched_orig_heights = heights
+        self._stitched_chunk_bounds = chunk_bounds
+        self._stitch_choice = choice
+
         self.main.webtoon_mode = False
         self._init_stitched_files(paths)
         return True

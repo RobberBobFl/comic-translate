@@ -460,6 +460,14 @@
         <source>Export Inpainted Image</source>
         <translation>Экспортировать восстановленное изображение</translation>
     </message>
+    <message>
+        <source>Split stitched webtoon into original pages on export</source>
+        <translation>Разбить склеенный вебтун на исходные страницы при экспорте</translation>
+    </message>
+    <message>
+        <source>When a webtoon was stitched into one image, export it back as the original separate pages so comic readers load it instantly.</source>
+        <translation>Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</translation>
+    </message>
 </context>
 <context>
     <name>LlmsPage</name>
