@@ -91,27 +91,46 @@ class RectItemController:
             new_tr_origin: QPointF
         ):
         # Find the corresponding TextBlock in blk_list
+        # Find the TextBlock whose region contains the center of the edited
+        # rectangle. When a detection box is resized the signal carries the
+        # box rect, but when the (on-top) text overlay is resized/moved it
+        # carries the *text* rect -- which is much smaller and sits inside the
+        # detection box, so an IoU-based overlap test (threshold 0.2) fails to
+        # match and the block's xyxy is never updated. Matching by center is
+        # unambiguous even for bubbles that are close together.
+        ox1, oy1, ox2, oy2 = old_rect_coords
+        ocx, ocy = (float(ox1) + float(ox2)) / 2.0, (float(oy1) + float(oy2)) / 2.0
+        target = None
         for blk in self.main.blk_list:
-            if do_rectangles_overlap(blk.xyxy, old_rect_coords, 0.2):
-                # Update the TextBlock coordinates
-                blk.xyxy[:] = [int(new_rect_coords[0]), 
-                               int(new_rect_coords[1]), 
-                               int(new_rect_coords[2]), 
-                               int(new_rect_coords[3])]
-                blk.angle = new_angle if new_angle else 0
-                blk.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
-                blk.manual = True
-                # The block was just reshaped, so any previously recognized
-                # text/translation no longer matches its (edited) region.
-                # Drop it so the side panel / canvas stop showing stale
-                # recognition and so an explicit per-block OCR does not skip
-                # this block (OCR_image returns early when a block already
-                # has text).
-                blk.text = ''
-                if getattr(blk, 'texts', None) is not None:
-                    blk.texts = []
-                blk.translation = ''
+            bx1, by1, bx2, by2 = blk.xyxy[:4]
+            if bx1 <= ocx <= bx2 and by1 <= ocy <= by2:
+                target = blk
                 break
+        if target is None:
+            for blk in self.main.blk_list:
+                if do_rectangles_overlap(blk.xyxy, old_rect_coords, 0.2):
+                    target = blk
+                    break
+
+        if target is not None:
+            # Update the TextBlock coordinates
+            target.xyxy[:] = [int(new_rect_coords[0]),
+                              int(new_rect_coords[1]),
+                              int(new_rect_coords[2]),
+                              int(new_rect_coords[3])]
+            target.angle = new_angle if new_angle else 0
+            target.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
+            target.manual = True
+            # The block was just reshaped, so any previously recognized
+            # text/translation no longer matches its (edited) region.
+            # Drop it so the side panel / canvas stop showing stale
+            # recognition and so an explicit per-block OCR does not skip
+            # this block (OCR_image returns early when a block already
+            # has text).
+            target.text = ''
+            if getattr(target, 'texts', None) is not None:
+                target.texts = []
+            target.translation = ''
         self._sync_to_state()
 
     def _sync_to_state(self) -> None:
