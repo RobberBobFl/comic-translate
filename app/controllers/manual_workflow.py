@@ -255,6 +255,13 @@ class ManualWorkflowController:
             load_rects,
         )
 
+    def _on_ocr_finished(self, single_block: bool, then_translate: bool) -> None:
+        self.finish_ocr_translate(single_block)
+        # When the "Actualize" button triggers a refresh we also re-translate,
+        # so the rendered result reflects the freshly recognized blocks.
+        if then_translate and is_there_text(self.main.blk_list):
+            self.translate_image(False)
+
     def finish_ocr_translate(self, single_block: bool = False) -> None:
         if self.main.blk_list:
             if single_block:
@@ -273,7 +280,7 @@ class ManualWorkflowController:
         self.main.set_tool("box")
         self.main.on_manual_finished()
 
-    def ocr(self, single_block: bool = False) -> None:
+    def ocr(self, single_block: bool = False, then_translate: bool = False) -> None:
         if not validate_ocr(self.main):
             return
         selected_paths = self._selected_page_paths()
@@ -343,14 +350,14 @@ class ManualWorkflowController:
                 lambda: self.main.pipeline.OCR_webtoon_visible_area(single_block),
                 None,
                 self.main.default_error_handler,
-                lambda: self.finish_ocr_translate(single_block),
+                lambda: self._on_ocr_finished(single_block, then_translate),
             )
         else:
             self.main.run_threaded(
                 lambda: self.main.pipeline.OCR_image(single_block),
                 None,
                 self.main.default_error_handler,
-                lambda: self.finish_ocr_translate(single_block),
+                lambda: self._on_ocr_finished(single_block, then_translate),
             )
 
     def translate_image(self, single_block: bool = False) -> None:

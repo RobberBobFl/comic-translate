@@ -759,6 +759,38 @@ class ComicTranslate(ComicTranslateUI):
     def ocr(self, single_block=False):
         self.manual_workflow_ctrl.ocr(single_block)
 
+    def refresh_current_page(self):
+        """Clear the current page's OCR/translation cache and re-recognize it.
+
+        Manual block edits don't change the page pixels, so the cache key
+        (whole-image hash) stays identical and stale text could otherwise be
+        served. This is the explicit "Actualize" counterpart to the automatic
+        cache invalidation that runs on every manual block add / delete / resize.
+        """
+        self.invalidate_current_page_cache()
+        self.manual_workflow_ctrl.ocr(then_translate=True)
+
+    def invalidate_current_page_cache(self) -> None:
+        """Drop OCR + translation cache entries for the current page image.
+
+        The cache is keyed by the whole-page image hash, so editing blocks
+        (without altering pixels) leaves stale entries behind. Removing them
+        forces the next Recognize / Translate to re-run on the edited blocks.
+        """
+        try:
+            image = self.image_viewer.get_image_array()
+            if image is None:
+                return
+            img_hash = self.pipeline.cache_manager._generate_image_hash(image)
+            ocr_cache = self.pipeline.cache_manager.ocr_cache
+            for key in [k for k in ocr_cache if k[0] == img_hash]:
+                del ocr_cache[key]
+            tr_cache = self.pipeline.cache_manager.translation_cache
+            for key in [k for k in tr_cache if k[0] == img_hash]:
+                del tr_cache[key]
+        except Exception:
+            pass
+
     def translate_image(self, single_block=False):
         self.manual_workflow_ctrl.translate_image(single_block)
 

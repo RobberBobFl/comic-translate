@@ -302,10 +302,23 @@ class WorkspaceMixin:
             )
         )
 
+        self.refresh_page_button = self.create_tool_button(
+            text=self.tr("Actualize"), svg="refresh_line.svg"
+        )
+        self.refresh_page_button.setToolTip(
+            self.tr(
+                "Clear the page's OCR/translation cache and re-recognize "
+                "(and re-translate) the current page. Use after editing blocks "
+                "by hand if the recognized text looks stale."
+            )
+        )
+        self.refresh_page_button.clicked.connect(self.refresh_current_page)
+
         box_tools_lay.addWidget(self.box_button)
         box_tools_lay.addWidget(self.delete_button)
         box_tools_lay.addWidget(self.clear_rectangles_button)
         box_tools_lay.addWidget(self.draw_blklist_blks)
+        box_tools_lay.addWidget(self.refresh_page_button)
 
         self.change_all_blocks_size_dec = self.create_tool_button(svg="minus_line.svg")
         self.change_all_blocks_size_dec.setToolTip(self.tr("Reduce the size of all blocks"))

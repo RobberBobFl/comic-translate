@@ -115,6 +115,11 @@ class RectItemController:
             self.main.manual_workflow_ctrl.sync_blk_list_to_state()
         except Exception:
             pass
+        # Manual block edits don't change the page pixels, so the OCR /
+        # translation cache (keyed by the whole-image hash) would otherwise
+        # keep serving stale text for the edited blocks. Drop those entries so
+        # the next Recognize / Translate re-runs on the current blocks.
+        self.main.invalidate_current_page_cache()
 
     def rect_change_undo(self, old_state, new_state):
         command = BoxesChangeCommand(self.main.image_viewer, old_state,
