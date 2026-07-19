@@ -1769,14 +1769,6 @@ sonra yeniden boyutlandırılmış görselde boyama işlemi yapın.</translation
 </context>
 <context>
     <name>WorkspaceMixin</name>
-        <message>
-            <source>Actualize</source>
-            <translation type="unfinished"></translation>
-        </message>
-        <message>
-            <source>Clear the page's OCR/translation cache and re-recognize (and re-translate) the current page. Use after editing blocks by hand if the recognized text looks stale.</source>
-            <translation type="unfinished"></translation>
-        </message>
 
     <message>
         <location filename="../../app/ui/main_window/builders/workspace.py" line="31"/>

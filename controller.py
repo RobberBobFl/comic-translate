@@ -4,9 +4,6 @@ import numpy as np
 import shutil
 import tempfile
 from typing import Callable, Tuple
-import logging
-
-logger = logging.getLogger(__name__)
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QCoreApplication, QThreadPool
@@ -762,30 +759,6 @@ class ComicTranslate(ComicTranslateUI):
     def ocr(self, single_block=False):
         self.manual_workflow_ctrl.ocr(single_block)
 
-    def refresh_current_page(self):
-        """Drop the stale OCR/translation cache for the current page.
-
-        Unlike the automatic invalidation that runs on every manual block
-        edit, this is the explicit "Actualize" action: it ONLY clears the
-        cache (and any leftover recognized text/translation on the current
-        page's blocks) so the NEXT Recognize / Translate re-runs on the
-        edited blocks. It does not run OCR or translation by itself -- press
-        Recognize afterwards to get fresh recognition.
-        """
-        self.invalidate_current_page_cache()
-        for blk in (self.blk_list or []):
-            blk.text = ''
-            if getattr(blk, 'texts', None) is not None:
-                blk.texts = []
-            blk.translation = ''
-        try:
-            self.manual_workflow_ctrl.sync_blk_list_to_state()
-        except Exception:
-            pass
-        try:
-            self.text_ctrl.render_text()
-        except Exception:
-            pass
 
     def invalidate_current_page_cache(self) -> None:
         """Drop OCR + translation cache entries for the current page image.
@@ -797,23 +770,16 @@ class ComicTranslate(ComicTranslateUI):
         try:
             image = self.image_viewer.get_image_array()
             if image is None:
-                logger.info("[CACHE] invalidate skipped: no image loaded")
                 return
             img_hash = self.pipeline.cache_manager._generate_image_hash(image)
             ocr_cache = self.pipeline.cache_manager.ocr_cache
-            n_ocr = sum(1 for k in ocr_cache if k[0] == img_hash)
             for key in [k for k in ocr_cache if k[0] == img_hash]:
                 del ocr_cache[key]
             tr_cache = self.pipeline.cache_manager.translation_cache
-            n_tr = sum(1 for k in tr_cache if k[0] == img_hash)
             for key in [k for k in tr_cache if k[0] == img_hash]:
                 del tr_cache[key]
-            logger.info(
-                "[CACHE] invalidate_current_page_cache image_hash=%s removed ocr=%d translation=%d",
-                img_hash, n_ocr, n_tr,
-            )
-        except Exception as e:
-            logger.warning("[CACHE] invalidate_current_page_cache error: %s", e)
+        except Exception:
+            pass
 
     def translate_image(self, single_block=False):
         self.manual_workflow_ctrl.translate_image(single_block)

@@ -136,22 +136,9 @@ class LoadingWorker(QObject):
 def main():
     
     # Configure logging
-    import os
     logging.basicConfig(
         level=logging.INFO,
     )
-    # Also mirror logs to a file so they can be shared for debugging.
-    _log_dir = os.path.join(os.path.expanduser("~"), ".cache", "comic-translate")
-    try:
-        os.makedirs(_log_dir, exist_ok=True)
-        _log_path = os.path.join(_log_dir, "debug.log")
-        _fh = logging.FileHandler(_log_path, encoding="utf-8")
-        _fh.setLevel(logging.INFO)
-        _fh.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
-        logging.getLogger().addHandler(_fh)
-        logging.getLogger(__name__).info("Logging to %s", _log_path)
-    except Exception as _e:
-        logging.getLogger(__name__).warning("Could not set up file logging: %s", _e)
     
     if sys.platform == "win32":
         # Necessary Workaround to set Taskbar Icon on Windows

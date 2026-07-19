@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, Sequence
 
 from PySide6 import QtCore
@@ -17,8 +16,6 @@ from modules.utils.pipeline_config import validate_ocr, validate_translator
 from modules.utils.textblock import sort_blk_list
 from modules.utils.translator_utils import is_there_text, format_translations, set_upper_case
 from pipeline.webtoon_utils import get_visible_text_items, get_first_visible_block
-
-logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.ui.canvas.text_item import TextBlockItem
@@ -285,9 +282,7 @@ class ManualWorkflowController:
 
     def ocr(self, single_block: bool = False, then_translate: bool = False) -> None:
         if not validate_ocr(self.main):
-            logger.info("[OCR-CTRL] ocr() aborted: validate_ocr failed")
             return
-        logger.info("[OCR-CTRL] ocr() single_block=%s then_translate=%s", single_block, then_translate)
         selected_paths = self._selected_page_paths()
         if len(selected_paths) > 1 and not single_block:
             self.main.loading.setVisible(True)

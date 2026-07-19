@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import numpy as np
 from typing import TYPE_CHECKING
 from PySide6.QtCore import QRectF, QPointF
@@ -10,8 +9,6 @@ from app.ui.commands.box import AddRectangleCommand, BoxesChangeCommand
 
 from modules.detection.utils.geometry import do_rectangles_overlap
 from modules.utils.textblock import TextBlock
-
-logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -76,7 +73,6 @@ class RectItemController:
         new_blk = TextBlock(text_bbox=np.array(new_rect_coords))
         new_blk.manual = True
         self.main.blk_list.append(new_blk)
-        logger.info("[RECT] create block xyxy=%s manual=True (blk_list now %d)", new_rect_coords, len(self.main.blk_list))
         command = AddRectangleCommand(self.main, rect_item, new_blk, self.main.blk_list)
         self.main.undo_group.activeStack().push(command)
         self._sync_to_state()
@@ -84,9 +80,7 @@ class RectItemController:
     def handle_rectangle_deletion(self, rect: QRectF):
         rect_coords = rect.getCoords()
         current_text_block = self.find_corresponding_text_block(rect_coords, 0.5)
-        before = len(self.main.blk_list)
         self.main.blk_list.remove(current_text_block)
-        logger.info("[RECT] delete block xyxy=%s (blk_list %d -> %d)", rect_coords, before, len(self.main.blk_list))
         self._sync_to_state()
 
     def handle_rectangle_change(
@@ -96,13 +90,6 @@ class RectItemController:
             new_angle: float, 
             new_tr_origin: QPointF
         ):
-        logger.info(
-            "[RECT] change old=%s new=%s angle=%s (blk_list before: %s)",
-            tuple(int(v) for v in old_rect_coords),
-            tuple(int(v) for v in new_rect_coords),
-            new_angle,
-            [list(map(int, b.xyxy[:4])) for b in self.main.blk_list],
-        )
         # Find the corresponding TextBlock in blk_list
         # Find the TextBlock whose region contains the center of the edited
         # rectangle. When a detection box is resized the signal carries the
@@ -154,16 +141,6 @@ class RectItemController:
             if getattr(target, 'texts', None) is not None:
                 target.texts = []
             target.translation = ''
-            logger.info(
-                "[RECT] change -> TARGET FOUND xyxy updated to %s bubble_xyxy=%s (text cleared)",
-                list(map(int, target.xyxy[:4])),
-                list(map(int, target.bubble_xyxy[:4])),
-            )
-        else:
-            logger.warning(
-                "[RECT] change -> NO TARGET BLOCK FOUND for old=%s; xyxy NOT updated",
-                tuple(int(v) for v in old_rect_coords),
-            )
         self._sync_to_state()
 
     def _sync_to_state(self) -> None:

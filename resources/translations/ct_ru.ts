@@ -1769,14 +1769,6 @@ then do inpainting on the resized image.</source>
 </context>
 <context>
     <name>WorkspaceMixin</name>
-        <message>
-            <source>Actualize</source>
-            <translation>Обновить</translation>
-        </message>
-        <message>
-            <source>Clear the page's OCR/translation cache and re-recognize (and re-translate) the current page. Use after editing blocks by hand if the recognized text looks stale.</source>
-            <translation>Очистить кеш OCR/перевода страницы и заново распознать (и перевести) текущую страницу. Используйте после ручного редактирования блоков, если распознанный текст выглядит устаревшим.</translation>
-        </message>
 
     <message>
         <location filename="../../app/ui/main_window/builders/workspace.py" line="31"/>
