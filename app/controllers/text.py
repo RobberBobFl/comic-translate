@@ -6,7 +6,7 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore
-from PySide6.QtGui import QColor, QTextCursor
+from PySide6.QtGui import QColor, QTextCursor, QTextBlockFormat
 
 from app.ui.commands.textformat import TextFormatCommand
 from app.ui.commands.box import AddTextItemCommand, ResizeBlocksCommand
@@ -151,8 +151,29 @@ class TextController:
             vertical=vertical,
         )
         
+        # Widen the text document to the block width so the user's alignment
+        # (default: center) centers the text inside the bubble instead of pinning
+        # it to the block's top-left. pos() stays at the block top-left so
+        # position-based block lookups keep working.
+        bw = bh = 0
+        if blk.angle == 0 and not vertical:
+            _, _, bw, bh = blk.xywh
+            properties.width = bw
+
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text(text)
+
+        # Vertically center the text within the block box using a top margin.
+        if blk.angle == 0 and not vertical and bh:
+            text_height = text_item.document().size().height()
+            top = max(0.0, (bh - text_height) / 2.0)
+            if top > 0:
+                _cursor = QTextCursor(text_item.document())
+                _cursor.select(QTextCursor.SelectionType.Document)
+                _bf = QTextBlockFormat()
+                _bf.setTopMargin(top)
+                _bf.setAlignment(alignment)
+                _cursor.mergeBlockFormat(_bf)
 
         # Update or append the block in the main controller's blk_list
         existing_idx = next(
@@ -866,6 +887,20 @@ class TextController:
                         )
 
                         font_color = get_smart_text_color(blk.font_color, setting_font_color)
+
+                        # Center the rendered text inside its block box (matches the
+                        # single-page path): widen the text document to the block
+                        # width and add a top margin for vertical centering. The
+                        # item's pos() stays at the block's top-left so position
+                        # based block lookups keep working. Rotated / vertical
+                        # blocks keep the legacy rendered-size box.
+                        if blk.angle == 0 and not vertical:
+                            render_width = block_width
+                            render_v_margin = max(0.0, (block_height - rendered_height) / 2.0)
+                        else:
+                            render_width = rendered_width
+                            render_v_margin = 0.0
+
                         text_props = TextItemProperties(
                             text=wrapped,
                             font_family=font_family,
@@ -883,9 +918,10 @@ class TextController:
                             rotation=blk.angle,
                             scale=1.0,
                             transform_origin=blk.tr_origin_point if blk.tr_origin_point else (0, 0),
-                            width=rendered_width,
+                            width=render_width,
                             height=rendered_height,
                             vertical=vertical,
+                            v_margin=render_v_margin,
                         )
                         new_text_items_state.append(text_props.to_dict())
 

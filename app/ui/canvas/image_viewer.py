@@ -540,6 +540,20 @@ class ImageViewer(QGraphicsView):
         # Apply width if specified
         if properties.width is not None:
             item.set_text(properties.text, properties.width)
+            # set_text() resets the width for plain text (apply_all_attributes ->
+            # update_text_width), so force it again to honor the requested width.
+            item.setTextWidth(properties.width)
+        
+        # Apply a top margin to vertically center the text within its block box
+        # (used by the text-centering fix). Only for non-vertical documents.
+        if getattr(properties, "v_margin", 0) and not getattr(properties, "vertical", False):
+            _doc = item.document()
+            _cursor = QtGui.QTextCursor(_doc)
+            _cursor.select(QtGui.QTextCursor.SelectionType.Document)
+            _bf = QtGui.QTextBlockFormat()
+            _bf.setTopMargin(properties.v_margin)
+            _bf.setAlignment(properties.alignment)
+            _cursor.mergeBlockFormat(_bf)
         
         # Set direction if specified
         item.set_direction(properties.direction)
