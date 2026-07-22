@@ -17,7 +17,9 @@ class RephraseDialog(QtWidgets.QDialog):
         orig_label = QtWidgets.QLabel(original)
         orig_label.setWordWrap(True)
         orig_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        orig_label.setStyleSheet("background: #f0f0f0; padding: 6px; border-radius: 4px;")
+        orig_label.setStyleSheet(
+            "background: #f5f5f5; color: #000000; padding: 6px; border-radius: 4px;"
+        )
         layout.addWidget(orig_label)
 
         # Rephrased
@@ -26,7 +28,7 @@ class RephraseDialog(QtWidgets.QDialog):
         self.rephrased_label.setWordWrap(True)
         self.rephrased_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.rephrased_label.setStyleSheet(
-            "background: #e8f5e9; padding: 6px; border-radius: 4px; font-weight: bold;"
+            "background: #d4edda; color: #000000; padding: 6px; border-radius: 4px; font-weight: bold;"
         )
         layout.addWidget(self.rephrased_label)
 
