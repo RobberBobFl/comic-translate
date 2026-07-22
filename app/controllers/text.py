@@ -5,7 +5,7 @@ import copy
 import numpy as np
 from typing import TYPE_CHECKING
 
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QColor, QTextCursor, QTextBlockFormat
 
 from app.ui.commands.textformat import TextFormatCommand
@@ -22,6 +22,9 @@ from modules.utils.language_utils import to_canonical_language_name
 from modules.utils.image_utils import get_smart_text_color
 from modules.utils.common_utils import is_close
 from modules.utils.translator_utils import format_translations, is_renderable_translation
+from modules.translation.processor import Translator
+from modules.translation.base import LLMTranslation
+from app.ui.rephrase_dialog import RephraseDialog
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -1043,6 +1046,49 @@ class TextController:
         self.main.loading.setVisible(False)
         self.main.enable_hbutton_group()
         self._end_render_macro()
+
+    def rephrase_block(self):
+        """Send current block's translation to the LLM for rephrasing."""
+        blk = self.main.curr_tblock
+        if blk is None or not blk.translation or not blk.translation.strip():
+            return
+
+        original = blk.translation
+        target_lang = self.main.t_combo.currentText()
+        target_lang_en = self.main.lang_mapping.get(target_lang, target_lang)
+
+        translator = Translator(self.main, target_lang, target_lang)
+        if not translator.is_llm_engine:
+            return  # only LLM engines can rephrase
+        engine = translator.engine
+
+        def _do_rephrase() -> str | None:
+            try:
+                return engine.rephrase(original, target_lang_en)
+            except Exception:
+                return None
+
+        def _show_dialog(result: str | None) -> None:
+            if not result or result.strip() == original.strip():
+                return
+            dialog = RephraseDialog(original, result, self.main)
+            if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+                return
+
+            blk.translation = result
+            if self.main.curr_tblock_item:
+                self.main.curr_tblock_item.set_plain_text(result)
+            self.main.t_text_edit.blockSignals(True)
+            self.main.t_text_edit.setPlainText(result)
+            self.main.t_text_edit.blockSignals(False)
+            self.main.mark_project_dirty()
+
+        self.main.run_threaded(
+            _do_rephrase,
+            _show_dialog,
+            self.main.default_error_handler,
+            None,
+        )
 
     def render_settings(self) -> TextRenderingSettings:
         target_lang = self.main.lang_mapping.get(self.main.t_combo.currentText(), None)

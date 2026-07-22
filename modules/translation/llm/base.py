@@ -63,6 +63,25 @@ class BaseLLMTranslation(LLMTranslation):
             
         return blk_list
     
+    def rephrase(self, text: str, target_lang: str) -> str:
+        """Rephrase the given text in the same target language.
+
+        Uses the same LLM engine as translation but with a rephrase prompt
+        instead of a translation prompt. No image is sent.
+        """
+        system_prompt = (
+            f"You are a helpful assistant that rephrases text in {target_lang}. "
+            "Output ONLY the rephrased text, no explanations, no prefixes."
+        )
+        user_prompt = (
+            f"Rephrase the following text in {target_lang}. "
+            "Keep the meaning but say it differently using other words:\n"
+            f"{text}"
+        )
+        # Pass a tiny dummy image so the engine does not crash on None.
+        dummy = np.zeros((1, 1, 3), dtype=np.uint8)
+        return self._perform_translation(user_prompt, system_prompt, dummy)
+
     @abstractmethod
     def _perform_translation(self, user_prompt: str, system_prompt: str, image: np.ndarray) -> str:
         """

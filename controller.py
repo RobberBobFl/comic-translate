@@ -213,6 +213,8 @@ class ComicTranslate(ComicTranslateUI):
         self.s_text_edit.textChanged.connect(self.text_ctrl.update_text_block)
         self.t_text_edit.textChanged.connect(self.text_ctrl.update_text_block_from_edit)
 
+        self.rephrase_button.clicked.connect(self.text_ctrl.rephrase_block)
+
         self.s_combo.currentTextChanged.connect(self.text_ctrl.save_src_trg)
         self.t_combo.currentTextChanged.connect(self.text_ctrl.save_src_trg)
 
