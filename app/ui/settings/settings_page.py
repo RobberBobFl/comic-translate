@@ -132,6 +132,7 @@ class SettingsPage(QtWidgets.QWidget):
             'extra_context': self.ui.extra_context.toPlainText(),
             'image_input_enabled': self.ui.image_checkbox.isChecked(),
             'system_prompt': self.ui.system_prompt.toPlainText(),
+            'save_system_prompt': self.ui.save_system_prompt_checkbox.isChecked(),
         }
 
     def get_export_settings(self):
@@ -425,7 +426,12 @@ class SettingsPage(QtWidgets.QWidget):
         # Load LLM settings
         settings.beginGroup('llm')
         self.ui.extra_context.setPlainText(settings.value('extra_context', ''))
-        self.ui.system_prompt.setPlainText(settings.value('system_prompt', ''))
+        save_sp = settings.value('save_system_prompt', True, type=bool)
+        if save_sp:
+            self.ui.system_prompt.setPlainText(settings.value('system_prompt', ''))
+        else:
+            self.ui.system_prompt.clear()
+        self.ui.save_system_prompt_checkbox.setChecked(save_sp)
         self.ui.image_checkbox.setChecked(settings.value('image_input_enabled', False, type=bool))
         settings.endGroup()
 

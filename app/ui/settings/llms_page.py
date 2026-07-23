@@ -31,6 +31,9 @@ class LlmsPage(QtWidgets.QWidget):
         self.system_prompt.setMinimumHeight(150)
         left_layout.addWidget(system_label)
         left_layout.addWidget(self.system_prompt)
+        self.save_system_prompt_checkbox = MCheckBox(self.tr("Save System Prompt"))
+        self.save_system_prompt_checkbox.setChecked(True)
+        left_layout.addWidget(self.save_system_prompt_checkbox)
         left_layout.addStretch(1)
 
         # Right

@@ -228,6 +228,7 @@ class SettingsPageUI(QtWidgets.QWidget):
         self.image_checkbox = self.llms_page.image_checkbox
         self.extra_context = self.llms_page.extra_context
         self.system_prompt = self.llms_page.system_prompt
+        self.save_system_prompt_checkbox = self.llms_page.save_system_prompt_checkbox
 
         # Text rendering
         self.min_font_spinbox = self.text_rendering_page.min_font_spinbox
