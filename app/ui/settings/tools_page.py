@@ -1,5 +1,5 @@
 from PySide6 import QtWidgets
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QSettings
 from ..dayu_widgets.label import MLabel
 from ..dayu_widgets.check_box import MCheckBox
 from ..dayu_widgets.spin_box import MSpinBox
@@ -39,10 +39,16 @@ class ToolsPage(QtWidgets.QWidget):
         ocr_widget, self.ocr_combo = create_title_and_combo(self.tr("Text Recognition"), self.ocr_engines, h4=True, values=self.ocr_engine_values)
         set_combo_box_width(self.ocr_combo, self.ocr_engines)
 
-        self.custom_ocr_button = MPushButton(self.tr("Add Custom Model"))
-        self.custom_ocr_button.setVisible(False)
+        self.custom_ocr_button = MPushButton(self.tr("Add Custom Model")).small()
         self.custom_ocr_button.clicked.connect(lambda: self.custom_ocr_requested.emit())
-        self.ocr_combo.currentTextChanged.connect(self._update_custom_ocr_button)
+
+        self.stitch_webtoon_cb = QtWidgets.QCheckBox(
+            self.tr("Webtoon: stitch pages into one image (experimental)")
+        )
+        self.stitch_webtoon_cb.setChecked(
+            bool(QSettings("ComicLabs", "ComicTranslate").value("webtoon_stitch_mode", True, type=bool))
+        )
+        self.stitch_webtoon_cb.stateChanged.connect(self._on_stitch_mode_changed)
 
         detector_widget, self.detector_combo = create_title_and_combo(self.tr("Text Detector"), self.detectors, h4=True)
         set_combo_box_width(self.detector_combo, self.detectors)
@@ -125,7 +131,12 @@ class ToolsPage(QtWidgets.QWidget):
         layout.addWidget(detector_widget)
         layout.addSpacing(10)
         layout.addWidget(ocr_widget)
-        layout.addWidget(self.custom_ocr_button)
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.addSpacing(8)
+        button_row.addWidget(self.custom_ocr_button)
+        button_row.addStretch()
+        layout.addLayout(button_row)
+        layout.addWidget(self.stitch_webtoon_cb)
         layout.addSpacing(10)
         layout.addWidget(inpainting_label)
         layout.addWidget(inpainter_widget)
@@ -136,15 +147,9 @@ class ToolsPage(QtWidgets.QWidget):
         layout.addStretch(1)
 
         self._update_hd_strategy_widgets(self.inpaint_strategy_combo.currentIndex())
-        self._update_custom_ocr_button(self.ocr_combo.currentText())
 
-    def _update_custom_ocr_button(self, text: str):
-        """Show the custom OCR button only when 'Custom' is selected.
-
-        Uses the combo's internal item data (not the translated display text)
-        so the button appears regardless of the UI language.
-        """
-        self.custom_ocr_button.setVisible(self.ocr_combo.currentData() == "Custom")
+    def _on_stitch_mode_changed(self, state: int):
+        QSettings("ComicLabs", "ComicTranslate").setValue("webtoon_stitch_mode", bool(state))
 
     def _update_hd_strategy_widgets(self, index: int):
         strategy = self.inpaint_strategy_combo.itemData(index)

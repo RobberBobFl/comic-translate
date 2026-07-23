@@ -9,7 +9,7 @@ class CredentialsPage(QtWidgets.QWidget):
         super().__init__(parent)
         self.services = services
         self.value_mappings = value_mappings
-        self.credential_widgets: dict[str, MLineEdit] = {}
+        self.credential_widgets: dict[str, QtWidgets.QComboBox | MLineEdit] = {}
 
         # main layout (no internal scroll here — outer settings scroll handles it)
         main_layout = QtWidgets.QVBoxLayout(self)
@@ -104,14 +104,31 @@ class CredentialsPage(QtWidgets.QWidget):
                 service_layout.addWidget(endpoint_input)
                 self.credential_widgets[f"{normalized}_api_url"] = endpoint_input
 
-                model_input = MLineEdit()
-                model_input.setFixedWidth(400)
+                model_container = QtWidgets.QWidget()
+                model_container.setFixedWidth(400)
+                model_container_layout = QtWidgets.QHBoxLayout(model_container)
+                model_container_layout.setContentsMargins(0, 0, 0, 0)
+                model_container_layout.setSpacing(0)
                 model_prefix = MLabel(self.tr("Model")).border()
                 set_label_width(model_prefix)
                 model_prefix.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-                model_input.set_prefix_widget(model_prefix)
-                service_layout.addWidget(model_input)
-                self.credential_widgets[f"{normalized}_model"] = model_input
+                model_container_layout.addWidget(model_prefix)
+                model_combo = QtWidgets.QComboBox()
+                model_combo.setEditable(True)
+                model_combo.setMinimumContentsLength(30)
+                model_combo.setPlaceholderText(self.tr("Select or type model..."))
+                model_container_layout.addWidget(model_combo, 1)
+                service_layout.addWidget(model_container)
+                self.credential_widgets[f"{normalized}_model"] = model_combo
+
+                load_btn = QtWidgets.QPushButton(self.tr("Load Models"))
+                load_btn.setFixedWidth(120)
+                service_layout.addWidget(load_btn)
+
+                load_btn.clicked.connect(
+                    lambda checked, ak=api_key_input, ep=endpoint_input, mc=model_combo, lb=load_btn:
+                    self._fetch_models(ak, ep, mc, lb)
+                )
 
             elif normalized == "Yandex":
                 api_key_input = MLineEdit()
@@ -149,3 +166,98 @@ class CredentialsPage(QtWidgets.QWidget):
 
         content_layout.addStretch(1)
         main_layout.addLayout(content_layout)
+
+    def _fetch_models(self, api_key_input, endpoint_input, model_combo, load_btn):
+        """Fetch available models from the configured API endpoint.
+        Tries multiple URL patterns: OpenAI (/models, /v1/models),
+        Ollama (/api/tags), and the raw URL itself."""
+        import requests
+        from ..dayu_widgets.message import MMessage
+
+        api_url = endpoint_input.text().strip().rstrip('/')
+        api_key = api_key_input.text().strip()
+
+        if not api_url:
+            MMessage.warning(
+                self.tr("Please enter an Endpoint URL first."),
+                self
+            )
+            return
+
+        load_btn.setEnabled(False)
+        load_btn.setText(self.tr("Loading..."))
+        QtWidgets.QApplication.processEvents()
+
+        models = []
+        last_error = ""
+
+        try:
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+            # Список URL-паттернов для поиска моделей
+            url_patterns = [
+                f"{api_url}/models",          # OpenAI standard
+                f"{api_url}/v1/models",        # OpenAI with /v1
+                f"{api_url}/api/tags",         # Ollama
+            ]
+
+            # Если URL сам выглядит как полный эндпоинт (содержит /chat/completions и т.п.),
+            # пробуем подняться на уровень выше
+            import re
+            if re.search(r'/(chat/completions|completions|generate)$', api_url):
+                parent_url = api_url.rsplit('/', 2)[0]
+                url_patterns.insert(0, f"{parent_url}/models")
+                url_patterns.insert(1, f"{parent_url}/v1/models")
+
+            for url in url_patterns:
+                try:
+                    resp = requests.get(url, headers=headers, timeout=10)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        # OpenAI format: {"data": [{"id": "model-name", ...}]}
+                        if "data" in data and isinstance(data["data"], list):
+                            models = [m["id"] for m in data["data"]]
+                            break
+                        # Ollama format: {"models": [{"name": "model-name", ...}]}
+                        if "models" in data and isinstance(data["models"], list):
+                            models = [m["name"] for m in data["models"]]
+                            break
+                    else:
+                        last_error = f"HTTP {resp.status_code} at {url}"
+                except requests.exceptions.RequestException as e:
+                    last_error = f"{str(e)} at {url}"
+                    continue
+
+            if models:
+                current_text = model_combo.currentText().strip()
+                model_combo.clear()
+                model_combo.addItems(sorted(models))
+                # Добавляем автодополнение с фильтрацией по подстроке
+                completer = QtWidgets.QCompleter(sorted(models), model_combo)
+                completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
+                completer.setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+                model_combo.setCompleter(completer)
+                idx = model_combo.findText(current_text)
+                if idx >= 0:
+                    model_combo.setCurrentIndex(idx)
+                elif current_text:
+                    model_combo.setEditText(current_text)
+                MMessage.success(
+                    self.tr("Found {count} models.").format(count=len(models)),
+                    self
+                )
+            else:
+                MMessage.warning(
+                    self.tr("Could not fetch models.\n{error}").format(error=last_error),
+                    self
+                )
+
+        except Exception as e:
+            MMessage.error(
+                self.tr("Failed to load models: {error}").format(error=str(e)),
+                self
+            )
+
+        finally:
+            load_btn.setEnabled(True)
+            load_btn.setText(self.tr("Load Models"))

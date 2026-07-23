@@ -164,7 +164,11 @@ class SettingsPage(QtWidgets.QWidget):
 
         def _text_or_none(widget_key):
             w = self.ui.credential_widgets.get(widget_key)
-            return w.text() if w is not None else None
+            if w is None:
+                return None
+            if isinstance(w, QtWidgets.QComboBox):
+                return w.currentText()
+            return w.text()
 
         if service:
             normalized = self.ui.value_mappings.get(service, service)
@@ -468,7 +472,16 @@ class SettingsPage(QtWidgets.QWidget):
                 if translated_service == "Custom":
                     self.ui.credential_widgets[f"{translated_service}_api_key"].setText(settings.value(f"{translated_service}_api_key", ''))
                     self.ui.credential_widgets[f"{translated_service}_api_url"].setText(settings.value(f"{translated_service}_api_url", ''))
-                    self.ui.credential_widgets[f"{translated_service}_model"].setText(settings.value(f"{translated_service}_model", ''))
+                    model_widget = self.ui.credential_widgets[f"{translated_service}_model"]
+                    model_value = settings.value(f"{translated_service}_model", '')
+                    if isinstance(model_widget, QtWidgets.QComboBox):
+                        idx = model_widget.findText(model_value)
+                        if idx >= 0:
+                            model_widget.setCurrentIndex(idx)
+                        else:
+                            model_widget.setEditText(model_value)
+                    else:
+                        model_widget.setText(model_value)
         settings.endGroup()
 
         # ADDED: Load user info and update account view 
