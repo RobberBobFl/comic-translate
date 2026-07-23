@@ -392,6 +392,7 @@ def save_state_to_proj_file_v2(comic_translate: "ComicTranslate", file_name: str
         "displayed_images": list(comic_translate.displayed_images),
         "loaded_images": comic_translate.loaded_images,
         "llm_extra_context": comic_translate.settings_page.get_llm_settings().get("extra_context", ""),
+        "llm_system_prompt": comic_translate.settings_page.get_llm_settings().get("system_prompt", ""),
         "webtoon_mode": comic_translate.webtoon_mode,
         "webtoon_view_state": comic_translate.image_viewer.webtoon_view_state,
         "unique_images": ensure_string_keys(unique_images),
@@ -620,7 +621,7 @@ def _materialize_from_manifest_and_pages(
         original_to_temp.get(page, page): plist for page, plist in reconstructed.items()
     }
 
-    return manifest.get("llm_extra_context", "")
+    return manifest.get("llm_extra_context", ""), manifest.get("llm_system_prompt", "")
 
 
 def _remap_batch_report_paths_for_loaded_project(
@@ -691,6 +692,7 @@ def _load_from_legacy_state_blob(
         "displayed_images": state.get("displayed_images", []),
         "loaded_images": state.get("loaded_images", []),
         "llm_extra_context": state.get("llm_extra_context", ""),
+        "llm_system_prompt": state.get("llm_system_prompt", ""),
         "webtoon_mode": state.get("webtoon_mode", False),
         "webtoon_view_state": state.get("webtoon_view_state", {}),
         "unique_images": state.get("unique_images", {}),

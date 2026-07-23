@@ -206,13 +206,15 @@ class BatchProcessor:
                 return
 
             # Get Translations/ Export if selected
-            extra_context = settings_page.get_llm_settings()['extra_context']
+            llm_settings = settings_page.get_llm_settings()
+            extra_context = llm_settings['extra_context']
+            system_prompt = llm_settings.get('system_prompt', '')
             translator_key = settings_page.get_tool_selection('translator')
             translator = Translator(self.main_page, source_lang, target_lang)
             
             # Get translation cache key for batch processing
             translation_cache_key = self.cache_manager._get_translation_cache_key(
-                image, source_lang, target_lang, translator_key, extra_context, settings=settings_page
+                image, source_lang, target_lang, translator_key, extra_context, system_prompt, settings=settings_page
             )
             
             try:

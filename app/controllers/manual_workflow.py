@@ -394,7 +394,9 @@ class ManualWorkflowController:
                 self.main.lang_mapping,
             )
             settings_page = self.main.settings_page
-            extra_context = settings_page.get_llm_settings()["extra_context"]
+            llm_settings = settings_page.get_llm_settings()
+            extra_context = llm_settings["extra_context"]
+            system_prompt = llm_settings.get("system_prompt", "")
             translator_key = settings_page.get_tool_selection("translator")
             upper_case = settings_page.ui.uppercase_checkbox.isChecked()
 
@@ -418,6 +420,7 @@ class ManualWorkflowController:
                         target_lang,
                         translator_key,
                         extra_context,
+                        system_prompt,
                     )
                     if cache_manager._can_serve_all_blocks_from_translation_cache(cache_key, blk_list):
                         cache_manager._apply_cached_translations_to_blocks(cache_key, blk_list)

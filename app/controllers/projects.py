@@ -1536,8 +1536,10 @@ class ProjectController:
         self.main.project_file = file_name
         return load_state_from_proj_file(self.main, file_name)
     
-    def load_state_to_ui(self, saved_ctx: str):
+    def load_state_to_ui(self, saved_state: tuple[str, str]):
+        saved_ctx, saved_sys = saved_state
         self.main.settings_page.ui.extra_context.setPlainText(saved_ctx)
+        self.main.settings_page.ui.system_prompt.setPlainText(saved_sys)
 
     def save_main_page_settings(self):
         settings = QSettings("ComicLabs", "ComicTranslate")

@@ -242,7 +242,8 @@ def load_state_from_proj_file(comic_translate: ComicTranslate, file_name: str):
             for page, plist in reconstructed.items()
         }
 
-    # restore LLM extra context
+    # restore LLM extra context and system prompt
     saved_ctx = state.get('llm_extra_context', '')
-    return saved_ctx
+    saved_sys = state.get('llm_system_prompt', '')
+    return saved_ctx, saved_sys
 

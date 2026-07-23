@@ -19,6 +19,7 @@ class BaseLLMTranslation(LLMTranslation):
         self.api_url = None
         self.model = None
         self.img_as_llm_input = False
+        self.custom_system_prompt = ""
         self.temperature = None
         self.top_p = None
         self.max_tokens = None
@@ -38,6 +39,7 @@ class BaseLLMTranslation(LLMTranslation):
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.img_as_llm_input = llm_settings.get('image_input_enabled', True)
+        self.custom_system_prompt = llm_settings.get('system_prompt', '')
         self.temperature = 1.0
         self.top_p = 0.95
         self.max_tokens = 5000
@@ -55,7 +57,8 @@ class BaseLLMTranslation(LLMTranslation):
             List of updated TextBlock objects with translations
         """
         entire_raw_text = get_raw_text(blk_list)
-        system_prompt = self.get_system_prompt(self.source_lang, self.target_lang)
+        base_prompt = self.get_system_prompt(self.source_lang, self.target_lang)
+        system_prompt = f"{self.custom_system_prompt}\n{base_prompt}" if self.custom_system_prompt else base_prompt
         user_prompt = f"{extra_context}\nMake the translation sound as natural as possible.\nTranslate this:\n{entire_raw_text}"
         
         entire_translated_text = self._perform_translation(user_prompt, system_prompt, image)

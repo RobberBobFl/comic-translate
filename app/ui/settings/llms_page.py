@@ -25,6 +25,12 @@ class LlmsPage(QtWidgets.QWidget):
         left_layout.addWidget(prompt_label)
         left_layout.addWidget(self.extra_context)
         left_layout.addWidget(self.image_checkbox)
+        left_layout.addSpacing(15)
+        system_label = MLabel(self.tr("System Prompt:"))
+        self.system_prompt = MTextEdit()
+        self.system_prompt.setMinimumHeight(150)
+        left_layout.addWidget(system_label)
+        left_layout.addWidget(self.system_prompt)
         left_layout.addStretch(1)
 
         # Right

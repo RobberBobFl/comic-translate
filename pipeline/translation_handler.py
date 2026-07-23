@@ -41,7 +41,9 @@ class TranslationHandler:
         if self.main_page.image_viewer.hasPhoto() and self.main_page.blk_list:
             settings_page = self.main_page.settings_page
             image = self.main_page.image_viewer.get_image_array()
-            extra_context = settings_page.get_llm_settings()['extra_context']
+            llm_settings = settings_page.get_llm_settings()
+            extra_context = llm_settings['extra_context']
+            system_prompt = llm_settings.get('system_prompt', '')
             translator_key = settings_page.get_tool_selection('translator')
 
             upper_case = settings_page.ui.uppercase_checkbox.isChecked()
@@ -50,7 +52,7 @@ class TranslationHandler:
             
             # Get translation cache key
             translation_cache_key = self.cache_manager._get_translation_cache_key(
-                image, source_lang, target_lang, translator_key, extra_context, settings=settings_page
+                image, source_lang, target_lang, translator_key, extra_context, system_prompt, settings=settings_page
             )
             
             if single_block:

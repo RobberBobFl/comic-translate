@@ -111,7 +111,8 @@ class UserTranslator(TranslationEngine):
             # Access LLM settings from the desktop settings object
             llm_settings = self.settings.get_llm_settings() # Assuming this method exists
             llm_options_payload = {
-                "image_input_enabled": llm_settings.get('image_input_enabled', False)
+                "image_input_enabled": llm_settings.get('image_input_enabled', False),
+                "system_prompt": llm_settings.get('system_prompt', ''),
             }
 
         # 4. Handle Image Encoding (if applicable and provided)
