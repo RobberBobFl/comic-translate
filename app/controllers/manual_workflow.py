@@ -37,6 +37,10 @@ class ManualWorkflowController:
     def _selected_page_paths(self) -> list[str]:
         return self.main.get_selected_page_paths()
 
+    def _filter_skipped(self, paths: list[str]) -> list[str]:
+        return [p for p in paths
+                if not self.main.image_states.get(p, {}).get('skip', False)]
+
     def _load_page_image(self, file_path: str):
         img = self.main.image_data.get(file_path)
         if img is None:
@@ -184,7 +188,9 @@ class ManualWorkflowController:
         return strokes
 
     def block_detect(self, load_rects: bool = True) -> None:
-        selected_paths = self._selected_page_paths()
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            return
         if len(selected_paths) > 1:
             self.main.loading.setVisible(True)
             self.main.disable_hbutton_group()
@@ -247,6 +253,9 @@ class ManualWorkflowController:
             )
             return
 
+        curr = self._current_file_path()
+        if curr and self.main.image_states.get(curr, {}).get('skip', False):
+            return
         self.main.loading.setVisible(True)
         self.main.disable_hbutton_group()
         self.main.run_threaded(
@@ -285,7 +294,9 @@ class ManualWorkflowController:
     def ocr(self, single_block: bool = False, then_translate: bool = False) -> None:
         if not validate_ocr(self.main):
             return
-        selected_paths = self._selected_page_paths()
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            return
         if len(selected_paths) > 1 and not single_block:
             self.main.loading.setVisible(True)
             self.main.disable_hbutton_group()
@@ -344,6 +355,9 @@ class ManualWorkflowController:
             )
             return
 
+        curr = self._current_file_path()
+        if curr and self.main.image_states.get(curr, {}).get('skip', False):
+            return
         self.main.loading.setVisible(True)
         self.main.disable_hbutton_group()
 
@@ -363,7 +377,9 @@ class ManualWorkflowController:
             )
 
     def translate_image(self, single_block: bool = False) -> None:
-        selected_paths = self._selected_page_paths()
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            return
         if len(selected_paths) > 1 and not single_block:
             has_any_text = False
             for file_path in selected_paths:
@@ -489,6 +505,9 @@ class ManualWorkflowController:
             self.main, target_lang
         ):
             return
+        curr = self._current_file_path()
+        if curr and self.main.image_states.get(curr, {}).get('skip', False):
+            return
         self.main.loading.setVisible(True)
         self.main.disable_hbutton_group()
 
@@ -595,7 +614,9 @@ class ManualWorkflowController:
         if not self.main.image_viewer.hasPhoto():
             return
 
-        selected_paths = self._selected_page_paths()
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            return
         if len(selected_paths) > 1:
             self.main.text_ctrl.clear_text_edits()
             self.main.loading.setVisible(True)
@@ -683,6 +704,9 @@ class ManualWorkflowController:
             return
 
         if self.main.image_viewer.has_drawn_elements():
+            curr = self._current_file_path()
+            if curr and self.main.image_states.get(curr, {}).get('skip', False):
+                return
             self.main.text_ctrl.clear_text_edits()
             self.main.loading.setVisible(True)
             self.main.disable_hbutton_group()
@@ -723,7 +747,9 @@ class ManualWorkflowController:
             self.main.loading.setVisible(True)
             self.main.disable_hbutton_group()
 
-            selected_paths = self._selected_page_paths()
+            selected_paths = self._filter_skipped(self._selected_page_paths())
+            if not selected_paths:
+                return
             if len(selected_paths) > 1:
                 self.main.undo_group.activeStack().beginMacro("draw_segmentation_boxes")
                 context = self._prepare_multi_page_context(selected_paths)
