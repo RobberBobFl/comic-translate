@@ -79,7 +79,7 @@ class UserTranslator(TranslationEngine):
             logger.error(f"Failed to retrieve access token: {e}")
             return None
 
-    def translate(self, blk_list: List[TextBlock], image: np.ndarray = None, extra_context: str = "") -> List[TextBlock]:
+    def translate(self, blk_list: List[TextBlock], image: np.ndarray = None, extra_context: str = "") -> tuple[List[TextBlock], bool]:
         """
         Sends the translation request to the web API.
 
@@ -89,7 +89,7 @@ class UserTranslator(TranslationEngine):
             extra_context: Additional context information for translation.
 
         Returns:
-            List of updated TextBlock objects with translations or error messages.
+            Tuple of (List of updated TextBlock objects with translations, success flag).
         """
         start_t = time.perf_counter()
         logger.info(f"UserTranslator: Translating via web API ({self.api_url}) for {self.translator_key}")
@@ -247,7 +247,7 @@ class UserTranslator(TranslationEngine):
                 f"total={total_t:.3f}s (texts={len(blk_list)} image={'yes' if should_send_image else 'no'} server_ms={server_ms})"
             )
 
-        return blk_list
+        return blk_list, True
     
     def update_credits(self, credits: Optional[Any]) -> None:
         if credits is None:

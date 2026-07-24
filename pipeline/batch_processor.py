@@ -218,7 +218,12 @@ class BatchProcessor:
             )
             
             try:
-                translator.translate(blk_list, image, extra_context)
+                _, success = translator.translate(blk_list, image, extra_context)
+                if not success:
+                    err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
+                    if self.progress_callback:
+                        self.progress_callback(error=err_msg)
+                    continue
                 # Cache the translation results for potential future use
                 self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
             except InsufficientCreditsException:

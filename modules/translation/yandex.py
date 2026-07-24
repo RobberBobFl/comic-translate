@@ -23,7 +23,7 @@ class YandexTranslation(TraditionalTranslation):
         self.api_key = credentials.get('api_key', '')
         self.folder_id = credentials.get('folder_id', '')
         
-    def translate(self, blk_list: list[TextBlock]) -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock]) -> tuple[list[TextBlock], bool]:
         # Filter out empty texts
         text_map = {}
         for i, blk in enumerate(blk_list):
@@ -31,6 +31,7 @@ class YandexTranslation(TraditionalTranslation):
             if text.strip():
                 text_map[i] = text
         
+        success = True
         if text_map:
             texts_to_translate = list(text_map.values())
             
@@ -74,7 +75,7 @@ class YandexTranslation(TraditionalTranslation):
             if not hasattr(blk, 'translation') or blk.translation is None:
                 blk.translation = ""
             
-        return blk_list
+        return blk_list, success
     
     def preprocess_language_code(self, lang_code: str) -> str:
         if not lang_code:

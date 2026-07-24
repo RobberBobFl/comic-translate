@@ -67,7 +67,7 @@ class TraditionalTranslation(TranslationEngine):
     """Base class for traditional translation engines (non-LLM)."""
     
     @abstractmethod
-    def translate(self, blk_list: list[TextBlock]) -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock]) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using non-LLM translators.
         
@@ -75,7 +75,7 @@ class TraditionalTranslation(TranslationEngine):
             blk_list: List of TextBlock objects containing text to translate
             
         Returns:
-            List of updated TextBlock objects with translations
+            Tuple of (List of updated TextBlock objects with translations, success flag)
         """
         pass
 
@@ -97,7 +97,7 @@ class LLMTranslation(TranslationEngine):
     """Base class for LLM-based translation engines."""
     
     @abstractmethod
-    def translate(self, blk_list: list[TextBlock], image: np.ndarray, extra_context: str) -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock], image: np.ndarray, extra_context: str) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using LLM.
         
@@ -107,7 +107,7 @@ class LLMTranslation(TranslationEngine):
             extra_context: Additional context information for translation
             
         Returns:
-            List of updated TextBlock objects with translations
+            Tuple of (List of updated TextBlock objects with translations, success flag)
         """
         pass
     

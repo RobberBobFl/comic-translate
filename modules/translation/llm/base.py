@@ -62,9 +62,9 @@ class BaseLLMTranslation(LLMTranslation):
         user_prompt = f"{extra_context}\nMake the translation sound as natural as possible.\nTranslate this:\n{entire_raw_text}"
         
         entire_translated_text = self._perform_translation(user_prompt, system_prompt, image)
-        set_texts_from_json(blk_list, entire_translated_text)
+        success = set_texts_from_json(blk_list, entire_translated_text)
             
-        return blk_list
+        return blk_list, success
     
     def rephrase(self, text: str, target_lang: str) -> str:
         """Rephrase the given text in the same target language.

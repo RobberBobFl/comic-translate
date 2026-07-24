@@ -26,7 +26,7 @@ class MicrosoftTranslation(TraditionalTranslation):
         self.api_key = credentials['api_key_translator']
         self.region = credentials['region_translator']
         
-    def translate(self, blk_list: list[TextBlock]) -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock]) -> tuple[list[TextBlock], bool]:
         endpoint = "https://api.cognitive.microsofttranslator.com"
         path = '/translate'
         constructed_url = endpoint + path
@@ -45,6 +45,7 @@ class MicrosoftTranslation(TraditionalTranslation):
             'to': self.target_lang_code
         }
         
+        success = True
         # Process blocks in batches to avoid request size limits
         batch_size = 25  # Adjust based on typical text length
         for i in range(0, len(blk_list), batch_size):
@@ -90,7 +91,7 @@ class MicrosoftTranslation(TraditionalTranslation):
                     if block_idx < len(blk_list) and 'translations' in translation_result:
                         blk_list[block_idx].translation = translation_result['translations'][0]['text']
             
-        return blk_list
+        return blk_list, success
     
     def preprocess_language_code(self, lang_code: str) -> str:
         """

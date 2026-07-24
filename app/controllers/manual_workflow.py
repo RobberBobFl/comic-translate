@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Sequence
 
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
+
+from app.ui.dayu_widgets import dayu_theme
 
 from modules.detection.processor import TextBlockDetector
 from modules.ocr.processor import OCRProcessor
@@ -425,7 +427,34 @@ class ManualWorkflowController:
                     if cache_manager._can_serve_all_blocks_from_translation_cache(cache_key, blk_list):
                         cache_manager._apply_cached_translations_to_blocks(cache_key, blk_list)
                     else:
-                        translator.translate(blk_list, image, extra_context)
+                        _, success = translator.translate(blk_list, image, extra_context)
+                        if not success:
+                            result_holder = [None]
+                            event = QtCore.QEventLoop()
+
+                            def show_warning():
+                                msg_box = QtWidgets.QMessageBox(self.main)
+                                msg_box.setIcon(QtWidgets.QMessageBox.Warning)
+                                msg_box.setWindowTitle(self.main.tr("Translation Warning"))
+                                msg_box.setText(self.main.tr(
+                                    "Translation failed for a page. "
+                                    "The API may be unreachable or returned an empty response."
+                                ))
+                                continue_btn = msg_box.addButton(
+                                    self.main.tr("Continue"), QtWidgets.QMessageBox.AcceptRole
+                                )
+                                msg_box.addButton(
+                                    self.main.tr("Stop"), QtWidgets.QMessageBox.RejectRole
+                                )
+                                dayu_theme.apply(msg_box)
+                                msg_box.exec()
+                                result_holder[0] = msg_box.clickedButton() == continue_btn
+                                event.quit()
+
+                            QtCore.QTimer.singleShot(0, self.main, show_warning)
+                            event.exec()
+                            if not result_holder[0]:
+                                return results
                         cache_manager._cache_translation_results(cache_key, blk_list)
                     set_upper_case(blk_list, upper_case)
                     results[file_path] = blk_list

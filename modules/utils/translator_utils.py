@@ -42,7 +42,10 @@ def get_raw_translation(blk_list: list[TextBlock]):
     
     return raw_translations_json
 
-def set_texts_from_json(blk_list: list[TextBlock], json_string: str):
+def set_texts_from_json(blk_list: list[TextBlock], json_string: str) -> bool:
+    if not json_string:
+        print("Warning: Empty translation response from LLM.")
+        return False
     match = re.search(r"\{[\s\S]*\}", json_string)
     if match:
         # Extract the JSON string from the matched regular expression
@@ -55,8 +58,10 @@ def set_texts_from_json(blk_list: list[TextBlock], json_string: str):
                 blk.translation = translation_dict[block_key]
             else:
                 print(f"Warning: {block_key} not found in JSON string.")
+        return True
     else:
         print("No JSON found in the input string.")
+        return False
 
 def set_upper_case(blk_list: list[TextBlock], upper_case: bool):
     for blk in blk_list:

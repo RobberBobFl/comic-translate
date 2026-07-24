@@ -82,7 +82,7 @@ class Translator:
         """
         return main_page.lang_mapping.get(translated_lang, translated_lang)
     
-    def translate(self, blk_list: list[TextBlock], image: np.ndarray = None, extra_context: str = "") -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock], image: np.ndarray = None, extra_context: str = "") -> tuple[list[TextBlock], bool]:
         """
         Translate text in text blocks using the configured translation engine.
         
@@ -92,7 +92,7 @@ class Translator:
             extra_context: Additional context information for translation
             
         Returns:
-            List of updated TextBlock objects with translations
+            Tuple of (List of updated TextBlock objects with translations, success flag)
         """
         if self.is_llm_engine:
             # LLM translators need image and extra context

@@ -30,7 +30,8 @@ class DeepLTranslation(TraditionalTranslation):
         self.api_key = credentials.get('api_key', '')
         self.translator = deepl.Translator(self.api_key)
         
-    def translate(self, blk_list: list[TextBlock]) -> list[TextBlock]:
+    def translate(self, blk_list: list[TextBlock]) -> tuple[list[TextBlock], bool]:
+        success = True
         for blk in blk_list:
             text = self.preprocess_text(blk.text, self.source_lang_code)
             
@@ -46,7 +47,7 @@ class DeepLTranslation(TraditionalTranslation):
             
             blk.translation = result.text
             
-        return blk_list 
+        return blk_list, success
     
     def preprocess_source_language_code(self, lang_code: str) -> str:
         if 'zh' in lang_code.lower():
