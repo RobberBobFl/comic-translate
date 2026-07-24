@@ -3,12 +3,16 @@ from __future__ import annotations
 import numpy as np
 from typing import TYPE_CHECKING
 from PySide6.QtCore import QRectF, QPointF
+from PySide6.QtGui import QColor
 
 from app.ui.canvas.rectangle import MoveableRectItem
-from app.ui.commands.box import AddRectangleCommand, BoxesChangeCommand
+from app.ui.canvas.text.text_item_properties import TextItemProperties
+from app.ui.commands.box import AddRectangleCommand, AddTextItemCommand, BoxesChangeCommand
 
 from modules.detection.utils.geometry import do_rectangles_overlap
 from modules.utils.textblock import TextBlock
+from modules.utils.language_utils import get_language_code
+from modules.rendering.render import is_vertical_block
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -73,9 +77,60 @@ class RectItemController:
         new_blk = TextBlock(text_bbox=np.array(new_rect_coords))
         new_blk.manual = True
         self.main.blk_list.append(new_blk)
-        command = AddRectangleCommand(self.main, rect_item, new_blk, self.main.blk_list)
-        self.main.undo_group.activeStack().push(command)
+
+        is_manual_text = (self.main.image_viewer.current_tool == 'manual_text')
+        if is_manual_text:
+            self._create_manual_text_item(new_blk, rect_item)
+        else:
+            command = AddRectangleCommand(self.main, rect_item, new_blk, self.main.blk_list)
+            self.main.undo_group.activeStack().push(command)
+
         self._sync_to_state()
+
+        if is_manual_text:
+            self.main.set_tool(None)
+            self.main.t_text_edit.setFocus()
+
+    def _create_manual_text_item(self, blk: TextBlock, rect_item: MoveableRectItem):
+        """Build a TextBlockItem for a manually-drawn box without going through OCR."""
+        rs = self.main.text_ctrl.render_settings()
+        text_color = QColor(rs.color)
+        outline_color = QColor(rs.outline_color) if rs.outline else None
+        align_id = self.main.alignment_tool_group.get_dayu_checked()
+        alignment = self.main.button_to_alignment[align_id]
+        line_spacing = float(self.main.line_spacing_dropdown.currentText())
+        target_lang = self.main.lang_mapping.get(self.main.t_combo.currentText(), None)
+        trg_lng_cd = get_language_code(target_lang)
+        vertical = is_vertical_block(blk, trg_lng_cd)
+
+        bw, bh = (blk.xyxy[2] - blk.xyxy[0], blk.xyxy[3] - blk.xyxy[1])
+        properties = TextItemProperties(
+            text="",
+            font_family=rs.font_family,
+            font_size=rs.min_font_size or 12,
+            text_color=text_color,
+            alignment=alignment,
+            line_spacing=line_spacing,
+            outline_color=outline_color,
+            outline_width=float(self.main.outline_width_dropdown.currentText()),
+            bold=rs.bold,
+            italic=rs.italic,
+            underline=rs.underline,
+            direction=rs.direction,
+            position=(int(blk.xyxy[0]), int(blk.xyxy[1])),
+            rotation=blk.angle,
+            width=bw if blk.angle == 0 and not vertical else None,
+            vertical=vertical,
+        )
+        text_item = self.main.image_viewer.add_text_item(properties)
+        text_item.set_plain_text("")
+
+        command = AddTextItemCommand(self.main, text_item)
+        self.main.undo_group.activeStack().push(command)
+
+        text_item.selected = True
+        text_item.setSelected(True)
+        text_item.item_selected.emit(text_item)
 
     def handle_rectangle_deletion(self, rect: QRectF):
         rect_coords = rect.getCoords()

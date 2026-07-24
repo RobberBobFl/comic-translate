@@ -92,7 +92,7 @@ class EventHandler:
             if self._press_handle_drag(event, scene_pos): return
             self._press_handle_deselection(clicked_item, ctrl_pressed)
 
-            if self.viewer.current_tool == 'box' and not isinstance(clicked_item, (TextBlockItem, MoveableRectItem)):
+            if self.viewer.current_tool in ('box', 'manual_text') and not isinstance(clicked_item, (TextBlockItem, MoveableRectItem)):
                 if self._is_on_image(scene_pos):
                     self._press_handle_new_box(scene_pos)
                     return # Stop further processing
@@ -144,7 +144,7 @@ class EventHandler:
             if self._is_on_image(scene_pos):
                 self.viewer.drawing_manager.continue_stroke(scene_pos)
         
-        if self.viewer.current_tool == 'box':
+        if self.viewer.current_tool in ('box', 'manual_text'):
             self._move_handle_box_resize(scene_pos)
 
         self.last_scene_pos = scene_pos
@@ -186,7 +186,7 @@ class EventHandler:
         if self.viewer.current_tool in ['brush', 'eraser']:
             self.viewer.drawing_manager.end_stroke()
             
-        if self.viewer.current_tool == 'box':
+        if self.viewer.current_tool in ('box', 'manual_text'):
             self._release_handle_box_creation()
 
     def handle_wheel(self, event: QtGui.QWheelEvent):

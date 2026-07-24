@@ -396,6 +396,20 @@ class WorkspaceMixin:
         self.paint_slider.valueChanged.connect(self.set_paint_size)
         tools_layout.addWidget(self.paint_slider)
 
+        # ---- Manual Text (user-drawn box + text without OCR) ----
+        text_div = MDivider(self.tr("Text"))
+        tools_layout.addWidget(text_div)
+
+        text_tools_lay = QtWidgets.QHBoxLayout()
+        self.manual_text_button = self.create_tool_button(svg="add_text_line.svg", checkable=True)
+        self.manual_text_button.setToolTip(self.tr("Draw a box and add manual text"))
+        self.manual_text_button.clicked.connect(self.toggle_manual_text_tool)
+        self.tool_buttons["manual_text"] = self.manual_text_button
+
+        text_tools_lay.addWidget(self.manual_text_button)
+        text_tools_lay.addStretch()
+        tools_layout.addLayout(text_tools_lay)
+
         self.webtoon_toggle.toggled.connect(self._on_webtoon_toggled)
 
         self.brush_eraser_slider = MSlider()

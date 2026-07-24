@@ -177,6 +177,9 @@ class ImageViewer(QGraphicsView):
         elif tool == 'eyedropper':
             self.setDragMode(QGraphicsView.NoDrag)
             self.setCursor(self._eyedropper_cursor)
+        elif tool == 'manual_text':
+            self.setDragMode(QGraphicsView.NoDrag)
+            self.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.setDragMode(QGraphicsView.NoDrag)
 
