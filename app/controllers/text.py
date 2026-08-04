@@ -1048,12 +1048,13 @@ class TextController:
         self._end_render_macro()
 
     def rephrase_block(self):
-        """Send current block's translation to the LLM for rephrasing."""
+        """Send current block's original source text to the LLM for a fresh,
+        natural translation (instead of rephrasing the existing translation)."""
         blk = self.main.curr_tblock
-        if blk is None or not blk.translation or not blk.translation.strip():
+        if blk is None or not blk.text or not blk.text.strip():
             return
 
-        original = blk.translation
+        original = blk.text  # send the source text, not the existing translation
         target_lang = self.main.t_combo.currentText()
         target_lang_en = self.main.lang_mapping.get(target_lang, target_lang)
 

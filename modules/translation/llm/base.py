@@ -68,18 +68,19 @@ class BaseLLMTranslation(LLMTranslation):
         return blk_list, success
     
     def rephrase(self, text: str, target_lang: str) -> str:
-        """Rephrase the given text in the same target language.
+        """Produce a fresh, natural translation from the original source text.
 
-        Uses the same LLM engine as translation but with a rephrase prompt
-        instead of a translation prompt. No image is sent.
+        Uses the same LLM engine as translation but sends the *original*
+        source text and asks for a natural, idiomatic translation — instead
+        of rephrasing an existing (possibly clunky) translation.
         """
         system_prompt = (
-            f"You are a helpful assistant that rephrases text in {target_lang}. "
-            "Output ONLY the rephrased text, no explanations, no prefixes."
+            f"You are an expert translator. Translate to {target_lang}, "
+            "making it sound natural and idiomatic, like a native speaker. "
+            "Output ONLY the translation, no explanations, no prefixes."
         )
         user_prompt = (
-            f"Rephrase the following text in {target_lang}. "
-            "Keep the meaning but say it differently using other words:\n"
+            f"Translate this to {target_lang}, phrasing it as naturally as possible:\n"
             f"{text}"
         )
         # Pass a tiny dummy image so the engine does not crash on None.
