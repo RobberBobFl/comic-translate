@@ -59,7 +59,8 @@ class BaseLLMTranslation(LLMTranslation):
         entire_raw_text = get_raw_text(blk_list)
         base_prompt = self.get_system_prompt(self.source_lang, self.target_lang)
         system_prompt = f"{self.custom_system_prompt}\n{base_prompt}" if self.custom_system_prompt else base_prompt
-        user_prompt = f"{extra_context}\nMake the translation sound as natural as possible.\nTranslate this:\n{entire_raw_text}"
+        target_hint = f"Target language: {self.target_lang}." if self.target_lang else ""
+        user_prompt = f"{extra_context}\nMake the translation sound as natural as possible.\n{target_hint}\nTranslate this:\n{entire_raw_text}"
         
         entire_translated_text = self._perform_translation(user_prompt, system_prompt, image)
         success = set_texts_from_json(blk_list, entire_translated_text)
