@@ -1063,6 +1063,10 @@ class TextController:
             return  # only LLM engines can rephrase
         engine = translator.engine
 
+        # Show the loading spinner and disable the button while the LLM call runs.
+        self.main.loading.setVisible(True)
+        self.main.rephrase_button.setEnabled(False)
+
         def _do_rephrase() -> str | None:
             try:
                 return engine.rephrase(original, target_lang_en)
@@ -1084,11 +1088,15 @@ class TextController:
             self.main.t_text_edit.blockSignals(False)
             self.main.mark_project_dirty()
 
+        def _finished() -> None:
+            self.main.loading.setVisible(False)
+            self.main.rephrase_button.setEnabled(True)
+
         self.main.run_threaded(
             _do_rephrase,
             _show_dialog,
             self.main.default_error_handler,
-            None,
+            _finished,
         )
 
     def render_settings(self) -> TextRenderingSettings:
