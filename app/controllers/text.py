@@ -1060,8 +1060,11 @@ class TextController:
 
         translator = Translator(self.main, target_lang, target_lang)
         if not translator.is_llm_engine:
+            print("[REPHRASE] not an LLM engine, aborting")
             return  # only LLM engines can rephrase
         engine = translator.engine
+
+        print(f"[REPHRASE] sending to LLM: lang={target_lang_en} text={original!r}")
 
         # Show the loading spinner and disable the button while the LLM call runs.
         self.main.loading.setVisible(True)
@@ -1069,12 +1072,18 @@ class TextController:
 
         def _do_rephrase() -> str | None:
             try:
-                return engine.rephrase(original, target_lang_en)
-            except Exception:
+                print("[REPHRASE] LLM call started...")
+                result = engine.rephrase(original, target_lang_en)
+                print(f"[REPHRASE] LLM returned: {result!r}")
+                return result
+            except Exception as e:
+                print(f"[REPHRASE] LLM error: {e}")
                 return None
 
         def _show_dialog(result: str | None) -> None:
+            print(f"[REPHRASE] dialog result: {result!r}")
             if not result or result.strip() == original.strip():
+                print("[REPHRASE] empty or unchanged result, skipping dialog")
                 return
             dialog = RephraseDialog(original, result, self.main)
             if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
