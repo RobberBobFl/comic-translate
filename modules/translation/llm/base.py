@@ -83,6 +83,8 @@ class BaseLLMTranslation(LLMTranslation):
             f"Translate this to {target_lang}, phrasing it as naturally as possible:\n"
             f"{text}"
         )
+        print(f"[REPHRASE] system_prompt={system_prompt!r}")
+        print(f"[REPHRASE] user_prompt={user_prompt!r}")
         # Pass a tiny dummy image so the engine does not crash on None.
         dummy = np.zeros((1, 1, 3), dtype=np.uint8)
         return self._perform_translation(user_prompt, system_prompt, dummy)
