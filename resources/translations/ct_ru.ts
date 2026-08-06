@@ -5,598 +5,598 @@
     <name></name>
     <message>
         <source>Custom</source>
-        <translation type="vanished">Пользовательский</translation>
+        <translation>Пользовательский</translation>
     </message>
 </context>
 <context>
     <name>AboutPage</name>
     <message>
         <source>App Information</source>
-        <translation type="vanished">Информация о приложении</translation>
+        <translation>Информация о приложении</translation>
     </message>
     <message>
         <source>Current Version:</source>
-        <translation type="vanished">Текущая версия:</translation>
+        <translation>Текущая версия:</translation>
     </message>
     <message>
         <source>Check for Updates</source>
-        <translation type="vanished">Проверить обновления</translation>
+        <translation>Проверить обновления</translation>
     </message>
 </context>
 <context>
     <name>AccountPage</name>
     <message>
         <source>Sign in to Comic Translate</source>
-        <translation type="vanished">Войдите в Comic Translate</translation>
+        <translation>Войдите в Comic Translate</translation>
     </message>
     <message>
         <source>Sign in to use Comic Translate, see your credits balance, and purchase additional credits.</source>
-        <translation type="vanished">Войдите, чтобы использовать Comic Translate, просматривать баланс кредитов и покупать дополнительные кредиты.</translation>
+        <translation>Войдите, чтобы использовать Comic Translate, просматривать баланс кредитов и покупать дополнительные кредиты.</translation>
     </message>
     <message>
         <source>Sign In</source>
-        <translation type="vanished">Войти</translation>
+        <translation>Войти</translation>
     </message>
     <message>
         <source>See model credit costs</source>
-        <translation type="vanished">Посмотреть стоимость кредитов модели</translation>
+        <translation>Посмотреть стоимость кредитов модели</translation>
     </message>
     <message>
         <source>Account Information</source>
-        <translation type="vanished">Информация об аккаунте</translation>
+        <translation>Информация об аккаунте</translation>
     </message>
     <message>
         <source>Email:</source>
-        <translation type="vanished">Электронная почта:</translation>
+        <translation>Электронная почта:</translation>
     </message>
     <message>
         <source>Subscription Tier:</source>
-        <translation type="vanished">Уровень подписки:</translation>
+        <translation>Уровень подписки:</translation>
     </message>
     <message>
         <source>Credits:</source>
-        <translation type="vanished">Кредиты:</translation>
+        <translation>Кредиты:</translation>
     </message>
     <message>
         <source>Buy Credits</source>
-        <translation type="vanished">Купить кредиты</translation>
+        <translation>Купить кредиты</translation>
     </message>
     <message>
         <source>Sign Out</source>
-        <translation type="vanished">Выйти</translation>
+        <translation>Выйти</translation>
     </message>
 </context>
 <context>
     <name>ComicTranslate</name>
     <message>
         <source>Error</source>
-        <translation type="vanished">Ошибка</translation>
+        <translation>Ошибка</translation>
     </message>
     <message>
         <source>Downloading model file: {filename}</source>
-        <translation type="vanished">Загрузка файла модели: {filename}</translation>
+        <translation>Загрузка файла модели: {filename}</translation>
     </message>
     <message>
         <source>Unsaved Changes</source>
-        <translation type="vanished">Несохранённые изменения</translation>
+        <translation>Несохранённые изменения</translation>
     </message>
     <message>
         <source>Save changes to this file?</source>
-        <translation type="vanished">Сохранить изменения в этом файле?</translation>
+        <translation>Сохранить изменения в этом файле?</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="vanished">Сохранить</translation>
+        <translation>Сохранить</translation>
     </message>
     <message>
         <source>Don&apos;t Save</source>
-        <translation type="vanished">Не сохранять</translation>
+        <translation>Не сохранять</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <source>Webtoon mode</source>
-        <translation type="vanished">Режим вебтуна</translation>
+        <translation>Режим вебтуна</translation>
     </message>
     <message>
         <source>Choose how to load the webtoon:</source>
-        <translation type="vanished">Выберите, как загрузить вебтун:</translation>
+        <translation>Выберите, как загрузить вебтун:</translation>
     </message>
     <message>
         <source>Lightweight (stitch, auto-chunk if very tall)</source>
-        <translation type="vanished">Облегчённый (склейка, авто-нарезка при большой высоте)</translation>
+        <translation>Облегчённый (склейка, авто-нарезка при большой высоте)</translation>
     </message>
     <message>
         <source>Unlimited (stitch entire comic into one image)</source>
-        <translation type="vanished">Безлимитный (весь комикс одной картинкой)</translation>
+        <translation>Безлимитный (весь комикс одной картинкой)</translation>
     </message>
     <message>
         <source>Stitching webtoon…</source>
-        <translation type="vanished">Склейка вебтуна…</translation>
+        <translation>Склейка вебтуна…</translation>
     </message>
     <message>
         <source>Slicing webtoon…</source>
-        <translation type="vanished">Разрезка вебтуна…</translation>
+        <translation>Разрезка вебтуна…</translation>
     </message>
     <message>
         <source>Finalizing export…</source>
-        <translation type="vanished">Финализация экспорта…</translation>
+        <translation>Финализация экспорта…</translation>
     </message>
     <message>
         <source>Failed to stitch webtoon:</source>
-        <translation type="vanished">Не удалось склеить вебтун:</translation>
+        <translation>Не удалось склеить вебтун:</translation>
     </message>
 </context>
 <context>
     <name>ComicTranslateUI</name>
     <message>
         <source>Auto</source>
-        <translation type="vanished">Авто</translation>
+        <translation>Авто</translation>
     </message>
     <message>
         <source>English</source>
-        <translation type="vanished">Английский</translation>
+        <translation>Английский</translation>
     </message>
     <message>
         <source>Korean</source>
-        <translation type="vanished">Корейский</translation>
+        <translation>Корейский</translation>
     </message>
     <message>
         <source>Japanese</source>
-        <translation type="vanished">Японский</translation>
+        <translation>Японский</translation>
     </message>
     <message>
         <source>French</source>
-        <translation type="vanished">Французский</translation>
+        <translation>Французский</translation>
     </message>
     <message>
         <source>Simplified Chinese</source>
-        <translation type="vanished">Упрощенный китайский</translation>
+        <translation>Упрощенный китайский</translation>
     </message>
     <message>
         <source>Traditional Chinese</source>
-        <translation type="vanished">Традиционный китайский</translation>
+        <translation>Традиционный китайский</translation>
     </message>
     <message>
         <source>Chinese</source>
-        <translation type="vanished">Китайский</translation>
+        <translation>Китайский</translation>
     </message>
     <message>
         <source>Russian</source>
-        <translation type="vanished">Русский</translation>
+        <translation>Русский</translation>
     </message>
     <message>
         <source>German</source>
-        <translation type="vanished">Немецкий</translation>
+        <translation>Немецкий</translation>
     </message>
     <message>
         <source>Dutch</source>
-        <translation type="vanished">Нидерландский</translation>
+        <translation>Нидерландский</translation>
     </message>
     <message>
         <source>Spanish</source>
-        <translation type="vanished">Испанский</translation>
+        <translation>Испанский</translation>
     </message>
     <message>
         <source>Italian</source>
-        <translation type="vanished">Итальянский</translation>
+        <translation>Итальянский</translation>
     </message>
     <message>
         <source>Turkish</source>
-        <translation type="vanished">Турецкий</translation>
+        <translation>Турецкий</translation>
     </message>
     <message>
         <source>Polish</source>
-        <translation type="vanished">Польский</translation>
+        <translation>Польский</translation>
     </message>
     <message>
         <source>Portuguese</source>
-        <translation type="vanished">Португальский</translation>
+        <translation>Португальский</translation>
     </message>
     <message>
         <source>Brazilian Portuguese</source>
-        <translation type="vanished">Бразильский португальский</translation>
+        <translation>Бразильский португальский</translation>
     </message>
     <message>
         <source>Thai</source>
-        <translation type="vanished">Тайский</translation>
+        <translation>Тайский</translation>
     </message>
     <message>
         <source>Vietnamese</source>
-        <translation type="vanished">Вьетнамский</translation>
+        <translation>Вьетнамский</translation>
     </message>
     <message>
         <source>Indonesian</source>
-        <translation type="vanished">Индонезийский</translation>
+        <translation>Индонезийский</translation>
     </message>
     <message>
         <source>Hungarian</source>
-        <translation type="vanished">Венгерский</translation>
+        <translation>Венгерский</translation>
     </message>
     <message>
         <source>Finnish</source>
-        <translation type="vanished">Финский</translation>
+        <translation>Финский</translation>
     </message>
     <message>
         <source>Arabic</source>
-        <translation type="vanished">Арабский</translation>
+        <translation>Арабский</translation>
     </message>
     <message>
         <source>Hebrew</source>
-        <translation type="vanished">Иврит</translation>
+        <translation>Иврит</translation>
     </message>
     <message>
         <source>Czech</source>
-        <translation type="vanished">Чешский</translation>
+        <translation>Чешский</translation>
     </message>
     <message>
         <source>Croatian</source>
-        <translation type="vanished">Хорватский</translation>
+        <translation>Хорватский</translation>
     </message>
     <message>
         <source>Persian</source>
-        <translation type="vanished">Персидский</translation>
+        <translation>Персидский</translation>
     </message>
     <message>
         <source>Romanian</source>
-        <translation type="vanished">Румынский</translation>
+        <translation>Румынский</translation>
     </message>
     <message>
         <source>Mongolian</source>
-        <translation type="vanished">Монгольский</translation>
+        <translation>Монгольский</translation>
     </message>
 </context>
 <context>
     <name>CredentialsPage</name>
     <message>
         <source>Save Keys</source>
-        <translation type="vanished">Сохранить ключи</translation>
+        <translation>Сохранить ключи</translation>
     </message>
     <message>
         <source>These settings are for advanced users who wish to use their own Custom API endpoints (e.g. Local Language Models) for translation. For most users, no configuration is needed here.</source>
-        <translation type="vanished">Эти настройки предназначены для опытных пользователей, которые хотят использовать свои собственные пользовательские API-интерфейсы (например, локальные языковые модели) для перевода. Для большинства пользователей конфигурация здесь не требуется.</translation>
+        <translation>Эти настройки предназначены для опытных пользователей, которые хотят использовать свои собственные пользовательские API-интерфейсы (например, локальные языковые модели) для перевода. Для большинства пользователей конфигурация здесь не требуется.</translation>
     </message>
     <message>
         <source>OCR</source>
-        <translation type="vanished">Распознавание текста</translation>
+        <translation>Распознавание текста</translation>
     </message>
     <message>
         <source>API Key</source>
-        <translation type="vanished">Ключ API</translation>
+        <translation>Ключ API</translation>
     </message>
     <message>
         <source>Endpoint URL</source>
-        <translation type="vanished">URL-адрес конечной точки</translation>
+        <translation>URL-адрес конечной точки</translation>
     </message>
     <message>
         <source>Model</source>
-        <translation type="vanished">Модель</translation>
+        <translation>Модель</translation>
     </message>
     <message>
         <source>Secret Key</source>
-        <translation type="vanished">Секретный ключ</translation>
+        <translation>Секретный ключ</translation>
     </message>
     <message>
         <source>Folder ID</source>
-        <translation type="vanished">ID папки</translation>
+        <translation>ID папки</translation>
     </message>
 </context>
 <context>
     <name>CustomOCRDialog</name>
     <message>
         <source>Custom OCR Provider</source>
-        <translation type="vanished">Пользовательский OCR-провайдер</translation>
+        <translation>Пользовательский OCR-провайдер</translation>
     </message>
     <message>
         <source>Connect any OpenAI-compatible vision API (e.g. Ollama, LM Studio, vLLM, or a cloud provider). The base URL should point to the API root, e.g. http://localhost:11434/v1 — &apos;/chat/completions&apos; is added automatically.</source>
-        <translation type="vanished">Подключите любой совместимый с OpenAI API компьютерного зрения (например, Ollama, LM Studio, vLLM или облачный провайдер). Базовый URL должен указывать на корень API, напр. http://localhost:11434/v1 — &apos;/chat/completions&apos; добавляется автоматически.</translation>
+        <translation>Подключите любой совместимый с OpenAI API компьютерного зрения (например, Ollama, LM Studio, vLLM или облачный провайдер). Базовый URL должен указывать на корень API, напр. http://localhost:11434/v1 — &apos;/chat/completions&apos; добавляется автоматически.</translation>
     </message>
     <message>
         <source>API URL</source>
-        <translation type="vanished">URL API</translation>
+        <translation>URL API</translation>
     </message>
     <message>
         <source>Load Models</source>
-        <translation type="vanished">Загрузить модели</translation>
+        <translation>Загрузить модели</translation>
     </message>
     <message>
         <source>The model must support image (vision) input — e.g. llama3.2-vision, llava, or qwen2.5-vl. Plain text models will return an error.</source>
-        <translation type="vanished">Модель должна поддерживать ввод изображений (компьютерное зрение) — напр. llama3.2-vision, llava или qwen2.5-vl. Текстовые модели вернут ошибку.</translation>
+        <translation>Модель должна поддерживать ввод изображений (компьютерное зрение) — напр. llama3.2-vision, llava или qwen2.5-vl. Текстовые модели вернут ошибку.</translation>
     </message>
     <message>
         <source>Save API Key</source>
-        <translation type="vanished">Сохранить ключ API</translation>
+        <translation>Сохранить ключ API</translation>
     </message>
     <message>
         <source>API Key</source>
-        <translation type="vanished">Ключ API</translation>
+        <translation>Ключ API</translation>
     </message>
     <message>
         <source>Model</source>
-        <translation type="vanished">Модель</translation>
+        <translation>Модель</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="vanished">Сохранить</translation>
+        <translation>Сохранить</translation>
     </message>
 </context>
 <context>
     <name>CustomTitleBar</name>
     <message>
         <source>Auto-Save</source>
-        <translation type="vanished">Автосохранение</translation>
+        <translation>Автосохранение</translation>
     </message>
     <message>
         <source>Auto-Save Project</source>
-        <translation type="vanished">Автосохранение проекта</translation>
+        <translation>Автосохранение проекта</translation>
     </message>
 </context>
 <context>
     <name>ExportChaptersDialog</name>
     <message>
         <source>Partition Export</source>
-        <translation type="vanished">Разделённый экспорт</translation>
+        <translation>Разделённый экспорт</translation>
     </message>
     <message>
         <source>Pages with the same chapter name are exported together. Edit the Chapter column to merge or split chapters.</source>
-        <translation type="vanished">Страницы с одинаковым названием главы экспортируются вместе. Измените столбец «Глава», чтобы объединить или разделить главы.</translation>
+        <translation>Страницы с одинаковым названием главы экспортируются вместе. Измените столбец «Глава», чтобы объединить или разделить главы.</translation>
     </message>
     <message>
         <source>Output folder</source>
-        <translation type="vanished">Папка вывода</translation>
+        <translation>Папка вывода</translation>
     </message>
     <message>
         <source>Browse</source>
-        <translation type="vanished">Обзор</translation>
+        <translation>Обзор</translation>
     </message>
     <message>
         <source>Selected pages</source>
-        <translation type="vanished">Выбранные страницы</translation>
+        <translation>Выбранные страницы</translation>
     </message>
     <message>
         <source>New chapter name</source>
-        <translation type="vanished">Новое имя главы</translation>
+        <translation>Новое имя главы</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation type="vanished">Применить</translation>
+        <translation>Применить</translation>
     </message>
     <message>
         <source>Page</source>
-        <translation type="vanished">Страница</translation>
+        <translation>Страница</translation>
     </message>
     <message>
         <source>File</source>
-        <translation type="vanished">Файл</translation>
+        <translation>Файл</translation>
     </message>
     <message>
         <source>Chapter</source>
-        <translation type="vanished">Глава</translation>
+        <translation>Глава</translation>
     </message>
     <message>
         <source>Export targets</source>
-        <translation type="vanished">Цели экспорта</translation>
+        <translation>Цели экспорта</translation>
     </message>
     <message>
         <source>Reset Chapters</source>
-        <translation type="vanished">Сбросить главы</translation>
+        <translation>Сбросить главы</translation>
     </message>
     <message>
         <source>Select Export Folder</source>
-        <translation type="vanished">Выбрать папку экспорта</translation>
+        <translation>Выбрать папку экспорта</translation>
     </message>
     <message>
         <source>Output Folder Required</source>
-        <translation type="vanished">Требуется папка вывода</translation>
+        <translation>Требуется папка вывода</translation>
     </message>
     <message>
         <source>Choose an existing output folder.</source>
-        <translation type="vanished">Выберите существующую папку вывода.</translation>
+        <translation>Выберите существующую папку вывода.</translation>
     </message>
     <message>
         <source>Chapter Name Required</source>
-        <translation type="vanished">Требуется имя главы</translation>
+        <translation>Требуется имя главы</translation>
     </message>
     <message>
         <source>Each page must belong to a non-empty chapter.</source>
-        <translation type="vanished">Каждая страница должна принадлежать непустой главе.</translation>
+        <translation>Каждая страница должна принадлежать непустой главе.</translation>
     </message>
 </context>
 <context>
     <name>ExportPage</name>
     <message>
         <source>Automatic Mode</source>
-        <translation type="vanished">Автоматический режим</translation>
+        <translation>Автоматический режим</translation>
     </message>
     <message>
         <source>Selected exports are saved to comic_translate_&lt;timestamp&gt; in the same directory as the input file/archive.</source>
-        <translation type="vanished">Выбранные экспортированные файлы сохраняются в comic_translate_&lt;timestamp&gt; в том же каталоге, что и входной файл/архив.</translation>
+        <translation>Выбранные экспортированные файлы сохраняются в comic_translate_&lt;timestamp&gt; в том же каталоге, что и входной файл/архив.</translation>
     </message>
     <message>
         <source>Export Raw Text</source>
-        <translation type="vanished">Экспортировать необработанный текст</translation>
+        <translation>Экспортировать необработанный текст</translation>
     </message>
     <message>
         <source>Export Translated text</source>
-        <translation type="vanished">Экспортировать переведенный текст</translation>
+        <translation>Экспортировать переведенный текст</translation>
     </message>
     <message>
         <source>Export Inpainted Image</source>
-        <translation type="vanished">Экспортировать восстановленное изображение</translation>
+        <translation>Экспортировать восстановленное изображение</translation>
     </message>
     <message>
         <source>Split stitched webtoon into original pages on export</source>
-        <translation type="vanished">Разбить склеенный вебтун на исходные страницы при экспорте</translation>
+        <translation>Разбить склеенный вебтун на исходные страницы при экспорте</translation>
     </message>
     <message>
         <source>When a webtoon was stitched into one image, export it back as the original separate pages so comic readers load it instantly.</source>
-        <translation type="vanished">Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</translation>
+        <translation>Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</translation>
     </message>
 </context>
 <context>
     <name>LlmsPage</name>
     <message>
         <source>Provide Image as Input to AI</source>
-        <translation type="vanished">Предоставить изображение как входные данные для ИИ</translation>
+        <translation>Предоставить изображение как входные данные для ИИ</translation>
     </message>
     <message>
         <source>Extra Context:</source>
-        <translation type="vanished">Дополнительный контекст:</translation>
+        <translation>Дополнительный контекст:</translation>
     </message>
 </context>
 <context>
     <name>Messages</name>
     <message>
         <source>Skipping:</source>
-        <translation type="vanished">Пропускаем:</translation>
+        <translation>Пропускаем:</translation>
     </message>
     <message>
         <source>Cancelling... %p%</source>
-        <translation type="vanished">Отмена... %p%</translation>
+        <translation>Отмена... %p%</translation>
     </message>
     <message>
         <source>Processing:</source>
-        <translation type="vanished">Обработка:</translation>
+        <translation>Обработка:</translation>
     </message>
     <message>
         <source>Archiving:</source>
-        <translation type="vanished">Архивация:</translation>
+        <translation>Архивация:</translation>
     </message>
     <message>
         <source>Comic has been Translated!</source>
-        <translation type="vanished">Комикс переведен!</translation>
+        <translation>Комикс переведен!</translation>
     </message>
     <message>
         <source>No Font selected.
 Go to Settings &gt; Text Rendering &gt; Font to select or import one </source>
-        <translation type="vanished">Шрифт не выбран.
+        <translation>Шрифт не выбран.
 Перейдите в Настройки &gt; Отображение текста &gt; Шрифт, чтобы выбрать или импортировать его</translation>
     </message>
     <message>
         <source>Please sign in or sign up via Settings &gt; Account to continue.</source>
-        <translation type="vanished">Пожалуйста, войдите или зарегистрируйтесь через Настройки &gt; Аккаунт для продолжения.</translation>
+        <translation>Пожалуйста, войдите или зарегистрируйтесь через Настройки &gt; Аккаунт для продолжения.</translation>
     </message>
     <message>
         <source>The translator does not support the selected target language. Please choose a different language or tool.</source>
-        <translation type="vanished">Переводчик не поддерживает выбранный целевой язык. Пожалуйста, выберите другой язык или инструмент.</translation>
+        <translation>Переводчик не поддерживает выбранный целевой язык. Пожалуйста, выберите другой язык или инструмент.</translation>
     </message>
     <message>
         <source>No {} selected. Please select a {} in Settings &gt; Tools.</source>
-        <translation type="vanished">Не выбран {}. Пожалуйста, выберите {} в Настройки &gt; Инструменты.</translation>
+        <translation>Не выбран {}. Пожалуйста, выберите {} в Настройки &gt; Инструменты.</translation>
     </message>
     <message>
         <source>Insufficient credits to perform this action.
 Go to Settings &gt; Account to buy more credits.</source>
-        <translation type="vanished">Недостаточно кредитов для выполнения этого действия.
+        <translation>Недостаточно кредитов для выполнения этого действия.
 Перейдите в Настройки &gt; Аккаунт, чтобы купить больше кредитов.</translation>
     </message>
     <message>
         <source>Custom requires advanced API configuration. Most users should use the Credits system instead.
 Please sign in via Settings &gt; Account to use credits, or configure Custom API settings in Settings &gt; Advanced.</source>
-        <translation type="vanished">Пользовательский режим требует расширенной настройки API. Большинству пользователей рекомендуется использовать систему кредитов.
+        <translation>Пользовательский режим требует расширенной настройки API. Большинству пользователей рекомендуется использовать систему кредитов.
 Пожалуйста, войдите через Настройки &gt; Аккаунт для использования кредитов или настройте параметры пользовательского API в Настройки &gt; Дополнительно.</translation>
     </message>
     <message>
         <source>Copy</source>
-        <translation type="vanished">Копировать</translation>
+        <translation>Копировать</translation>
     </message>
     <message>
         <source>We encountered an unexpected server error.
 Please try again in a few moments.</source>
-        <translation type="vanished">Произошла непредвиденная ошибка сервера.
+        <translation>Произошла непредвиденная ошибка сервера.
 Пожалуйста, попробуйте снова через несколько минут.</translation>
     </message>
     <message>
         <source>The external service provider is having trouble.
 Please try again later.</source>
-        <translation type="vanished">У внешнего поставщика услуг возникли проблемы.
+        <translation>У внешнего поставщика услуг возникли проблемы.
 Пожалуйста, попробуйте позже.</translation>
     </message>
     <message>
         <source>The server is currently busy or under maintenance.
 Please try again shortly.</source>
-        <translation type="vanished">Сервер в данный момент занят или проходит техническое обслуживание.
+        <translation>Сервер в данный момент занят или проходит техническое обслуживание.
 Пожалуйста, попробуйте позже.</translation>
     </message>
     <message>
         <source>The server took too long to respond.
 Please check your connection or try again later.</source>
-        <translation type="vanished">Сервер слишком долго не отвечает.
+        <translation>Сервер слишком долго не отвечает.
 Проверьте соединение или попробуйте позже.</translation>
     </message>
     <message>
         <source>The selected text recognition tool is not supported.
 Please select a different tool in Settings.</source>
-        <translation type="vanished">Выбранный инструмент распознавания текста не поддерживается.
+        <translation>Выбранный инструмент распознавания текста не поддерживается.
 Выберите другой инструмент в настройках.</translation>
     </message>
     <message>
         <source>The selected translator is not supported.
 Please select a different tool in Settings.</source>
-        <translation type="vanished">Выбранный переводчик не поддерживается.
+        <translation>Выбранный переводчик не поддерживается.
 Выберите другой инструмент в настройках.</translation>
     </message>
     <message>
         <source>The selected tool is not supported.
 Please select a different tool in Settings.</source>
-        <translation type="vanished">Выбранный инструмент не поддерживается.
+        <translation>Выбранный инструмент не поддерживается.
 Выберите другой инструмент в настройках.</translation>
     </message>
     <message>
         <source>{0} image(s) were skipped in this batch.
 Open Batch Report to see all skipped images and reasons.</source>
-        <translation type="vanished">{0} изображение(й) пропущено в этом пакете.
+        <translation>{0} изображение(й) пропущено в этом пакете.
 Откройте Отчёт о пакетной обработке, чтобы увидеть все пропущенные изображения и причины.</translation>
     </message>
     <message>
         <source>Text Recognition blocked: The AI provider flagged this content.
 Please try a different Text Recognition tool.</source>
-        <translation type="vanished">Распознавание текста заблокировано: Провайдер ИИ пометил этот контент.
+        <translation>Распознавание текста заблокировано: Провайдер ИИ пометил этот контент.
 Пожалуйста, попробуйте другой инструмент распознавания текста.</translation>
     </message>
     <message>
         <source>Translation blocked: The AI provider flagged this content.
 Please try a different translator.</source>
-        <translation type="vanished">Перевод заблокирован: Провайдер ИИ пометил этот контент.
+        <translation>Перевод заблокирован: Провайдер ИИ пометил этот контент.
 Пожалуйста, попробуйте другой переводчик.</translation>
     </message>
     <message>
         <source>Operation blocked: The AI provider flagged this content.
 Please try a different tool.</source>
-        <translation type="vanished">Операция заблокирована: Провайдер ИИ пометил этот контент.
+        <translation>Операция заблокирована: Провайдер ИИ пометил этот контент.
 Пожалуйста, попробуйте другой инструмент.</translation>
     </message>
     <message>
         <source>OK</source>
-        <translation type="vanished">ОК</translation>
+        <translation>ОК</translation>
     </message>
     <message>
         <source>Insufficient Credits</source>
-        <translation type="vanished">Недостаточно кредитов</translation>
+        <translation>Недостаточно кредитов</translation>
     </message>
     <message>
         <source>Close</source>
-        <translation type="vanished">Закрыть</translation>
+        <translation>Закрыть</translation>
     </message>
     <message>
         <source>Unable to connect to the server.
 Please check your internet connection.</source>
-        <translation type="vanished">Не удалось подключиться к серверу.
+        <translation>Не удалось подключиться к серверу.
 Пожалуйста, проверьте ваше интернет-соединение.</translation>
     </message>
     <message>
         <source>Text Recognition model</source>
-        <translation type="vanished">Модель распознавания текста</translation>
+        <translation>Модель распознавания текста</translation>
     </message>
     <message>
         <source>Translator</source>
-        <translation type="vanished">Переводчик</translation>
+        <translation>Переводчик</translation>
     </message>
     <message>
         <source>Off</source>
@@ -624,786 +624,786 @@ Please check your internet connection.</source>
     </message>
     <message>
         <source>This PSD was exported by this application, but it now contains Photoshop features that are not fully supported on import. It may not appear exactly as it did in Photoshop.</source>
-        <translation type="vanished">Этот PSD был экспортирован этим приложением, но теперь содержит функции Photoshop, которые не полностью поддерживаются при импорте. Он может отображаться не совсем так, как в Photoshop.</translation>
+        <translation>Этот PSD был экспортирован этим приложением, но теперь содержит функции Photoshop, которые не полностью поддерживаются при импорте. Он может отображаться не совсем так, как в Photoshop.</translation>
     </message>
     <message>
         <source>Imported a PSD that was not exported by this application. Visible image layers were flattened, and unsupported Photoshop features may not match exactly.</source>
-        <translation type="vanished">Импортирован PSD, который не был экспортирован этим приложением. Видимые слои изображения были сведены, а неподдерживаемые функции Photoshop могут отображаться неточно.</translation>
+        <translation>Импортирован PSD, который не был экспортирован этим приложением. Видимые слои изображения были сведены, а неподдерживаемые функции Photoshop могут отображаться неточно.</translation>
     </message>
 </context>
 <context>
     <name>NavRailMixin</name>
     <message>
         <source>New Project</source>
-        <translation type="vanished">Новый проект</translation>
+        <translation>Новый проект</translation>
     </message>
     <message>
         <source>Import Images, PDFs, Epubs or Comic Book Archive Files (cbr, cbz, etc). This will Open a new project</source>
-        <translation type="vanished">Импортировать изображения, PDF, Epub или архивы комиксов (cbr, cbz и т.д.). Это откроет новый проект</translation>
+        <translation>Импортировать изображения, PDF, Epub или архивы комиксов (cbr, cbz и т.д.). Это откроет новый проект</translation>
     </message>
     <message>
         <source>Images</source>
-        <translation type="vanished">Изображения</translation>
+        <translation>Изображения</translation>
     </message>
     <message>
         <source>Document</source>
-        <translation type="vanished">Документ</translation>
+        <translation>Документ</translation>
     </message>
     <message>
         <source>Archive</source>
-        <translation type="vanished">Архив</translation>
+        <translation>Архив</translation>
     </message>
     <message>
         <source>Comic Book Archive</source>
-        <translation type="vanished">Архив комиксов</translation>
+        <translation>Архив комиксов</translation>
     </message>
     <message>
         <source>Project File</source>
-        <translation type="vanished">Файл проекта</translation>
+        <translation>Файл проекта</translation>
     </message>
     <message>
         <source>Save Currently Loaded Image</source>
-        <translation type="vanished">Сохранить текущее изображение</translation>
+        <translation>Сохранить текущее изображение</translation>
     </message>
     <message>
         <source>Save Project</source>
-        <translation type="vanished">Сохранить проект</translation>
+        <translation>Сохранить проект</translation>
     </message>
     <message>
         <source>Save as</source>
-        <translation type="vanished">Сохранить как</translation>
+        <translation>Сохранить как</translation>
     </message>
     <message>
         <source>Export all Images</source>
-        <translation type="vanished">Экспортировать все изображения</translation>
+        <translation>Экспортировать все изображения</translation>
     </message>
     <message>
         <source>ZIP</source>
-        <translation type="vanished">ZIP</translation>
+        <translation>ZIP</translation>
     </message>
     <message>
         <source>CBZ</source>
-        <translation type="vanished">CBZ</translation>
+        <translation>CBZ</translation>
     </message>
     <message>
         <source>PDF</source>
-        <translation type="vanished">PDF</translation>
+        <translation>PDF</translation>
     </message>
     <message>
         <source>PSD</source>
-        <translation type="vanished">PSD</translation>
+        <translation>PSD</translation>
     </message>
     <message>
         <source>Start</source>
-        <translation type="vanished">Старт</translation>
+        <translation>Старт</translation>
     </message>
     <message>
         <source>Home</source>
-        <translation type="vanished">Главная</translation>
+        <translation>Главная</translation>
     </message>
     <message>
         <source>Settings</source>
-        <translation type="vanished">Настройки</translation>
+        <translation>Настройки</translation>
     </message>
     <message>
         <source>Search / Replace (Ctrl+F)</source>
-        <translation type="vanished">Поиск / Замена (Ctrl+F)</translation>
+        <translation>Поиск / Замена (Ctrl+F)</translation>
     </message>
     <message>
         <source>Insert files into current project</source>
-        <translation type="vanished">Вставить файлы в текущий проект</translation>
+        <translation>Вставить файлы в текущий проект</translation>
     </message>
     <message>
         <source>Start New Project</source>
-        <translation type="vanished">Начать новый проект</translation>
+        <translation>Начать новый проект</translation>
     </message>
     <message>
         <source>Your current project has unsaved changes. Start a new project?</source>
-        <translation type="vanished">В текущем проекте есть несохранённые изменения. Начать новый проект?</translation>
+        <translation>В текущем проекте есть несохранённые изменения. Начать новый проект?</translation>
     </message>
     <message>
         <source>Yes</source>
-        <translation type="vanished">Да</translation>
+        <translation>Да</translation>
     </message>
     <message>
         <source>No</source>
-        <translation type="vanished">Нет</translation>
+        <translation>Нет</translation>
     </message>
 </context>
 <context>
     <name>PageListView</name>
     <message>
         <source>Insert</source>
-        <translation type="vanished">Вставить</translation>
+        <translation>Вставить</translation>
     </message>
     <message>
         <source>Delete</source>
-        <translation type="vanished">Удалить</translation>
+        <translation>Удалить</translation>
     </message>
     <message>
         <source>Unskip</source>
-        <translation type="vanished">Не пропускать</translation>
+        <translation>Не пропускать</translation>
     </message>
     <message>
         <source>Skip</source>
-        <translation type="vanished">Пропустить</translation>
+        <translation>Пропустить</translation>
     </message>
     <message>
         <source>Translate</source>
-        <translation type="vanished">Перевести</translation>
+        <translation>Перевести</translation>
     </message>
 </context>
 <context>
     <name>PersonalizationPage</name>
     <message>
         <source>Language</source>
-        <translation type="vanished">Язык</translation>
+        <translation>Язык</translation>
     </message>
     <message>
         <source>Theme</source>
-        <translation type="vanished">Тема</translation>
+        <translation>Тема</translation>
     </message>
 </context>
 <context>
     <name>ProjectPage</name>
     <message>
         <source>Auto-Recover</source>
-        <translation type="vanished">Автоматическое восстановление</translation>
+        <translation>Автоматическое восстановление</translation>
     </message>
     <message>
         <source>Auto-Recover saves recovery snapshots in the background so work can be restored after a crash.
 These snapshots are not your main project file; use Save/Auto-Save for normal project saves.</source>
-        <translation type="vanished">Функция автоматического восстановления сохраняет снимки восстановления в фоновом режиме, чтобы можно было восстановить работу после сбоя.
+        <translation>Функция автоматического восстановления сохраняет снимки восстановления в фоновом режиме, чтобы можно было восстановить работу после сбоя.
 Эти снимки не являются основным файлом вашего проекта; используйте Save/Auto-Save для обычного сохранения проекта.</translation>
     </message>
     <message>
         <source>Create recovery snapshot every (minutes):</source>
-        <translation type="vanished">Создавать снимок восстановления каждые (минут):</translation>
+        <translation>Создавать снимок восстановления каждые (минут):</translation>
     </message>
     <message>
         <source>Auto-Save Project Files</source>
-        <translation type="vanished">Автосохранение файлов проекта</translation>
+        <translation>Автосохранение файлов проекта</translation>
     </message>
     <message>
         <source>These are normal .ctpr project files saved while Auto-Save is enabled.
 This folder is separate from Auto-Recover snapshots.</source>
-        <translation type="vanished">Это обычные файлы проекта .ctpr, сохраняемые при включенном автосохранении.
+        <translation>Это обычные файлы проекта .ctpr, сохраняемые при включенном автосохранении.
 Эта папка отделена от снимков автоматического восстановления.</translation>
     </message>
     <message>
         <source>Auto-Save folder:</source>
-        <translation type="vanished">Папка автосохранения:</translation>
+        <translation>Папка автосохранения:</translation>
     </message>
     <message>
         <source>Select a folder for auto-saved project files</source>
-        <translation type="vanished">Выберите папку для автоматически сохраняемых файлов проекта.</translation>
+        <translation>Выберите папку для автоматически сохраняемых файлов проекта.</translation>
     </message>
     <message>
         <source>Browse</source>
-        <translation type="vanished">Обзор</translation>
+        <translation>Обзор</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation type="vanished">Сбросить</translation>
+        <translation>Сбросить</translation>
     </message>
     <message>
         <source>Choose Auto-Save Folder</source>
-        <translation type="vanished">Выберите папку автосохранения</translation>
+        <translation>Выберите папку автосохранения</translation>
     </message>
 </context>
 <context>
     <name>SearchReplaceController</name>
     <message>
         <source>Empty query</source>
-        <translation type="vanished">Пустой запрос</translation>
+        <translation>Пустой запрос</translation>
     </message>
     <message>
         <source>Search Error</source>
-        <translation type="vanished">Ошибка поиска</translation>
+        <translation>Ошибка поиска</translation>
     </message>
     <message>
         <source>Ready</source>
-        <translation type="vanished">Готов</translation>
+        <translation>Готов</translation>
     </message>
     <message>
         <source>No results</source>
-        <translation type="vanished">Нет результатов</translation>
+        <translation>Нет результатов</translation>
     </message>
     <message>
         <source>Replace Error</source>
-        <translation type="vanished">Ошибка замены</translation>
+        <translation>Ошибка замены</translation>
     </message>
     <message>
         <source>Replace</source>
-        <translation type="vanished">Замена</translation>
+        <translation>Замена</translation>
     </message>
     <message>
         <source>Replaced 1 occurrence(s)</source>
-        <translation type="vanished">Заменено 1 совпадение</translation>
+        <translation>Заменено 1 совпадение</translation>
     </message>
     <message>
         <source>Replace All</source>
-        <translation type="vanished">Заменить все</translation>
+        <translation>Заменить все</translation>
     </message>
     <message>
         <source>Replaced {0} occurrence(s)</source>
-        <translation type="vanished">Заменено {0} совпадений</translation>
+        <translation>Заменено {0} совпадений</translation>
     </message>
     <message>
         <source>No replacements</source>
-        <translation type="vanished">Нет замен</translation>
+        <translation>Нет замен</translation>
     </message>
 </context>
 <context>
     <name>SearchReplacePanel</name>
     <message>
         <source>Search</source>
-        <translation type="vanished">Поиск</translation>
+        <translation>Поиск</translation>
     </message>
     <message>
         <source>Previous match (Ctrl+Enter)</source>
-        <translation type="vanished">Предыдущее совпадение (Ctrl+Enter)</translation>
+        <translation>Предыдущее совпадение (Ctrl+Enter)</translation>
     </message>
     <message>
         <source>Next match (Enter)</source>
-        <translation type="vanished">Следующее совпадение (Enter)</translation>
+        <translation>Следующее совпадение (Enter)</translation>
     </message>
     <message>
         <source>Clear (Esc)</source>
-        <translation type="vanished">Очистить (Esc)</translation>
+        <translation>Очистить (Esc)</translation>
     </message>
     <message>
         <source>Find</source>
-        <translation type="vanished">Найти</translation>
+        <translation>Найти</translation>
     </message>
     <message>
         <source>Match case</source>
-        <translation type="vanished">Учитывать регистр</translation>
+        <translation>Учитывать регистр</translation>
     </message>
     <message>
         <source>Match whole word</source>
-        <translation type="vanished">Только слово целиком</translation>
+        <translation>Только слово целиком</translation>
     </message>
     <message>
         <source>Use regular expression</source>
-        <translation type="vanished">Использовать регулярные выражения</translation>
+        <translation>Использовать регулярные выражения</translation>
     </message>
     <message>
         <source>0 results</source>
-        <translation type="vanished">0 результатов</translation>
+        <translation>0 результатов</translation>
     </message>
     <message>
         <source>Replace</source>
-        <translation type="vanished">Заменить</translation>
+        <translation>Заменить</translation>
     </message>
     <message>
         <source>Preserve case (match original capitalization)</source>
-        <translation type="vanished">Сохранять регистр (соответствие исходной капитализации)</translation>
+        <translation>Сохранять регистр (соответствие исходной капитализации)</translation>
     </message>
     <message>
         <source>Replace All</source>
-        <translation type="vanished">Заменить все</translation>
+        <translation>Заменить все</translation>
     </message>
     <message>
         <source>Current Image</source>
-        <translation type="vanished">Текущее изображение</translation>
+        <translation>Текущее изображение</translation>
     </message>
     <message>
         <source>All Images</source>
-        <translation type="vanished">Все изображения</translation>
+        <translation>Все изображения</translation>
     </message>
     <message>
         <source>Search Scope</source>
-        <translation type="vanished">Область поиска</translation>
+        <translation>Область поиска</translation>
     </message>
     <message>
         <source>Target</source>
-        <translation type="vanished">Перевод</translation>
+        <translation>Перевод</translation>
     </message>
     <message>
         <source>Source</source>
-        <translation type="vanished">Оригинал</translation>
+        <translation>Оригинал</translation>
     </message>
     <message>
         <source>Search in original source or translated target text</source>
-        <translation type="vanished">Поиск в исходном тексте или в переводе</translation>
+        <translation>Поиск в исходном тексте или в переводе</translation>
     </message>
     <message>
         <source>Ready</source>
-        <translation type="vanished">Готов</translation>
+        <translation>Готов</translation>
     </message>
     <message>
         <source>{0} results in {1} image(s)</source>
-        <translation type="vanished">{0} результатов в {1} изображениях</translation>
+        <translation>{0} результатов в {1} изображениях</translation>
     </message>
 </context>
 <context>
     <name>SettingsPage</name>
     <message>
         <source>OK</source>
-        <translation type="vanished">ОК</translation>
+        <translation>ОК</translation>
     </message>
     <message>
         <source>Yes</source>
-        <translation type="vanished">Да</translation>
+        <translation>Да</translation>
     </message>
     <message>
         <source>No</source>
-        <translation type="vanished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <source>Restart Required</source>
-        <translation type="vanished">Необходим перезапуск</translation>
+        <translation>Необходим перезапуск</translation>
     </message>
     <message>
         <source>Failed to initiate sign-in process.</source>
-        <translation type="vanished">Не удалось начать процесс входа.</translation>
+        <translation>Не удалось начать процесс входа.</translation>
     </message>
     <message>
         <source>Sign In</source>
-        <translation type="vanished">Войти</translation>
+        <translation>Войти</translation>
     </message>
     <message>
         <source>Sign In Required</source>
-        <translation type="vanished">Требуется вход</translation>
+        <translation>Требуется вход</translation>
     </message>
     <message>
         <source>Please sign in to purchase or manage credits.</source>
-        <translation type="vanished">Пожалуйста, войдите, чтобы купить или управлять кредитами.</translation>
+        <translation>Пожалуйста, войдите, чтобы купить или управлять кредитами.</translation>
     </message>
     <message>
         <source>Unable to Open Browser</source>
-        <translation type="vanished">Не удалось открыть браузер</translation>
+        <translation>Не удалось открыть браузер</translation>
     </message>
     <message>
         <source>Please open the pricing page in your browser: {url}</source>
-        <translation type="vanished">Пожалуйста, откройте страницу с ценами в вашем браузере: {url}</translation>
+        <translation>Пожалуйста, откройте страницу с ценами в вашем браузере: {url}</translation>
     </message>
     <message>
         <source>The application needs to restart for the language changes to take effect.
 Restart now?</source>
-        <translation type="vanished">Для применения изменений языка необходимо перезапустить приложение.
+        <translation>Для применения изменений языка необходимо перезапустить приложение.
 Перезапустить сейчас?</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <source>Sign In Error</source>
-        <translation type="vanished">Ошибка входа</translation>
+        <translation>Ошибка входа</translation>
     </message>
     <message>
         <source>Authentication failed: {error}</source>
-        <translation type="vanished">Ошибка аутентификации: {error}</translation>
+        <translation>Ошибка аутентификации: {error}</translation>
     </message>
     <message>
         <source>Confirm Sign Out</source>
-        <translation type="vanished">Подтвердите выход</translation>
+        <translation>Подтвердите выход</translation>
     </message>
     <message>
         <source>Are you sure you want to sign out?</source>
-        <translation type="vanished">Вы уверены, что хотите выйти?</translation>
+        <translation>Вы уверены, что хотите выйти?</translation>
     </message>
     <message>
         <source>Signing Out...</source>
-        <translation type="vanished">Выход...</translation>
+        <translation>Выход...</translation>
     </message>
     <message>
         <source>Sign Out</source>
-        <translation type="vanished">Выйти</translation>
+        <translation>Выйти</translation>
     </message>
     <message>
         <source>Session Expired</source>
-        <translation type="vanished">Сессия истекла</translation>
+        <translation>Сессия истекла</translation>
     </message>
     <message>
         <source>Your session has expired. Please sign in again.</source>
-        <translation type="vanished">Ваша сессия истекла. Пожалуйста, войдите снова.</translation>
+        <translation>Ваша сессия истекла. Пожалуйста, войдите снова.</translation>
     </message>
     <message>
         <source>N/A</source>
-        <translation type="vanished">Н/Д</translation>
+        <translation>Н/Д</translation>
     </message>
     <message>
         <source>Free</source>
-        <translation type="vanished">Бесплатно</translation>
+        <translation>Бесплатно</translation>
     </message>
     <message>
         <source>Subscription</source>
-        <translation type="vanished">Подписка</translation>
+        <translation>Подписка</translation>
     </message>
     <message>
         <source>One-time</source>
-        <translation type="vanished">Одноразовая</translation>
+        <translation>Одноразовая</translation>
     </message>
     <message>
         <source>Total</source>
-        <translation type="vanished">Всего</translation>
+        <translation>Всего</translation>
     </message>
     <message>
         <source>Checking...</source>
-        <translation type="vanished">Проверка...</translation>
+        <translation>Проверка...</translation>
     </message>
     <message>
         <source>Check for Updates</source>
-        <translation type="vanished">Проверить обновления</translation>
+        <translation>Проверить обновления</translation>
     </message>
     <message>
         <source>Update Available</source>
-        <translation type="vanished">Доступно обновление</translation>
+        <translation>Доступно обновление</translation>
     </message>
     <message>
         <source>A new version {version} is available.</source>
-        <translation type="vanished">Доступна новая версия {version}.</translation>
+        <translation>Доступна новая версия {version}.</translation>
     </message>
     <message>
         <source>Release Notes</source>
-        <translation type="vanished">Примечания к выпуску</translation>
+        <translation>Примечания к выпуску</translation>
     </message>
     <message>
         <source>Skip This Version</source>
-        <translation type="vanished">Пропустить эту версию</translation>
+        <translation>Пропустить эту версию</translation>
     </message>
     <message>
         <source>Up to Date</source>
-        <translation type="vanished">Актуальная версия</translation>
+        <translation>Актуальная версия</translation>
     </message>
     <message>
         <source>You are using the latest version.</source>
-        <translation type="vanished">Вы используете последнюю версию.</translation>
+        <translation>Вы используете последнюю версию.</translation>
     </message>
     <message>
         <source>Update Error</source>
-        <translation type="vanished">Ошибка обновления</translation>
+        <translation>Ошибка обновления</translation>
     </message>
     <message>
         <source>Downloading update...</source>
-        <translation type="vanished">Загрузка обновления...</translation>
+        <translation>Загрузка обновления...</translation>
     </message>
     <message>
         <source>Download Complete</source>
-        <translation type="vanished">Загрузка завершена</translation>
+        <translation>Загрузка завершена</translation>
     </message>
     <message>
         <source>Installer downloaded to {path}. Run it now?</source>
-        <translation type="vanished">Установщик загружен в {path}. Запустить сейчас?</translation>
+        <translation>Установщик загружен в {path}. Запустить сейчас?</translation>
     </message>
 </context>
 <context>
     <name>SettingsPageUI</name>
     <message>
         <source>Default</source>
-        <translation type="vanished">По умолчанию</translation>
+        <translation>По умолчанию</translation>
     </message>
     <message>
         <source>Microsoft OCR</source>
-        <translation type="vanished">Microsoft OCR</translation>
+        <translation>Microsoft OCR</translation>
     </message>
     <message>
         <source>Google Cloud Vision</source>
-        <translation type="vanished">Google Cloud Vision</translation>
+        <translation>Google Cloud Vision</translation>
     </message>
     <message>
         <source>GPT-4.1-mini</source>
-        <translation type="vanished">GPT-4.1-mini</translation>
+        <translation>GPT-4.1-mini</translation>
     </message>
     <message>
         <source>Resize</source>
-        <translation type="vanished">Изменить размер</translation>
+        <translation>Изменить размер</translation>
     </message>
     <message>
         <source>Gemini-2.5-Flash-Lite</source>
-        <translation type="vanished">Gemini-2.5-Flash-Lite</translation>
+        <translation>Gemini-2.5-Flash-Lite</translation>
     </message>
     <message>
         <source>Original</source>
-        <translation type="vanished">Оригинал</translation>
+        <translation>Оригинал</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="vanished">Обрезать</translation>
+        <translation>Обрезать</translation>
     </message>
     <message>
         <source>Dark</source>
-        <translation type="vanished">Темная</translation>
+        <translation>Темная</translation>
     </message>
     <message>
         <source>Light</source>
-        <translation type="vanished">Светлая</translation>
+        <translation>Светлая</translation>
     </message>
     <message>
         <source>Left</source>
-        <translation type="vanished">Слева</translation>
+        <translation>Слева</translation>
     </message>
     <message>
         <source>Center</source>
-        <translation type="vanished">По центру</translation>
+        <translation>По центру</translation>
     </message>
     <message>
         <source>Right</source>
-        <translation type="vanished">Справа</translation>
+        <translation>Справа</translation>
     </message>
     <message>
         <source>Open AI GPT</source>
-        <translation type="vanished">Open AI GPT</translation>
+        <translation>Open AI GPT</translation>
     </message>
     <message>
         <source>Microsoft Azure</source>
-        <translation type="vanished">Microsoft Azure</translation>
+        <translation>Microsoft Azure</translation>
     </message>
     <message>
         <source>Google Cloud</source>
-        <translation type="vanished">Google Cloud</translation>
+        <translation>Google Cloud</translation>
     </message>
     <message>
         <source>LLMs</source>
-        <translation type="vanished">LLMs</translation>
+        <translation>LLMs</translation>
     </message>
     <message>
         <source>Project</source>
-        <translation type="vanished">Проект</translation>
+        <translation>Проект</translation>
     </message>
     <message>
         <source>Shortcuts</source>
-        <translation type="vanished">Сочетания клавиш</translation>
+        <translation>Сочетания клавиш</translation>
     </message>
     <message>
         <source>Advanced</source>
-        <translation type="vanished">Дополнительно</translation>
+        <translation>Дополнительно</translation>
     </message>
     <message>
         <source>About</source>
-        <translation type="vanished">О программе</translation>
+        <translation>О программе</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="vanished">Пользовательский</translation>
+        <translation>Пользовательский</translation>
     </message>
     <message>
         <source>Deepseek</source>
-        <translation type="vanished">Deepseek</translation>
+        <translation>Deepseek</translation>
     </message>
     <message>
         <source>Google Gemini</source>
-        <translation type="vanished">Google Gemini</translation>
+        <translation>Google Gemini</translation>
     </message>
     <message>
         <source>DeepL</source>
-        <translation type="vanished">DeepL</translation>
+        <translation>DeepL</translation>
     </message>
     <message>
         <source>Anthropic Claude</source>
-        <translation type="vanished">Anthropic Claude</translation>
+        <translation>Anthropic Claude</translation>
     </message>
     <message>
         <source>Yandex</source>
-        <translation type="vanished">Яндекс</translation>
+        <translation>Яндекс</translation>
     </message>
     <message>
         <source>GPT-4.1</source>
-        <translation type="vanished">GPT-4.1</translation>
+        <translation>GPT-4.1</translation>
     </message>
     <message>
         <source>Claude-4.5-Haiku</source>
-        <translation type="vanished">Claude-4.5-Haiku</translation>
+        <translation>Claude-4.5-Haiku</translation>
     </message>
     <message>
         <source>Gemini-2.5-Pro</source>
-        <translation type="vanished">Gemini-2.5-Pro</translation>
+        <translation>Gemini-2.5-Pro</translation>
     </message>
     <message>
         <source>Account</source>
-        <translation type="vanished">Аккаунт</translation>
+        <translation>Аккаунт</translation>
     </message>
     <message>
         <source>Microsoft Translator</source>
-        <translation type="vanished">Microsoft Translator</translation>
+        <translation>Microsoft Translator</translation>
     </message>
     <message>
         <source>Gemini-3.1-Flash-Lite</source>
-        <translation type="vanished">Gemini-3.1-Flash-Lite</translation>
+        <translation>Gemini-3.1-Flash-Lite</translation>
     </message>
     <message>
         <source>Claude-4.6-Sonnet</source>
-        <translation type="vanished">Claude-4.6-Sonnet</translation>
+        <translation>Claude-4.6-Sonnet</translation>
     </message>
     <message>
         <source>Personalization</source>
-        <translation type="vanished">Персонализация</translation>
+        <translation>Персонализация</translation>
     </message>
     <message>
         <source>Tools</source>
-        <translation type="vanished">Инструменты</translation>
+        <translation>Инструменты</translation>
     </message>
     <message>
         <source>Text Rendering</source>
-        <translation type="vanished">Отображение текста</translation>
+        <translation>Отображение текста</translation>
     </message>
     <message>
         <source>Export</source>
-        <translation type="vanished">Экспорт</translation>
+        <translation>Экспорт</translation>
     </message>
 </context>
 <context>
     <name>ShortcutDefinitions</name>
     <message>
         <source>Save Project</source>
-        <translation type="vanished">Сохранить проект</translation>
+        <translation>Сохранить проект</translation>
     </message>
     <message>
         <source>Save the current project file.</source>
-        <translation type="vanished">Сохраняет текущий файл проекта.</translation>
+        <translation>Сохраняет текущий файл проекта.</translation>
     </message>
     <message>
         <source>Save Current Image</source>
-        <translation type="vanished">Сохранить текущее изображение</translation>
+        <translation>Сохранить текущее изображение</translation>
     </message>
     <message>
         <source>Save the currently loaded image.</source>
-        <translation type="vanished">Сохраняет текущее загруженное изображение.</translation>
+        <translation>Сохраняет текущее загруженное изображение.</translation>
     </message>
     <message>
         <source>Undo</source>
-        <translation type="vanished">Отменить</translation>
+        <translation>Отменить</translation>
     </message>
     <message>
         <source>Undo the last editing action.</source>
-        <translation type="vanished">Отменяет последнее действие редактирования.</translation>
+        <translation>Отменяет последнее действие редактирования.</translation>
     </message>
     <message>
         <source>Redo</source>
-        <translation type="vanished">Повторить</translation>
+        <translation>Повторить</translation>
     </message>
     <message>
         <source>Redo the previously undone action.</source>
-        <translation type="vanished">Повторяет ранее отменённое действие.</translation>
+        <translation>Повторяет ранее отменённое действие.</translation>
     </message>
     <message>
         <source>Delete Selected Box</source>
-        <translation type="vanished">Удалить выбранный блок</translation>
+        <translation>Удалить выбранный блок</translation>
     </message>
     <message>
         <source>Delete the currently selected text box.</source>
-        <translation type="vanished">Удаляет текущий выбранный текстовый блок.</translation>
+        <translation>Удаляет текущий выбранный текстовый блок.</translation>
     </message>
     <message>
         <source>Restore Text Blocks</source>
-        <translation type="vanished">Восстановить текстовые блоки</translation>
+        <translation>Восстановить текстовые блоки</translation>
     </message>
     <message>
         <source>Draw saved text blocks back onto the image for editing.</source>
-        <translation type="vanished">Снова рисует на изображении сохранённые текстовые блоки для редактирования.</translation>
+        <translation>Снова рисует на изображении сохранённые текстовые блоки для редактирования.</translation>
     </message>
     <message>
         <source>Toggle Brush Strokes</source>
-        <translation type="vanished">Переключить мазки кисти</translation>
+        <translation>Переключить мазки кисти</translation>
     </message>
     <message>
         <source>Toggle brush stroke drawing on or off.</source>
-        <translation type="vanished">Включает или отключает рисование мазков кисти.</translation>
+        <translation>Включает или отключает рисование мазков кисти.</translation>
     </message>
 </context>
 <context>
     <name>ShortcutsPage</name>
     <message>
         <source>Keyboard Shortcuts</source>
-        <translation type="vanished">Сочетания клавиш</translation>
+        <translation>Сочетания клавиш</translation>
     </message>
     <message>
         <source>Assign shortcuts for common editing actions. Leave a field empty to disable that shortcut.</source>
-        <translation type="vanished">Назначьте сочетания клавиш для часто используемых действий редактирования. Оставьте поле пустым, чтобы отключить это сочетание.</translation>
+        <translation>Назначьте сочетания клавиш для часто используемых действий редактирования. Оставьте поле пустым, чтобы отключить это сочетание.</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation type="vanished">Сбросить</translation>
+        <translation>Сбросить</translation>
     </message>
     <message>
         <source>Reset All Shortcuts</source>
-        <translation type="vanished">Сбросить все сочетания клавиш</translation>
+        <translation>Сбросить все сочетания клавиш</translation>
     </message>
 </context>
 <context>
     <name>StartupHomeScreen</name>
     <message>
         <source>New</source>
-        <translation type="vanished">Новый</translation>
+        <translation>Новый</translation>
     </message>
     <message>
         <source>New Project</source>
-        <translation type="vanished">Новый проект</translation>
+        <translation>Новый проект</translation>
     </message>
     <message>
         <source>Open Files</source>
-        <translation type="vanished">Открыть файлы</translation>
+        <translation>Открыть файлы</translation>
     </message>
     <message>
         <source>Drag and drop files anywhere on this page to open them.</source>
-        <translation type="vanished">Перетащите файлы в любое место на этой странице, чтобы открыть их.</translation>
+        <translation>Перетащите файлы в любое место на этой странице, чтобы открыть их.</translation>
     </message>
     <message>
         <source>Recent</source>
-        <translation type="vanished">Недавний</translation>
+        <translation>Недавний</translation>
     </message>
     <message>
         <source>Pinned</source>
-        <translation type="vanished">Закреплено</translation>
+        <translation>Закреплено</translation>
     </message>
     <message>
         <source>Search</source>
-        <translation type="vanished">Поиск</translation>
+        <translation>Поиск</translation>
     </message>
     <message>
         <source>Name</source>
-        <translation type="vanished">Имя</translation>
+        <translation>Имя</translation>
     </message>
     <message>
         <source>Date modified</source>
-        <translation type="vanished">Дата изменения</translation>
+        <translation>Дата изменения</translation>
     </message>
     <message>
         <source>No recent projects.
 Open or create a project to get started.</source>
-        <translation type="vanished">Нет недавних проектов.
+        <translation>Нет недавних проектов.
 Откройте или создайте проект, чтобы начать работу.</translation>
     </message>
     <message>
         <source>Supported Files ({exts});;All Files (*)</source>
-        <translation type="vanished">Поддерживаемые файлы ({exts});;Все файлы (*)</translation>
+        <translation>Поддерживаемые файлы ({exts});;Все файлы (*)</translation>
     </message>
 </context>
 <context>
     <name>TextRenderingPage</name>
     <message>
         <source>Minimum Font Size:</source>
-        <translation type="vanished">Минимальный размер шрифта:</translation>
+        <translation>Минимальный размер шрифта:</translation>
     </message>
     <message>
         <source>Maximum Font Size:</source>
-        <translation type="vanished">Максимальный размер шрифта:</translation>
+        <translation>Максимальный размер шрифта:</translation>
     </message>
     <message>
         <source>Font:</source>
-        <translation type="vanished">Шрифт:</translation>
+        <translation>Шрифт:</translation>
     </message>
     <message>
         <source>Import Font:</source>
-        <translation type="vanished">Импортировать шрифт:</translation>
+        <translation>Импортировать шрифт:</translation>
     </message>
     <message>
         <source>Import the Font to use for Rendering Text on Images</source>
-        <translation type="vanished">Импортировать шрифт для использования при рендеринге текста на изображениях</translation>
+        <translation>Импортировать шрифт для использования при рендеринге текста на изображениях</translation>
     </message>
     <message>
         <source>Render Text in UpperCase</source>
-        <translation type="vanished">Отображать текст прописными буквами</translation>
+        <translation>Отображать текст прописными буквами</translation>
     </message>
 </context>
 <context>
     <name>ToolsPage</name>
     <message>
         <source>Translator</source>
-        <translation type="vanished">Переводчик</translation>
+        <translation>Переводчик</translation>
     </message>
     <message>
         <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
@@ -1430,385 +1430,389 @@ Open or create a project to get started.</source>
         <translation>Высокий</translation>
     </message>
     <message>
+        <source>Auto</source>
+        <translation>Авто</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
-        <translation type="vanished">Распознавание текста</translation>
+        <translation>Распознавание текста</translation>
     </message>
     <message>
         <source>Text Detector</source>
-        <translation type="vanished">Обнаружение текста</translation>
+        <translation>Обнаружение текста</translation>
     </message>
     <message>
         <source>Image Cleaning</source>
-        <translation type="vanished">Очистка изображений</translation>
+        <translation>Очистка изображений</translation>
     </message>
     <message>
         <source>Inpainter</source>
-        <translation type="vanished">Инструмент восстановления</translation>
+        <translation>Инструмент восстановления</translation>
     </message>
     <message>
         <source>AOT</source>
-        <translation type="vanished">Стратегия AOT</translation>
+        <translation>Стратегия AOT</translation>
     </message>
     <message>
         <source>HD Strategy</source>
-        <translation type="vanished">Стратегия HD</translation>
+        <translation>Стратегия HD</translation>
     </message>
     <message>
         <source>Resize</source>
-        <translation type="vanished">Изменить размер</translation>
+        <translation>Изменить размер</translation>
     </message>
     <message>
         <source>Resize Limit:</source>
-        <translation type="vanished">Предел изменения размера:</translation>
+        <translation>Предел изменения размера:</translation>
     </message>
     <message>
         <source>Resize the longer side of the image to a specific size,
 then do inpainting on the resized image.</source>
-        <translation type="vanished">Измените размер большей стороны изображения до определенного размера,
+        <translation>Измените размер большей стороны изображения до определенного размера,
 затем выполните восстановление изображения на изображении с измененным размером.</translation>
     </message>
     <message>
         <source>Crop masking area from the original image to do inpainting.</source>
-        <translation type="vanished">Обрежьте область маскировки из исходного изображения, чтобы выполнить восстановление изображения.</translation>
+        <translation>Обрежьте область маскировки из исходного изображения, чтобы выполнить восстановление изображения.</translation>
     </message>
     <message>
         <source>Crop Margin:</source>
-        <translation type="vanished">Поле обрезки:</translation>
+        <translation>Поле обрезки:</translation>
     </message>
     <message>
         <source>Crop Trigger Size:</source>
-        <translation type="vanished">Размер триггера обрезки:</translation>
+        <translation>Размер триггера обрезки:</translation>
     </message>
     <message>
         <source>Use GPU</source>
-        <translation type="vanished">Использовать GPU</translation>
+        <translation>Использовать GPU</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="vanished">Обрезать</translation>
+        <translation>Обрезать</translation>
     </message>
     <message>
         <source>Original</source>
-        <translation type="vanished">Оригинал</translation>
+        <translation>Оригинал</translation>
     </message>
     <message>
         <source>Add Custom Model</source>
-        <translation type="vanished">Добавить пользовательскую модель</translation>
+        <translation>Добавить пользовательскую модель</translation>
     </message>
 </context>
 <context>
     <name>WorkspaceMixin</name>
     <message>
         <source>Undo</source>
-        <translation type="vanished">Отменить</translation>
+        <translation>Отменить</translation>
     </message>
     <message>
         <source>Redo</source>
-        <translation type="vanished">Повторить</translation>
+        <translation>Повторить</translation>
     </message>
     <message>
         <source>Detect</source>
-        <translation type="vanished">Обнаружить</translation>
+        <translation>Обнаружить</translation>
     </message>
     <message>
         <source>Recognize</source>
-        <translation type="vanished">Распознать</translation>
+        <translation>Распознать</translation>
     </message>
     <message>
         <source>Translate</source>
-        <translation type="vanished">Перевести</translation>
+        <translation>Перевести</translation>
     </message>
     <message>
         <source>Segment</source>
-        <translation type="vanished">Сегментировать</translation>
+        <translation>Сегментировать</translation>
     </message>
     <message>
         <source>Clean</source>
-        <translation type="vanished">Очистить</translation>
+        <translation>Очистить</translation>
     </message>
     <message>
         <source>Render</source>
-        <translation type="vanished">Отрисовка</translation>
+        <translation>Отрисовка</translation>
     </message>
     <message>
         <source>Manual</source>
-        <translation type="vanished">Вручную</translation>
+        <translation>Вручную</translation>
     </message>
     <message>
         <source>Automatic</source>
-        <translation type="vanished">Автоматически</translation>
+        <translation>Автоматически</translation>
     </message>
     <message>
         <source>Semi-Auto</source>
-        <translation type="vanished">Полуавто</translation>
+        <translation>Полуавто</translation>
     </message>
     <message>
         <source>Toggle Webtoon Mode. For comics that are read in long vertical strips</source>
-        <translation type="vanished">Переключить режим вебтуна. Для комиксов, которые читаются длинными вертикальными полосами</translation>
+        <translation>Переключить режим вебтуна. Для комиксов, которые читаются длинными вертикальными полосами</translation>
     </message>
     <message>
         <source>Translate All</source>
-        <translation type="vanished">Перевести всё</translation>
+        <translation>Перевести всё</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <source>Report</source>
-        <translation type="vanished">Отчёт</translation>
+        <translation>Отчёт</translation>
     </message>
     <message>
         <source>Click or drag files here</source>
-        <translation type="vanished">Нажмите или перетащите файлы сюда</translation>
+        <translation>Нажмите или перетащите файлы сюда</translation>
     </message>
     <message>
         <source>Import Images, PDFs, Epubs or Comic Book Archive Files(cbr, cbz, etc)</source>
-        <translation type="vanished">Имортировать изображения, PDF, Epubs или архивы комиксов (cbr, cbz и т. д.)</translation>
+        <translation>Имортировать изображения, PDF, Epubs или архивы комиксов (cbr, cbz и т. д.)</translation>
     </message>
     <message>
         <source>Source Language</source>
-        <translation type="vanished">Исходный язык</translation>
+        <translation>Исходный язык</translation>
     </message>
     <message>
         <source>Target Language</source>
-        <translation type="vanished">Целевой язык</translation>
+        <translation>Целевой язык</translation>
     </message>
     <message>
         <source>Font</source>
-        <translation type="vanished">Шрифт</translation>
+        <translation>Шрифт</translation>
     </message>
     <message>
         <source>Font Size</source>
-        <translation type="vanished">Размер шрифта</translation>
+        <translation>Размер шрифта</translation>
     </message>
     <message>
         <source>Line Spacing</source>
-        <translation type="vanished">Межстрочный интервал</translation>
+        <translation>Межстрочный интервал</translation>
     </message>
     <message>
         <source>Font Color</source>
-        <translation type="vanished">Цвет шрифта</translation>
+        <translation>Цвет шрифта</translation>
     </message>
     <message>
         <source>Bold</source>
-        <translation type="vanished">Жирный</translation>
+        <translation>Жирный</translation>
     </message>
     <message>
         <source>Italic</source>
-        <translation type="vanished">Курсив</translation>
+        <translation>Курсив</translation>
     </message>
     <message>
         <source>Underline</source>
-        <translation type="vanished">Подчеркнутый</translation>
+        <translation>Подчеркнутый</translation>
     </message>
     <message>
         <source>Outline</source>
-        <translation type="vanished">Контур</translation>
+        <translation>Контур</translation>
     </message>
     <message>
         <source>Outline Color</source>
-        <translation type="vanished">Цвет контура</translation>
+        <translation>Цвет контура</translation>
     </message>
     <message>
         <source>Outline Width</source>
-        <translation type="vanished">Ширина контура</translation>
+        <translation>Ширина контура</translation>
     </message>
     <message>
         <source>Pan Image</source>
-        <translation type="vanished">Переместить изображение</translation>
+        <translation>Переместить изображение</translation>
     </message>
     <message>
         <source>Set for all</source>
-        <translation type="vanished">Установить для всех</translation>
+        <translation>Установить для всех</translation>
     </message>
     <message>
         <source>Sets the Source and Target Language on the current page for all pages</source>
-        <translation type="vanished">Устанавливает исходный и целевой язык на текущей странице для всех страниц</translation>
+        <translation>Устанавливает исходный и целевой язык на текущей странице для всех страниц</translation>
     </message>
     <message>
         <source>Draw or Select Text Boxes</source>
-        <translation type="vanished">Нарисовать или выбрать текстовые блоки</translation>
+        <translation>Нарисовать или выбрать текстовые блоки</translation>
     </message>
     <message>
         <source>Delete Selected Box</source>
-        <translation type="vanished">Удалить выбранный блок</translation>
+        <translation>Удалить выбранный блок</translation>
     </message>
     <message>
         <source>Remove all the Boxes on the Image</source>
-        <translation type="vanished">Удалить все блоки на изображении</translation>
+        <translation>Удалить все блоки на изображении</translation>
     </message>
     <message>
         <source>Draws all the Text Blocks in the existing Text Block List
 back on the Image (for further editing)</source>
-        <translation type="vanished">Снова рисует все текстовые блоки из существующего списка текстовых блоков
+        <translation>Снова рисует все текстовые блоки из существующего списка текстовых блоков
 на изображении (для дальнейшего редактирования)</translation>
     </message>
     <message>
         <source>Reduce the size of all blocks</source>
-        <translation type="vanished">Уменьшить размер всех блоков</translation>
+        <translation>Уменьшить размер всех блоков</translation>
     </message>
     <message>
         <source>Increase the size of all blocks</source>
-        <translation type="vanished">Увеличить размер всех блоков</translation>
+        <translation>Увеличить размер всех блоков</translation>
     </message>
     <message>
         <source>Draw Brush Strokes for Cleaning Image</source>
-        <translation type="vanished">Рисовать мазки кистью для очистки изображения</translation>
+        <translation>Рисовать мазки кистью для очистки изображения</translation>
     </message>
     <message>
         <source>Erase Brush Strokes</source>
-        <translation type="vanished">Стереть мазки кистью</translation>
+        <translation>Стереть мазки кистью</translation>
     </message>
     <message>
         <source>Remove all the brush strokes on the Image</source>
-        <translation type="vanished">Удалить все мазки кистью на изображении</translation>
+        <translation>Удалить все мазки кистью на изображении</translation>
     </message>
     <message>
         <source>Brush/Eraser Size Slider</source>
-        <translation type="vanished">Ползунок размера кисти/ластика</translation>
+        <translation>Ползунок размера кисти/ластика</translation>
     </message>
     <message>
         <source>Box Drawing</source>
-        <translation type="vanished">Рисование блоков</translation>
+        <translation>Рисование блоков</translation>
     </message>
     <message>
         <source>Inpainting</source>
-        <translation type="vanished">Восстановление изображения</translation>
+        <translation>Восстановление изображения</translation>
     </message>
     <message>
         <source>Retouch (experimental)</source>
-        <translation type="vanished">Ретушь (эксперимент)</translation>
+        <translation>Ретушь (эксперимент)</translation>
     </message>
     <message>
         <source>Pick a color from the image (click to sample)</source>
-        <translation type="vanished">Взять цвет с изображения (клик для взятия пробы)</translation>
+        <translation>Взять цвет с изображения (клик для взятия пробы)</translation>
     </message>
     <message>
         <source>Paint over imperfectly cleaned areas with the sampled color</source>
-        <translation type="vanished">Закрасьте неидеально очищенные области взятым цветом</translation>
+        <translation>Закрасьте неидеально очищенные области взятым цветом</translation>
     </message>
     <message>
         <source>Erase retouch paint strokes</source>
-        <translation type="vanished">Стереть мазки ретуши</translation>
+        <translation>Стереть мазки ретуши</translation>
     </message>
     <message>
         <source>Current retouch color (sampled with the eyedropper)</source>
-        <translation type="vanished">Текущий цвет ретуши (взят пипеткой)</translation>
+        <translation>Текущий цвет ретуши (взят пипеткой)</translation>
     </message>
     <message>
         <source>Retouch Brush Size</source>
-        <translation type="vanished">Размер кисти ретуши</translation>
+        <translation>Размер кисти ретуши</translation>
     </message>
 </context>
 <context>
     <name>_ProjectDetailsPopup</name>
     <message>
         <source>File name</source>
-        <translation type="vanished">Имя файла</translation>
+        <translation>Имя файла</translation>
     </message>
     <message>
         <source>Location</source>
-        <translation type="vanished">Расположение</translation>
+        <translation>Расположение</translation>
     </message>
     <message>
         <source>Browse</source>
-        <translation type="vanished">Обзор</translation>
+        <translation>Обзор</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation type="vanished">Применить</translation>
+        <translation>Применить</translation>
     </message>
     <message>
         <source>Apply to rename or move the current project file.</source>
-        <translation type="vanished">Применить, чтобы переименовать или переместить текущий файл проекта.</translation>
+        <translation>Применить, чтобы переименовать или переместить текущий файл проекта.</translation>
     </message>
     <message>
         <source>Apply to save the current project file with a new name or location.</source>
-        <translation type="vanished">Применить, чтобы сохранить текущий файл проекта с новым именем или в новом месте.</translation>
+        <translation>Применить, чтобы сохранить текущий файл проекта с новым именем или в новом месте.</translation>
     </message>
     <message>
         <source>Choose Project Folder</source>
-        <translation type="vanished">Выбрать папку проекта</translation>
+        <translation>Выбрать папку проекта</translation>
     </message>
     <message>
         <source>Project File</source>
-        <translation type="vanished">Файл проекта</translation>
+        <translation>Файл проекта</translation>
     </message>
     <message>
         <source>Enter a file name.</source>
-        <translation type="vanished">Введите имя файла.</translation>
+        <translation>Введите имя файла.</translation>
     </message>
     <message>
         <source>Choose a folder location.</source>
-        <translation type="vanished">Выберите расположение папки.</translation>
+        <translation>Выберите расположение папки.</translation>
     </message>
 </context>
 <context>
     <name>_RecentRow</name>
     <message>
         <source>Open</source>
-        <translation type="vanished">Открыть</translation>
+        <translation>Открыть</translation>
     </message>
     <message>
         <source>Open File Location</source>
-        <translation type="vanished">Открыть местоположение файла</translation>
+        <translation>Открыть местоположение файла</translation>
     </message>
     <message>
         <source>Copy Path</source>
-        <translation type="vanished">Копировать путь</translation>
+        <translation>Копировать путь</translation>
     </message>
     <message>
         <source>Unpin</source>
-        <translation type="vanished">Открепить</translation>
+        <translation>Открепить</translation>
     </message>
     <message>
         <source>Pin to list</source>
-        <translation type="vanished">Закрепить в списке</translation>
+        <translation>Закрепить в списке</translation>
     </message>
     <message>
         <source>Remove from Recent</source>
-        <translation type="vanished">Удалить из последних</translation>
+        <translation>Удалить из последних</translation>
     </message>
     <message>
         <source>Delete File</source>
-        <translation type="vanished">Удалить файл</translation>
+        <translation>Удалить файл</translation>
     </message>
     <message>
         <source>File Not Found</source>
-        <translation type="vanished">Файл не найден</translation>
+        <translation>Файл не найден</translation>
     </message>
     <message>
         <source>The selected project file could not be found.
 It may have already been moved, renamed, or deleted.
 
 {path}</source>
-        <translation type="vanished">Не удалось найти выбранный файл проекта.
+        <translation>Не удалось найти выбранный файл проекта.
 Возможно, он уже был перемещён, переименован или удалён.
 
 {path}</translation>
     </message>
     <message>
         <source>Are you sure you want to permanently delete this project file?</source>
-        <translation type="vanished">Вы действительно хотите безвозвратно удалить этот файл проекта?</translation>
+        <translation>Вы действительно хотите безвозвратно удалить этот файл проекта?</translation>
     </message>
     <message>
         <source>Delete</source>
-        <translation type="vanished">Удалить</translation>
+        <translation>Удалить</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="vanished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <source>Delete Failed</source>
-        <translation type="vanished">Не удалось удалить</translation>
+        <translation>Не удалось удалить</translation>
     </message>
     <message>
         <source>Could not delete the selected project file.
 
 {error}</source>
-        <translation type="vanished">Не удалось удалить выбранный файл проекта.
+        <translation>Не удалось удалить выбранный файл проекта.
 
 {error}</translation>
     </message>
@@ -1817,223 +1821,223 @@ It may have already been moved, renamed, or deleted.
     <name>self.main</name>
     <message>
         <source>The AI provider flagged this content</source>
-        <translation type="vanished">Провайдер ИИ пометил этот контент</translation>
+        <translation>Провайдер ИИ пометил этот контент</translation>
     </message>
     <message>
         <source>Insufficient credits</source>
-        <translation type="vanished">Недостаточно кредитов</translation>
+        <translation>Недостаточно кредитов</translation>
     </message>
     <message>
         <source>Request timed out</source>
-        <translation type="vanished">Время ожидания запроса истекло</translation>
+        <translation>Время ожидания запроса истекло</translation>
     </message>
     <message>
         <source>Rate limited by provider</source>
-        <translation type="vanished">Ограничение частоты запросов провайдером</translation>
+        <translation>Ограничение частоты запросов провайдером</translation>
     </message>
     <message>
         <source>Authentication failed</source>
-        <translation type="vanished">Ошибка аутентификации</translation>
+        <translation>Ошибка аутентификации</translation>
     </message>
     <message>
         <source>Network or connection error</source>
-        <translation type="vanished">Ошибка сети или подключения</translation>
+        <translation>Ошибка сети или подключения</translation>
     </message>
     <message>
         <source>Provider unavailable</source>
-        <translation type="vanished">Провайдер недоступен</translation>
+        <translation>Провайдер недоступен</translation>
     </message>
     <message>
         <source>Invalid translation response</source>
-        <translation type="vanished">Недопустимый ответ перевода</translation>
+        <translation>Недопустимый ответ перевода</translation>
     </message>
     <message>
         <source>Unexpected tool error</source>
-        <translation type="vanished">Непредвиденная ошибка инструмента</translation>
+        <translation>Непредвиденная ошибка инструмента</translation>
     </message>
     <message>
         <source>Try another text recognition tool</source>
-        <translation type="vanished">Попробуйте другой инструмент распознавания текста</translation>
+        <translation>Попробуйте другой инструмент распознавания текста</translation>
     </message>
     <message>
         <source>Try another translator</source>
-        <translation type="vanished">Попробуйте другой переводчик</translation>
+        <translation>Попробуйте другой переводчик</translation>
     </message>
     <message>
         <source>Try another tool</source>
-        <translation type="vanished">Попробуйте другой инструмент</translation>
+        <translation>Попробуйте другой инструмент</translation>
     </message>
     <message>
         <source>Buy more credits</source>
-        <translation type="vanished">Купить больше кредитов</translation>
+        <translation>Купить больше кредитов</translation>
     </message>
     <message>
         <source>Try again</source>
-        <translation type="vanished">Повторить попытку</translation>
+        <translation>Повторить попытку</translation>
     </message>
     <message>
         <source>Wait and try again</source>
-        <translation type="vanished">Подождите и повторите попытку</translation>
+        <translation>Подождите и повторите попытку</translation>
     </message>
     <message>
         <source>Check API settings</source>
-        <translation type="vanished">Проверьте настройки API</translation>
+        <translation>Проверьте настройки API</translation>
     </message>
     <message>
         <source>Check your connection</source>
-        <translation type="vanished">Проверьте подключение</translation>
+        <translation>Проверьте подключение</translation>
     </message>
     <message>
         <source>Try again later</source>
-        <translation type="vanished">Повторите попытку позже</translation>
+        <translation>Повторите попытку позже</translation>
     </message>
     <message>
         <source>Image could not be opened</source>
-        <translation type="vanished">Не удалось открыть изображение</translation>
+        <translation>Не удалось открыть изображение</translation>
     </message>
     <message>
         <source>No text blocks detected</source>
-        <translation type="vanished">Текстовые блоки не обнаружены</translation>
+        <translation>Текстовые блоки не обнаружены</translation>
     </message>
     <message>
         <source>Text recognition failed</source>
-        <translation type="vanished">Ошибка распознавания текста</translation>
+        <translation>Ошибка распознавания текста</translation>
     </message>
     <message>
         <source>Translation failed</source>
-        <translation type="vanished">Ошибка перевода</translation>
+        <translation>Ошибка перевода</translation>
     </message>
     <message>
         <source>Webtoon text recognition chunk failed</source>
-        <translation type="vanished">Ошибка фрагмента распознавания текста вебтуна</translation>
+        <translation>Ошибка фрагмента распознавания текста вебтуна</translation>
     </message>
     <message>
         <source>Webtoon translation chunk failed</source>
-        <translation type="vanished">Ошибка фрагмента перевода вебтуна</translation>
+        <translation>Ошибка фрагмента перевода вебтуна</translation>
     </message>
     <message>
         <source>Page processing failed</source>
-        <translation type="vanished">Ошибка обработки страницы</translation>
+        <translation>Ошибка обработки страницы</translation>
     </message>
     <message>
         <source>This image is not in the current project.</source>
-        <translation type="vanished">Это изображение не входит в текущий проект.</translation>
+        <translation>Это изображение не входит в текущий проект.</translation>
     </message>
     <message>
         <source>No skipped images are available to retry.</source>
-        <translation type="vanished">Нет пропущенных изображений для повторной попытки.</translation>
+        <translation>Нет пропущенных изображений для повторной попытки.</translation>
     </message>
     <message>
         <source>Wait for the current batch to finish before retrying skipped images.</source>
-        <translation type="vanished">Дождитесь завершения текущего пакета, прежде чем повторно запускать пропущенные изображения.</translation>
+        <translation>Дождитесь завершения текущего пакета, прежде чем повторно запускать пропущенные изображения.</translation>
     </message>
     <message>
         <source>Cancelled</source>
-        <translation type="vanished">Отменено</translation>
+        <translation>Отменено</translation>
     </message>
     <message>
         <source>Completed</source>
-        <translation type="vanished">Завершено</translation>
+        <translation>Завершено</translation>
     </message>
     <message>
         <source>{0}  |  Updated {1}</source>
-        <translation type="vanished">{0}  |  Обновлено {1}</translation>
+        <translation>{0}  |  Обновлено {1}</translation>
     </message>
     <message>
         <source>Total</source>
-        <translation type="vanished">Всего</translation>
+        <translation>Всего</translation>
     </message>
     <message>
         <source>Skipped</source>
-        <translation type="vanished">Пропущено</translation>
+        <translation>Пропущено</translation>
     </message>
     <message>
         <source>Skipped Images ({0})</source>
-        <translation type="vanished">Пропущенные изображения ({0})</translation>
+        <translation>Пропущенные изображения ({0})</translation>
     </message>
     <message>
         <source>Retry Skipped Images</source>
-        <translation type="vanished">Повторить пропущенные изображения</translation>
+        <translation>Повторить пропущенные изображения</translation>
     </message>
     <message>
         <source>Double-click a row to open that page.</source>
-        <translation type="vanished">Дважды щёлкните по строке, чтобы открыть эту страницу.</translation>
+        <translation>Дважды щёлкните по строке, чтобы открыть эту страницу.</translation>
     </message>
     <message>
         <source>Image</source>
-        <translation type="vanished">Изображение</translation>
+        <translation>Изображение</translation>
     </message>
     <message>
         <source>Reason</source>
-        <translation type="vanished">Причина</translation>
+        <translation>Причина</translation>
     </message>
     <message>
         <source>No skipped images in this batch.</source>
-        <translation type="vanished">Нет пропущенных изображений в этом пакете.</translation>
+        <translation>Нет пропущенных изображений в этом пакете.</translation>
     </message>
     <message>
         <source>No batch report is available yet.</source>
-        <translation type="vanished">Отчёт о пакетной обработке ещё не доступен.</translation>
+        <translation>Отчёт о пакетной обработке ещё не доступен.</translation>
     </message>
     <message>
         <source>Batch Report</source>
-        <translation type="vanished">Отчёт о пакетной обработке</translation>
+        <translation>Отчёт о пакетной обработке</translation>
     </message>
     <message>
         <source>Project Recovery</source>
-        <translation type="vanished">Восстановление проекта</translation>
+        <translation>Восстановление проекта</translation>
     </message>
     <message>
         <source>An autosaved project from a previous session was found.</source>
-        <translation type="vanished">Обнаружен автоматически сохраненный проект из предыдущего сеанса.</translation>
+        <translation>Обнаружен автоматически сохраненный проект из предыдущего сеанса.</translation>
     </message>
     <message>
         <source>Last autosave: {saved_at}
 Do you want to restore it?</source>
-        <translation type="vanished">Последнее автосохранение: {saved_at}
+        <translation>Последнее автосохранение: {saved_at}
 Вы хотите восстановить его?</translation>
     </message>
     <message>
         <source>Restore</source>
-        <translation type="vanished">Восстановить</translation>
+        <translation>Восстановить</translation>
     </message>
     <message>
         <source>Discard</source>
-        <translation type="vanished">Отменить изменения</translation>
+        <translation>Отменить изменения</translation>
     </message>
     <message>
         <source>Export Folder</source>
-        <translation type="vanished">Папка экспорта</translation>
+        <translation>Папка экспорта</translation>
     </message>
     <message>
         <source>Choose a folder path, not an existing file.</source>
-        <translation type="vanished">Выберите путь к папке, а не существующий файл.</translation>
+        <translation>Выберите путь к папке, а не существующий файл.</translation>
     </message>
     <message>
         <source>Could not create the selected export folder.
 
 {error}</source>
-        <translation type="vanished">{error}</translation>
+        <translation>{error}</translation>
     </message>
     <message>
         <source>Project File</source>
-        <translation type="vanished">Файл проекта</translation>
+        <translation>Файл проекта</translation>
     </message>
     <message>
         <source>Choose an existing folder for the project file.</source>
-        <translation type="vanished">Выберите существующую папку для файла проекта.</translation>
+        <translation>Выберите существующую папку для файла проекта.</translation>
     </message>
     <message>
         <source>Could not create the selected project folder.
 
 {error}</source>
-        <translation type="vanished">Не удалось создать выбранную папку проекта.
+        <translation>Не удалось создать выбранную папку проекта.
 
 {error}</translation>
     </message>
     <message>
         <source>Overwrite Project File</source>
-        <translation type="vanished">Перезаписать файл проекта</translation>
+        <translation>Перезаписать файл проекта</translation>
     </message>
     <message>
         <source>A project file already exists at this location.
@@ -2041,7 +2045,7 @@ Do you want to restore it?</source>
 {path}
 
 Overwrite it?</source>
-        <translation type="vanished">В этом месте уже существует файл проекта.
+        <translation>В этом месте уже существует файл проекта.
 
 {path}
 
@@ -2049,7 +2053,7 @@ Overwrite it?</source>
     </message>
     <message>
         <source>Old Project File Kept</source>
-        <translation type="vanished">Старый файл проекта сохранён</translation>
+        <translation>Старый файл проекта сохранён</translation>
     </message>
     <message>
         <source>The project was saved to the new location, but the old file could not be removed.
@@ -2057,7 +2061,7 @@ Overwrite it?</source>
 {path}
 
 {error}</source>
-        <translation type="vanished">Проект был сохранён в новом месте, но старый файл не удалось удалить.
+        <translation>Проект был сохранён в новом месте, но старый файл не удалось удалить.
 
 {path}
 
@@ -2065,183 +2069,183 @@ Overwrite it?</source>
     </message>
     <message>
         <source>Project file updated.</source>
-        <translation type="vanished">Файл проекта обновлён.</translation>
+        <translation>Файл проекта обновлён.</translation>
     </message>
     <message>
         <source>Could not move the project file.
 
 {error}</source>
-        <translation type="vanished">Не удалось переместить файл проекта.
+        <translation>Не удалось переместить файл проекта.
 
 {error}</translation>
     </message>
     <message>
         <source>Project file renamed.</source>
-        <translation type="vanished">Файл проекта переименован.</translation>
+        <translation>Файл проекта переименован.</translation>
     </message>
     <message>
         <source>Project file moved.</source>
-        <translation type="vanished">Файл проекта перемещён.</translation>
+        <translation>Файл проекта перемещён.</translation>
     </message>
     <message>
         <source>Project Not Found</source>
-        <translation type="vanished">Проект не найден</translation>
+        <translation>Проект не найден</translation>
     </message>
     <message>
         <source>The selected project file could not be found.
 It may have been moved, renamed, or deleted.
 
 {path}</source>
-        <translation type="vanished">Не удалось найти выбранный файл проекта.
+        <translation>Не удалось найти выбранный файл проекта.
 Возможно, он был перемещен, переименован или удален.
 
 {путь}</translation>
     </message>
     <message>
         <source>Auto</source>
-        <translation type="vanished">Авто</translation>
+        <translation>Авто</translation>
     </message>
     <message>
         <source>English</source>
-        <translation type="vanished">Английский</translation>
+        <translation>Английский</translation>
     </message>
 </context>
 <context>
     <name>self.settings.ui</name>
     <message>
         <source>GPT-4.1-mini</source>
-        <translation type="vanished">GPT-4.1-mini</translation>
+        <translation>GPT-4.1-mini</translation>
     </message>
     <message>
         <source>Microsoft OCR</source>
-        <translation type="vanished">Microsoft OCR</translation>
+        <translation>Microsoft OCR</translation>
     </message>
     <message>
         <source>Google Cloud Vision</source>
-        <translation type="vanished">Google Cloud Vision</translation>
+        <translation>Google Cloud Vision</translation>
     </message>
     <message>
         <source>Gemini-2.5-Flash-Lite</source>
-        <translation type="vanished">Gemini-2.5-Flash-Lite</translation>
+        <translation>Gemini-2.5-Flash-Lite</translation>
     </message>
     <message>
         <source>Default</source>
-        <translation type="vanished">По умолчанию</translation>
+        <translation>По умолчанию</translation>
     </message>
     <message>
         <source>Custom</source>
-        <translation type="vanished">Пользовательский</translation>
+        <translation>Пользовательский</translation>
     </message>
     <message>
         <source>GPT-4.1</source>
-        <translation type="vanished">GPT-4.1</translation>
+        <translation>GPT-4.1</translation>
     </message>
     <message>
         <source>Claude-4.5-Haiku</source>
-        <translation type="vanished">Claude-4.5-Haiku</translation>
+        <translation>Claude-4.5-Haiku</translation>
     </message>
     <message>
         <source>Deepseek</source>
-        <translation type="vanished">Deepseek</translation>
+        <translation>Deepseek</translation>
     </message>
     <message>
         <source>Claude-4.6-Sonnet</source>
-        <translation type="vanished">Claude-4.6-Sonnet</translation>
+        <translation>Claude-4.6-Sonnet</translation>
     </message>
     <message>
         <source>Gemini-3.1-Flash-Lite</source>
-        <translation type="vanished">Gemini-3.1-Flash-Lite</translation>
+        <translation>Gemini-3.1-Flash-Lite</translation>
     </message>
     <message>
         <source>Gemini-2.5-Pro</source>
-        <translation type="vanished">Gemini-2.5-Pro</translation>
+        <translation>Gemini-2.5-Pro</translation>
     </message>
     <message>
         <source>Microsoft Translator</source>
-        <translation type="vanished">Microsoft Translator</translation>
+        <translation>Microsoft Translator</translation>
     </message>
     <message>
         <source>DeepL</source>
-        <translation type="vanished">DeepL</translation>
+        <translation>DeepL</translation>
     </message>
     <message>
         <source>Yandex</source>
-        <translation type="vanished">Яндекс</translation>
+        <translation>Яндекс</translation>
     </message>
 </context>
 <context>
     <name>self.settings_page.ui</name>
     <message>
         <source>Light</source>
-        <translation type="vanished">Светлая</translation>
+        <translation>Светлая</translation>
     </message>
 </context>
 <context>
     <name>self.ui</name>
     <message>
         <source>Resize</source>
-        <translation type="vanished">Изменить размер</translation>
+        <translation>Изменить размер</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="vanished">Обрезать</translation>
+        <translation>Обрезать</translation>
     </message>
 </context>
 <context>
     <name>settings.ui</name>
     <message>
         <source>Microsoft Azure</source>
-        <translation type="vanished">Microsoft Azure</translation>
+        <translation>Microsoft Azure</translation>
     </message>
     <message>
         <source>Google Cloud</source>
-        <translation type="vanished">Google Cloud</translation>
+        <translation>Google Cloud</translation>
     </message>
     <message>
         <source>Open AI GPT</source>
-        <translation type="vanished">Open AI GPT</translation>
+        <translation>Open AI GPT</translation>
     </message>
     <message>
         <source>Google Gemini</source>
-        <translation type="vanished">Google Gemini</translation>
+        <translation>Google Gemini</translation>
     </message>
     <message>
         <source>DeepL</source>
-        <translation type="vanished">DeepL</translation>
+        <translation>DeepL</translation>
     </message>
     <message>
         <source>Anthropic Claude</source>
-        <translation type="vanished">Anthropic Claude</translation>
+        <translation>Anthropic Claude</translation>
     </message>
     <message>
         <source>Deepseek</source>
-        <translation type="vanished">Deepseek</translation>
+        <translation>Deepseek</translation>
     </message>
     <message>
         <source>Yandex</source>
-        <translation type="vanished">Яндекс</translation>
+        <translation>Яндекс</translation>
     </message>
 </context>
 <context>
     <name>settings_page.ui</name>
     <message>
         <source>Resize</source>
-        <translation type="vanished">Изменить размер</translation>
+        <translation>Изменить размер</translation>
     </message>
     <message>
         <source>Crop</source>
-        <translation type="vanished">Обрезать</translation>
+        <translation>Обрезать</translation>
     </message>
 </context>
 <context>
     <name>view</name>
     <message>
         <source>OCR</source>
-        <translation type="vanished">Распознавание текста</translation>
+        <translation>Распознавание текста</translation>
     </message>
     <message>
         <source>Translate</source>
-        <translation type="vanished">Перевести</translation>
+        <translation>Перевести</translation>
     </message>
 </context>
 </TS>
