@@ -133,6 +133,9 @@ class SettingsPage(QtWidgets.QWidget):
             'image_input_enabled': self.ui.image_checkbox.isChecked(),
             'system_prompt': self.ui.system_prompt.toPlainText(),
             'save_system_prompt': self.ui.save_system_prompt_checkbox.isChecked(),
+            'reasoning_effort': self.ui.value_mappings.get(
+                self.ui.thinking_combo.currentText(), 'Auto'
+            ),
         }
 
     def get_export_settings(self):
@@ -433,6 +436,10 @@ class SettingsPage(QtWidgets.QWidget):
             self.ui.system_prompt.clear()
         self.ui.save_system_prompt_checkbox.setChecked(save_sp)
         self.ui.image_checkbox.setChecked(settings.value('image_input_enabled', False, type=bool))
+        reasoning_effort = settings.value('reasoning_effort', 'Auto')
+        if reasoning_effort:
+            translated_thinking = self.ui.reverse_mappings.get(reasoning_effort, reasoning_effort)
+            self.ui.thinking_combo.setCurrentText(translated_thinking)
         settings.endGroup()
 
         # Load export settings

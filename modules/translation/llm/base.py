@@ -40,6 +40,7 @@ class BaseLLMTranslation(LLMTranslation):
         self.target_lang = target_lang
         self.img_as_llm_input = llm_settings.get('image_input_enabled', True)
         self.custom_system_prompt = llm_settings.get('system_prompt', '')
+        self.reasoning_effort = llm_settings.get('reasoning_effort', 'Auto')
         self.temperature = 1.0
         self.top_p = 0.95
         self.max_tokens = 5000

@@ -128,6 +128,36 @@ class ToolsPage(QtWidgets.QWidget):
 
         layout.addWidget(translator_widget)
         layout.addSpacing(10)
+
+        # Thinking (reasoning) effort control -- only affects LLM-based
+        # translators that support it (GPT, Claude, Gemini, Custom/Ollama,
+        # DeepSeek). Traditional translators ignore it.
+        thinking_options = [
+            self.tr("Auto"),
+            self.tr("Off"),
+            self.tr("Low"),
+            self.tr("Medium"),
+            self.tr("High"),
+        ]
+        thinking_widget, self.thinking_combo = create_title_and_combo(
+            self.tr("Thinking or Reasoning (OpenAI-compatible only)*"),
+            thinking_options,
+            h4=True,
+        )
+        set_combo_box_width(self.thinking_combo, thinking_options)
+        self.thinking_combo.setCurrentIndex(0)  # Auto by default
+
+        thinking_hint = MLabel(
+            self.tr(
+                "* Only affects LLM translators that support it. "
+                "Does not apply to DeepL / Microsoft / Google."
+            )
+        )
+        thinking_hint.setWordWrap(True)
+        layout.addWidget(thinking_widget)
+        layout.addWidget(thinking_hint)
+        layout.addSpacing(10)
+
         layout.addWidget(detector_widget)
         layout.addSpacing(10)
         layout.addWidget(ocr_widget)

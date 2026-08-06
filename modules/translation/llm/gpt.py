@@ -89,6 +89,11 @@ class GPTTranslation(BaseLLMTranslation):
             "top_p": self.top_p,
         }
 
+        # Reasoning effort (OpenAI-compatible models only).
+        effort = getattr(self, 'reasoning_effort', 'Auto')
+        if effort and effort != 'Auto':
+            payload["reasoning_effort"] = effort.lower()
+
         return self._make_api_request(payload, headers)
     
     def _make_api_request(self, payload, headers):

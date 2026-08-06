@@ -50,18 +50,27 @@ class GeminiTranslation(BaseLLMTranslation):
         url = f"{self.api_base_url}/{self.model_api_name}:generateContent?key={self.api_key}"
         
         # Setup generation config
-        if self.model_name in ["Gemini-3.1-Flash-Lite"]:
-            thinking_level = "minimal"
+        effort = getattr(self, 'reasoning_effort', 'Auto')
+        if isinstance(effort, str) and effort not in ('Auto', ''):
+            thinking_budget = {'low': 1024, 'medium': 4096, 'high': 8192, 'off': 0}.get(effort.lower())
+            generation_config = {
+                "temperature": self.temperature,
+                "maxOutputTokens": self.max_tokens,
+                "thinkingConfig": {"thinkingBudget": thinking_budget},
+            }
         else:
-            thinking_level = "low"
-
-        generation_config = {
-            "temperature": self.temperature,
-            "maxOutputTokens": self.max_tokens,
-            "thinkingConfig": {
-                "thinkingLevel": thinking_level
-            },
-        }
+            # Auto: keep current hardcoded defaults
+            if self.model_name in ["Gemini-3.1-Flash-Lite"]:
+                thinking_level = "minimal"
+            else:
+                thinking_level = "low"
+            generation_config = {
+                "temperature": self.temperature,
+                "maxOutputTokens": self.max_tokens,
+                "thinkingConfig": {
+                    "thinkingLevel": thinking_level
+                },
+            }
         
         # Setup safety settings
         safety_settings = [

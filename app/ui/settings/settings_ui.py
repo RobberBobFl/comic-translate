@@ -140,6 +140,13 @@ class SettingsPageUI(QtWidgets.QWidget):
             # Detector mappings
             "RT-DETR-v2": "RT-DETR-v2",
 
+            # Thinking (reasoning) effort mappings
+            self.tr("Auto"): "Auto",
+            self.tr("Off"): "Off",
+            self.tr("Low"): "Low",
+            self.tr("Medium"): "Medium",
+            self.tr("High"): "High",
+
             # HD Strategy mappings
             self.tr("Resize"): "Resize",
             self.tr("Original"): "Original",
@@ -215,6 +222,7 @@ class SettingsPageUI(QtWidgets.QWidget):
         self.detector_combo = self.tools_page.detector_combo
         self.inpainter_combo = self.tools_page.inpainter_combo
         self.inpaint_strategy_combo = self.tools_page.inpaint_strategy_combo
+        self.thinking_combo = self.tools_page.thinking_combo
         self.resize_spinbox = self.tools_page.resize_spinbox
         self.crop_margin_spinbox = self.tools_page.crop_margin_spinbox
         self.crop_trigger_spinbox = self.tools_page.crop_trigger_spinbox

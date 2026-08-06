@@ -52,6 +52,16 @@ class ClaudeTranslation(BaseLLMTranslation):
             "temperature": self.temperature,
             "max_tokens": self.max_tokens
         }
+
+        # Thinking budget (Anthropic models with extended-thinking support)
+        effort = getattr(self, 'reasoning_effort', 'Auto')
+        if isinstance(effort, str):
+            e = effort.lower()
+            if e and e not in ('auto', 'off'):
+                budget_map = {'low': 1024, 'medium': 2048, 'high': 4096}
+                payload["thinking"] = {
+                    "budget_tokens": budget_map.get(e, 2048)
+                }
         
         # Add messages with text and optionally image
         if self.img_as_llm_input and image is not None:
