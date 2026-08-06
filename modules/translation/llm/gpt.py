@@ -90,9 +90,12 @@ class GPTTranslation(BaseLLMTranslation):
         }
 
         # Reasoning effort (OpenAI-compatible models only).
+        # "Off" maps to "none" (accepted by LM Studio / OpenRouter);
+        # "Auto" omits the param so the server/model decides.
         effort = getattr(self, 'reasoning_effort', 'Auto')
         if effort and effort != 'Auto':
-            payload["reasoning_effort"] = effort.lower()
+            effort_val = 'none' if effort.lower() == 'off' else effort.lower()
+            payload["reasoning_effort"] = effort_val
 
         return self._make_api_request(payload, headers)
     

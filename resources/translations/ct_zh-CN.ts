@@ -1405,6 +1405,30 @@ Open or create a project to get started.</source>
         <translation type="vanished">翻译器</translation>
     </message>
     <message>
+        <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
+        <translation>思考或推理 (仅限 OpenAI 兼容)*</translation>
+    </message>
+    <message>
+        <source>* Only affects LLM translators that support it. Does not apply to DeepL / Microsoft / Google.</source>
+        <translation>* 仅影响支持它的 LLM 翻译器。不适用于 DeepL / Microsoft / Google。</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>低</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>高</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
         <translation type="vanished">文本识别</translation>
     </message>

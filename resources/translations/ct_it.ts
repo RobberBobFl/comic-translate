@@ -1406,6 +1406,30 @@ Apri o crea un progetto per iniziare.</translation>
         <translation type="vanished">Traduttore</translation>
     </message>
     <message>
+        <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
+        <translation>Pensiero o Ragionamento (solo compatibile con OpenAI)*</translation>
+    </message>
+    <message>
+        <source>* Only affects LLM translators that support it. Does not apply to DeepL / Microsoft / Google.</source>
+        <translation>* Influisce solo sui traduttori LLM che lo supportano. Non si applica a DeepL / Microsoft / Google.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Disattivato</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>Basso</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>Medio</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>Alto</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
         <translation type="vanished">Riconoscimento testo</translation>
     </message>

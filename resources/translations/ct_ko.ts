@@ -1406,6 +1406,30 @@ Open or create a project to get started.</source>
         <translation type="vanished">번역기</translation>
     </message>
     <message>
+        <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
+        <translation>사고 또는 추론 (OpenAI 호환만)*</translation>
+    </message>
+    <message>
+        <source>* Only affects LLM translators that support it. Does not apply to DeepL / Microsoft / Google.</source>
+        <translation>* 지원하는 LLM 번역기에만 영향을 줍니다. DeepL / Microsoft / Google에는 적용되지 않습니다.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>끄기</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>낮음</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>중간</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>높음</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
         <translation type="vanished">텍스트 인식</translation>
     </message>

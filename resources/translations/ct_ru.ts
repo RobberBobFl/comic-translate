@@ -1406,6 +1406,30 @@ Open or create a project to get started.</source>
         <translation type="vanished">Переводчик</translation>
     </message>
     <message>
+        <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
+        <translation>Уровень рассуждений (только для OpenAI-совместимых)*</translation>
+    </message>
+    <message>
+        <source>* Only affects LLM translators that support it. Does not apply to DeepL / Microsoft / Google.</source>
+        <translation>* Влияет только на LLM-переводчики, поддерживающие эту функцию. Не применяется к DeepL / Microsoft / Google.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Выкл</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>Низкий</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>Средний</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>Высокий</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
         <translation type="vanished">Распознавание текста</translation>
     </message>

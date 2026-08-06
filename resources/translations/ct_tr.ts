@@ -1406,6 +1406,30 @@ Başlamak için bir proje açın veya oluşturun.</translation>
         <translation type="vanished">Çevirmen</translation>
     </message>
     <message>
+        <source>Thinking or Reasoning (OpenAI-compatible only)*</source>
+        <translation>Düşünme veya Reasoning (yalnızca OpenAI uyumlu)*</translation>
+    </message>
+    <message>
+        <source>* Only affects LLM translators that support it. Does not apply to DeepL / Microsoft / Google.</source>
+        <translation>* Yalnızca bunu destekleyen LLM çevirmenleri etkiler. DeepL / Microsoft / Google için geçerli değildir.</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Kapalı</translation>
+    </message>
+    <message>
+        <source>Low</source>
+        <translation>Düşük</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>Orta</translation>
+    </message>
+    <message>
+        <source>High</source>
+        <translation>Yüksek</translation>
+    </message>
+    <message>
         <source>Text Recognition</source>
         <translation type="vanished">Metin Tanıma</translation>
     </message>
