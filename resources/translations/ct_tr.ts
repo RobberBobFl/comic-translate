@@ -2108,6 +2108,10 @@ Taşınmış, yeniden adlandırılmış veya silinmiş olabilir.
         <source>English</source>
         <translation>İngilizce</translation>
     </message>
+    <message>
+        <source>The LLM returned an invalid or corrupted response that could not be parsed. Try a more capable model or retry the translation.</source>
+        <translation>LLM, ayrıştırılamayan geçersiz veya bozuk bir yanıt döndürdü. Daha yetenekli bir model deneyin veya çeviriyi yeniden deneyin.</translation>
+    </message>
 </context>
 <context>
     <name>self.settings.ui</name>

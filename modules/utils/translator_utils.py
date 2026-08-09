@@ -42,26 +42,92 @@ def get_raw_translation(blk_list: list[TextBlock]):
     
     return raw_translations_json
 
+def _strip_code_fences(text: str) -> str:
+    """Remove markdown code fences (``` or ```json) if present."""
+    stripped = text.strip()
+    # Match an optional language tag after the opening fence.
+    fence = re.match(r"^```[a-zA-Z]*\s*\n(.*)\n```\s*$", stripped, re.DOTALL)
+    if fence:
+        return fence.group(1).strip()
+    # Fallback: just drop any ``` tokens.
+    return re.sub(r"```", "", stripped).strip()
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Extract the outermost balanced JSON object from arbitrary text.
+
+    Uses brace counting that respects string literals and basic escapes,
+    so it won't be fooled by braces inside strings. Returns None if no
+    complete object is found.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def _try_parse(json_text: str) -> dict | None:
+    """Parse JSON, falling back to trailing-comma / comment tolerant cleanup."""
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError:
+        pass
+    # Tolerant pass: drop // line comments and trailing commas before } or ].
+    cleaned = re.sub(r"//[^\n]*", "", json_text)
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+
+
 def set_texts_from_json(blk_list: list[TextBlock], json_string: str) -> bool:
     if not json_string:
         print("Warning: Empty translation response from LLM.")
         return False
-    match = re.search(r"\{[\s\S]*\}", json_string)
-    if match:
-        # Extract the JSON string from the matched regular expression
-        json_string = match.group(0)
-        translation_dict = json.loads(json_string)
-        
-        for idx, blk in enumerate(blk_list):
-            block_key = f"block_{idx}"
-            if block_key in translation_dict:
-                blk.translation = translation_dict[block_key]
-            else:
-                print(f"Warning: {block_key} not found in JSON string.")
-        return True
-    else:
-        print("No JSON found in the input string.")
+
+    cleaned = _strip_code_fences(json_string)
+    candidate = _extract_json_object(cleaned)
+    if candidate is None:
+        print("No JSON object found in the input string.")
+        print(f"Raw LLM response (first 500 chars):\n{json_string[:500]}")
         return False
+
+    translation_dict = _try_parse(candidate)
+    if translation_dict is None:
+        print("Failed to parse JSON from LLM response.")
+        print(f"Extracted JSON candidate (first 500 chars):\n{candidate[:500]}")
+        return False
+
+    for idx, blk in enumerate(blk_list):
+        block_key = f"block_{idx}"
+        if block_key in translation_dict:
+            blk.translation = translation_dict[block_key]
+        else:
+            print(f"Warning: {block_key} not found in JSON string.")
+    return True
 
 def set_upper_case(blk_list: list[TextBlock], upper_case: bool):
     for blk in blk_list:

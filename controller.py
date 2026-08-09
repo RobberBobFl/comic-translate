@@ -34,6 +34,7 @@ from app.controllers.task_runner import TaskRunnerController
 from app.controllers.batch_report import BatchReportController
 from app.controllers.manual_workflow import ManualWorkflowController
 from modules.utils.exceptions import InsufficientCreditsException, ContentFlaggedException
+from modules.translation.exceptions import LLMInvalidResponseError
 
 
 # Ensure any pre-declared mandatory models
@@ -540,6 +541,21 @@ class ComicTranslate(ComicTranslateUI):
             reason = err_msg.split(": ")[-1] if ": " in err_msg else err_msg
             context = getattr(value, 'context', 'Operation')
             Messages.show_content_flagged_error(self, details=reason, context=context)
+        
+        elif exctype is LLMInvalidResponseError:
+            Messages.show_error_with_copy(
+                self,
+                QCoreApplication.translate("self.main", "Translation failed"),
+                QCoreApplication.translate(
+                    "self.main",
+                    "The LLM returned an invalid or corrupted response that could not be parsed. "
+                    "Try a more capable model or retry the translation.",
+                ),
+                None,
+            )
+            self.loading.setVisible(False)
+            self.enable_hbutton_group()
+            return
         
         # Handle HTTP Errors (Server-side)
         elif issubclass(exctype, requests.exceptions.HTTPError):

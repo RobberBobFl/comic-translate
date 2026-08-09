@@ -128,5 +128,6 @@ class LLMTranslation(TranslationEngine):
         To aid you and provide context, You may be given the image of the page and/or extra context about the comic. You will be given a json string of the detected text blocks and the text to translate. Return the json string with the texts translated. DO NOT translate the keys of the json. For each block:
         - If it's already in {target_lang} or looks like gibberish, OUTPUT IT AS IT IS instead
         - DO NOT give explanations
+        CRITICAL FORMATTING RULES: Return ONLY a single valid JSON object and nothing else. Do NOT wrap it in markdown code fences. Do NOT include comments. Do NOT add trailing commas. Every key and string value must be enclosed in double quotes.
         Do Your Best! I'm really counting on you."""
     

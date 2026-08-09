@@ -2108,6 +2108,10 @@ Il a peut-être été déplacé, renommé ou supprimé.
         <source>English</source>
         <translation>Anglais</translation>
     </message>
+    <message>
+        <source>The LLM returned an invalid or corrupted response that could not be parsed. Try a more capable model or retry the translation.</source>
+        <translation>Le LLM a renvoyé une réponse invalide ou corrompue qui n'a pas pu être analysée. Essayez un modèle plus performant ou relancez la traduction.</translation>
+    </message>
 </context>
 <context>
     <name>self.settings.ui</name>

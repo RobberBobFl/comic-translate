@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 from modules.translation.processor import Translator
+from modules.translation.exceptions import LLMInvalidResponseError
 from modules.utils.translator_utils import set_upper_case
 from modules.utils.language_utils import to_canonical_language_name
 from pipeline.webtoon_utils import filter_and_convert_visible_blocks, restore_original_block_coordinates
@@ -78,7 +79,9 @@ class TranslationHandler:
                     
                     # If we reach here, need to process the block
                     single_block_list = [blk]
-                    translator.translate(single_block_list, image, extra_context)
+                    _, success = translator.translate(single_block_list, image, extra_context)
+                    if not success:
+                        raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     
                     # Update the cache with this new result using the cache manager's method
                     self.cache_manager.update_translation_cache_for_block(translation_cache_key, blk)
@@ -96,7 +99,9 @@ class TranslationHandler:
                         all_blocks_copy.append(copy_blk)
                     
                     if all_blocks_copy:  
-                        translator.translate(all_blocks_copy, image, extra_context)
+                        _, success = translator.translate(all_blocks_copy, image, extra_context)
+                        if not success:
+                            raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                         # Cache using the original blocks to maintain consistent IDs
                         self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list, all_blocks_copy)
                         cached_translation = self.cache_manager._get_cached_translation_for_block(translation_cache_key, blk)
@@ -112,7 +117,9 @@ class TranslationHandler:
                     logger.info(f"Using cached translation results for all {len(self.main_page.blk_list)} blocks")
                 else:
                     # Need to run translation and cache results
-                    translator.translate(self.main_page.blk_list, image, extra_context)
+                    _, success = translator.translate(self.main_page.blk_list, image, extra_context)
+                    if not success:
+                        raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list)
                     logger.info("Translation completed and cached for %d blocks", len(self.main_page.blk_list))
                 
@@ -154,7 +161,9 @@ class TranslationHandler:
         upper_case = settings_page.ui.uppercase_checkbox.isChecked()
         
         translator = Translator(self.main_page, source_lang, target_lang)
-        translator.translate(visible_blocks, visible_image, extra_context)
+        _, success = translator.translate(visible_blocks, visible_image, extra_context)
+        if not success:
+            raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
         
         # Translation is set, now restore original coordinates
         restore_original_block_coordinates(visible_blocks)

@@ -2109,6 +2109,10 @@ It may have been moved, renamed, or deleted.
         <source>English</source>
         <translation>英語</translation>
     </message>
+    <message>
+        <source>The LLM returned an invalid or corrupted response that could not be parsed. Try a more capable model or retry the translation.</source>
+        <translation>LLMが解析できない無効または破損した応答を返しました。より高性能なモデルを試すか、翻訳を再試行してください。</translation>
+    </message>
 </context>
 <context>
     <name>self.settings.ui</name>
