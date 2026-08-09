@@ -1,10 +1,13 @@
 from typing import Any
+import logging
 import numpy as np
 import requests
 import json
 
 from .base import BaseLLMTranslation
 from ...utils.translator_utils import MODEL_MAP
+
+logger = logging.getLogger(__name__)
 
 
 class GPTTranslation(BaseLLMTranslation):
@@ -113,8 +116,26 @@ class GPTTranslation(BaseLLMTranslation):
             
             response.raise_for_status()
             response_data = response.json()
-            
-            return response_data["choices"][0]["message"]["content"]
+
+            choice = response_data["choices"][0]
+            message = choice.get("message", {})
+            content = message.get("content")
+            if not content:
+                # Reasoning models may put the answer elsewhere / leave content empty.
+                content = message.get("reasoning_content") or ""
+                if message.get("reasoning_content"):
+                    logger.warning(
+                        "LLM returned empty 'content'; fell back to 'reasoning_content'."
+                    )
+
+            finish_reason = choice.get("finish_reason")
+            if finish_reason == "length":
+                logger.warning(
+                    "LLM response was truncated (finish_reason='length'). "
+                    "Consider raising max_completion_tokens."
+                )
+
+            return content
         except requests.exceptions.RequestException as e:
             error_msg = f"API request failed: {str(e)}"
             if hasattr(e, 'response') and e.response is not None:

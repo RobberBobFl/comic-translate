@@ -98,7 +98,19 @@ class ClaudeTranslation(BaseLLMTranslation):
         # Handle response
         if response.status_code == 200:
             response_data = response.json()
-            return response_data['content'][0]['text']
+            content = response_data.get('content')
+            # With extended thinking, 'content' is a list where thinking blocks
+            # precede the actual answer text block(s); pick the text blocks.
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                texts = [
+                    item.get('text', '')
+                    for item in content
+                    if isinstance(item, dict) and item.get('type') == 'text'
+                ]
+                return "\n".join(t for t in texts if t) if texts else ""
+            return ""
         else:
             error_msg = f"Error {response.status_code}: {response.text}"
             raise Exception(f"Claude API request failed: {error_msg}")

@@ -43,7 +43,7 @@ class BaseLLMTranslation(LLMTranslation):
         self.reasoning_effort = llm_settings.get('reasoning_effort', 'Auto')
         self.temperature = 1.0
         self.top_p = 0.95
-        self.max_tokens = 5000
+        self.max_tokens = 16000
         
     def translate(self, blk_list: list[TextBlock], image: np.ndarray, extra_context: str) -> list[TextBlock]:
         """

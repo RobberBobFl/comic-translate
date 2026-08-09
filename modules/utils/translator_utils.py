@@ -53,48 +53,34 @@ def _strip_code_fences(text: str) -> str:
     return re.sub(r"```", "", stripped).strip()
 
 
-def _extract_json_object(text: str) -> str | None:
-    """Extract the outermost balanced JSON object from arbitrary text.
+def _extract_json_value(text: str):
+    """Parse the first JSON value (object or array) from arbitrary text.
 
-    Uses brace counting that respects string literals and basic escapes,
-    so it won't be fooled by braces inside strings. Returns None if no
-    complete object is found.
+    Uses a real JSON decoder (raw_decode) so braces/quotes inside string
+    values are handled correctly. Returns the parsed value, or None if no
+    complete JSON value is found (e.g. the response was truncated).
     """
-    start = text.find("{")
-    if start == -1:
+    text = text.strip()
+    decoder = json.JSONDecoder()
+    i = 0
+    n = len(text)
+    while i < n and text[i] in " \t\r\n":
+        i += 1
+    if i >= n:
+        return None
+    try:
+        value, _ = decoder.raw_decode(text[i:])
+        return value
+    except json.JSONDecodeError:
         return None
 
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if in_string:
-            if escape:
-                escape = False
-            elif ch == "\\":
-                escape = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i + 1]
-    return None
 
-
-def _try_parse(json_text: str) -> dict | None:
-    """Parse JSON, falling back to trailing-comma / comment tolerant cleanup."""
+def _parse_lenient(json_text: str):
+    """Fallback tolerant parse: accept trailing commas / // line comments."""
     try:
         return json.loads(json_text)
     except json.JSONDecodeError:
         pass
-    # Tolerant pass: drop // line comments and trailing commas before } or ].
     cleaned = re.sub(r"//[^\n]*", "", json_text)
     cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
     try:
@@ -109,16 +95,23 @@ def set_texts_from_json(blk_list: list[TextBlock], json_string: str) -> bool:
         return False
 
     cleaned = _strip_code_fences(json_string)
-    candidate = _extract_json_object(cleaned)
-    if candidate is None:
-        print("No JSON object found in the input string.")
-        print(f"Raw LLM response (first 500 chars):\n{json_string[:500]}")
+    value = _extract_json_value(cleaned)
+    if value is None:
+        # Tolerant fallback for models that emit trailing commas / comments.
+        value = _parse_lenient(cleaned)
+
+    if value is None:
+        print("Failed to parse JSON from LLM response.")
+        print(f"Raw LLM response (first 2000 chars):\n{json_string[:2000]}")
         return False
 
-    translation_dict = _try_parse(candidate)
-    if translation_dict is None:
-        print("Failed to parse JSON from LLM response.")
-        print(f"Extracted JSON candidate (first 500 chars):\n{candidate[:500]}")
+    if isinstance(value, list):
+        # Model returned a JSON array; map by index to block_N keys.
+        translation_dict = {f"block_{i}": v for i, v in enumerate(value)}
+    elif isinstance(value, dict):
+        translation_dict = value
+    else:
+        print("LLM response JSON is neither an object nor an array.")
         return False
 
     for idx, blk in enumerate(blk_list):
