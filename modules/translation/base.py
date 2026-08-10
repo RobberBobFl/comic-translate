@@ -97,7 +97,14 @@ class LLMTranslation(TranslationEngine):
     """Base class for LLM-based translation engines."""
     
     @abstractmethod
-    def translate(self, blk_list: list[TextBlock], image: np.ndarray, extra_context: str) -> tuple[list[TextBlock], bool]:
+    def translate(
+        self,
+        blk_list: list[TextBlock],
+        image: np.ndarray,
+        extra_context: str,
+        context_blocks: list = None,
+        batch_size: int = None,
+    ) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using LLM.
         
@@ -105,6 +112,9 @@ class LLMTranslation(TranslationEngine):
             blk_list: List of TextBlock objects containing text to translate
             image: Image as numpy array (for context)
             extra_context: Additional context information for translation
+            context_blocks: Previously translated source/translation pairs used
+                as a sliding context window (batch/semi-auto modes)
+            batch_size: Blocks per request; falsy means one request per page
             
         Returns:
             Tuple of (List of updated TextBlock objects with translations, success flag)

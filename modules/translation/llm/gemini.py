@@ -84,7 +84,7 @@ class GeminiTranslation(BaseLLMTranslation):
         parts = []
         
         # Add image if needed
-        if self.img_as_llm_input:
+        if self.img_as_llm_input and image is not None:
             # Base64 encode the image
 
             img_b64, mime_type = self.encode_image(image)

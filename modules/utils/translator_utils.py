@@ -32,6 +32,20 @@ def get_raw_text(blk_list: list[TextBlock]):
     
     return raw_texts_json
 
+def get_context_entries(blk_list: list[TextBlock]) -> list[dict]:
+    """Source/translation pairs of already translated blocks.
+
+    Feeds the sliding context window that LLM translators send along with each
+    batch so names, pronouns and tone stay consistent across batches and pages.
+    """
+    entries = []
+    for blk in blk_list:
+        source = str(blk.text or '').strip()
+        translation = str(blk.translation or '').strip()
+        if source and translation:
+            entries.append({'source': source, 'translation': translation})
+    return entries
+
 def get_raw_translation(blk_list: list[TextBlock]):
     rw_translations_dict = {}
     for idx, blk in enumerate(blk_list):

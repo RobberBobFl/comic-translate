@@ -19,7 +19,7 @@ from modules.utils.textblock import sort_blk_list
 from modules.utils.pipeline_config import get_config
 from modules.utils.image_utils import generate_mask, get_smart_text_color
 from modules.utils.language_utils import get_language_code, is_no_space_lang
-from modules.utils.translator_utils import get_raw_translation, get_raw_text, format_translations, is_renderable_translation
+from modules.utils.translator_utils import get_context_entries, get_raw_translation, get_raw_text, format_translations, is_renderable_translation
 from modules.rendering.render import get_best_render_area, pyside_word_wrap, is_vertical_block
 from modules.utils.device import resolve_device
 from modules.utils.exceptions import InsufficientCreditsException
@@ -95,6 +95,12 @@ class BatchProcessor:
         except Exception:
             logger.debug("Batch pre-materialization failed; continuing lazily.", exc_info=True)
 
+        # Sliding context window: the last translated lines are carried over to
+        # the next page so names, pronouns and tone stay consistent through the
+        # chapter. Lives for one run only, and is dropped at a source boundary.
+        sliding_buffer: list[dict] = []
+        buffer_source = None
+
         for index, image_path in enumerate(image_list):
             if self._is_cancelled():
                 return
@@ -123,6 +129,13 @@ class BatchProcessor:
                     if img_pth == image_path:
                         directory = os.path.dirname(archive_path)
                         archive_bname = os.path.splitext(os.path.basename(archive_path))[0].strip()
+
+            # A new archive/folder or a different language pair is a different
+            # story: carrying context across would poison the translation.
+            page_source = (archive_bname or directory, source_lang, target_lang)
+            if page_source != buffer_source:
+                sliding_buffer.clear()
+                buffer_source = page_source
 
             ensure_path_materialized(image_path)
             image = imk.read_image(image_path)
@@ -212,20 +225,37 @@ class BatchProcessor:
             translator_key = settings_page.get_tool_selection('translator')
             translator = Translator(self.main_page, source_lang, target_lang)
             
+            batch_size = llm_settings.get('batch_size', 5)
+            context_window = llm_settings.get('context_window', 8)
+            
             # Get translation cache key for batch processing
             translation_cache_key = self.cache_manager._get_translation_cache_key(
                 image, source_lang, target_lang, translator_key, extra_context, system_prompt, settings=settings_page
             )
             
             try:
-                _, success = translator.translate(blk_list, image, extra_context)
-                if not success:
-                    err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
-                    if self.progress_callback:
-                        self.progress_callback(error=err_msg)
-                    continue
-                # Cache the translation results for potential future use
-                self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
+                if self.cache_manager._can_serve_all_blocks_from_translation_cache(translation_cache_key, blk_list):
+                    # Same page, same translator, same settings: a re-run of the
+                    # chapter costs nothing.
+                    self.cache_manager._apply_cached_translations_to_blocks(translation_cache_key, blk_list)
+                    logger.info("Using cached translations for '%s'", base_name)
+                else:
+                    context_blocks = sliding_buffer[-context_window:] if context_window else None
+                    _, success = translator.translate(
+                        blk_list, image, extra_context,
+                        context_blocks=context_blocks, batch_size=batch_size,
+                    )
+                    if not success:
+                        err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
+                        if self.progress_callback:
+                            self.progress_callback(error=err_msg)
+                        continue
+                    # Cache the translation results for potential future use
+                    self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
+
+                if context_window:
+                    sliding_buffer.extend(get_context_entries(blk_list))
+                    del sliding_buffer[:-context_window]
             except InsufficientCreditsException:
                 raise
             except Exception as e:

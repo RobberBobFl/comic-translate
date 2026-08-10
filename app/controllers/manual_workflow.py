@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, Sequence
 
 from PySide6 import QtCore, QtWidgets
@@ -16,7 +17,12 @@ from modules.utils.language_utils import get_language_code, is_no_space_lang
 from modules.utils.language_utils import to_canonical_language_name
 from modules.utils.pipeline_config import validate_ocr, validate_translator
 from modules.utils.textblock import sort_blk_list
-from modules.utils.translator_utils import is_there_text, format_translations, set_upper_case
+from modules.utils.translator_utils import (
+    is_there_text,
+    format_translations,
+    get_context_entries,
+    set_upper_case,
+)
 from pipeline.webtoon_utils import get_visible_text_items, get_first_visible_block
 
 if TYPE_CHECKING:
@@ -417,10 +423,16 @@ class ManualWorkflowController:
             system_prompt = llm_settings.get("system_prompt", "")
             translator_key = settings_page.get_tool_selection("translator")
             upper_case = settings_page.ui.uppercase_checkbox.isChecked()
+            batch_size = llm_settings.get("batch_size", 5)
+            context_window = llm_settings.get("context_window", 8)
 
             def translate_selected_pages() -> dict[str, list[TextBlock]]:
                 cache_manager = self.main.pipeline.cache_manager
                 results: dict[str, list[TextBlock]] = {}
+                # Sliding context window across the selected pages; see
+                # BatchProcessor.batch_process for the same mechanism.
+                sliding_buffer: list[dict] = []
+                buffer_source = None
                 for file_path in selected_paths:
                     state = self.main.image_states.get(file_path, {})
                     blk_list = state.get("blk_list", [])
@@ -431,6 +443,13 @@ class ManualWorkflowController:
                         continue
                     source_lang = state.get("source_lang", source_lang_fallback)
                     target_lang = state.get("target_lang", target_lang_fallback)
+
+                    # Different archive/folder or language pair: start over.
+                    page_source = (os.path.dirname(file_path), source_lang, target_lang)
+                    if page_source != buffer_source:
+                        sliding_buffer.clear()
+                        buffer_source = page_source
+
                     translator = Translator(self.main, source_lang, target_lang)
                     cache_key = cache_manager._get_translation_cache_key(
                         image,
@@ -443,7 +462,14 @@ class ManualWorkflowController:
                     if cache_manager._can_serve_all_blocks_from_translation_cache(cache_key, blk_list):
                         cache_manager._apply_cached_translations_to_blocks(cache_key, blk_list)
                     else:
-                        _, success = translator.translate(blk_list, image, extra_context)
+                        context_blocks = sliding_buffer[-context_window:] if context_window else None
+                        _, success = translator.translate(
+                            blk_list,
+                            image,
+                            extra_context,
+                            context_blocks=context_blocks,
+                            batch_size=batch_size,
+                        )
                         if not success:
                             result_holder = [None]
                             event = QtCore.QEventLoop()
@@ -472,6 +498,11 @@ class ManualWorkflowController:
                             if not result_holder[0]:
                                 return results
                         cache_manager._cache_translation_results(cache_key, blk_list)
+
+                    if context_window:
+                        sliding_buffer.extend(get_context_entries(blk_list))
+                        del sliding_buffer[:-context_window]
+
                     set_upper_case(blk_list, upper_case)
                     results[file_path] = blk_list
                 return results

@@ -1,12 +1,39 @@
 from typing import Any
+import logging
+import time
 import numpy as np
 from abc import abstractmethod
 import base64
 import imkit as imk
 
 from ..base import LLMTranslation
+from ...utils.exceptions import InsufficientCreditsException
 from ...utils.textblock import TextBlock
-from ...utils.translator_utils import get_raw_text, set_texts_from_json
+from ...utils.translator_utils import get_context_entries, get_raw_text, set_texts_from_json
+
+logger = logging.getLogger(__name__)
+
+# Pages with few blocks are cheap enough to translate in one request; splitting
+# them would only multiply the reasoning-token overhead paid per request.
+SINGLE_BATCH_MAX_BLOCKS = 8
+
+# A chunk that fails with a network/API error is retried this many times in
+# total. Malformed JSON is not retried -- it is a model behaviour, not a glitch.
+CHUNK_ATTEMPTS = 2
+CHUNK_RETRY_DELAY = 1.0
+
+
+class _TranslationSlot:
+    """Write target for set_texts_from_json used to validate a chunk response.
+
+    The parsed translations land here first so a chunk that comes back empty or
+    unparseable leaves the real TextBlocks untouched.
+    """
+
+    __slots__ = ('translation',)
+
+    def __init__(self):
+        self.translation = ''
 
 
 class BaseLLMTranslation(LLMTranslation):
@@ -41,32 +68,201 @@ class BaseLLMTranslation(LLMTranslation):
         self.img_as_llm_input = llm_settings.get('image_input_enabled', True)
         self.custom_system_prompt = llm_settings.get('system_prompt', '')
         self.reasoning_effort = llm_settings.get('reasoning_effort', 'Auto')
+        self.context_window = llm_settings.get('context_window', 8)
         self.temperature = 1.0
         self.top_p = 0.95
         self.max_tokens = 16000
         
-    def translate(self, blk_list: list[TextBlock], image: np.ndarray, extra_context: str) -> list[TextBlock]:
+    def translate(
+        self,
+        blk_list: list[TextBlock],
+        image: np.ndarray,
+        extra_context: str,
+        context_blocks: list = None,
+        batch_size: int = None,
+    ) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using LLM.
-        
+
+        The page is sent either as a single request (manual translation) or as
+        several smaller chunks (batch/semi-auto), each carrying a sliding window
+        of previously translated lines so names, pronouns and style stay
+        consistent across chunks and pages.
+
         Args:
             blk_list: List of TextBlock objects to translate
             image: Image as numpy array
             extra_context: Additional context information for translation
-            
+            context_blocks: Previously translated source/translation pairs
+            batch_size: Blocks per request; falsy means one request per page
+
         Returns:
-            List of updated TextBlock objects with translations
+            Tuple of (updated TextBlock objects, success flag). The flag is True
+            when at least one chunk was translated, so a page that came back
+            partially translated is still rendered.
         """
-        entire_raw_text = get_raw_text(blk_list)
         base_prompt = self.get_system_prompt(self.source_lang, self.target_lang)
         system_prompt = f"{self.custom_system_prompt}\n{base_prompt}" if self.custom_system_prompt else base_prompt
+
+        chunks = self._split_into_chunks(blk_list, batch_size)
+        window = list(context_blocks) if context_blocks else []
+        window_size = self._context_window_size()
+
+        translated_chunks = 0
+        failed_blocks = 0
+        last_error = None
+
+        for index, chunk in enumerate(chunks):
+            # Only the first request of a page carries the image: later chunks
+            # would pay the full image cost again for the same page.
+            chunk_image = image if index == 0 else None
+            try:
+                translations = self._translate_chunk(
+                    chunk, chunk_image, extra_context, system_prompt, window
+                )
+            except InsufficientCreditsException:
+                raise
+            except Exception as e:
+                last_error = e
+                translations = None
+                logger.exception("Translation chunk %d/%d failed", index + 1, len(chunks))
+
+            if translations is None:
+                failed_blocks += len(chunk)
+                continue
+
+            for blk, translation in zip(chunk, translations):
+                blk.translation = translation
+
+            translated_chunks += 1
+            if window_size:
+                window.extend(get_context_entries(chunk))
+                del window[:-window_size]
+
+        if translated_chunks == 0:
+            # Nothing came through: surface the original API error (auth,
+            # network, credits) instead of a generic failure flag.
+            if last_error is not None:
+                raise last_error
+            return blk_list, False
+
+        if failed_blocks:
+            logger.warning(
+                "Partial translation: %d of %d blocks left untranslated.",
+                failed_blocks,
+                len(blk_list),
+            )
+
+        return blk_list, True
+
+    def _context_window_size(self) -> int:
+        try:
+            return max(0, int(getattr(self, 'context_window', 8) or 0))
+        except (TypeError, ValueError):
+            return 8
+
+    @staticmethod
+    def _split_into_chunks(blk_list: list[TextBlock], batch_size: int) -> list[list[TextBlock]]:
+        """Split blocks into request-sized chunks, preserving reading order."""
+        if not blk_list:
+            return []
+        try:
+            size = int(batch_size or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if size <= 0 or len(blk_list) <= max(size, SINGLE_BATCH_MAX_BLOCKS):
+            return [list(blk_list)]
+        return [list(blk_list[i:i + size]) for i in range(0, len(blk_list), size)]
+
+    @staticmethod
+    def _format_context(context_blocks: list) -> str:
+        """Render the sliding window as plain 'source -> translation' lines.
+
+        Deliberately not JSON: the block keys of the chunk being translated
+        restart at block_0, so a JSON context section would collide with them.
+        """
+        lines = []
+        for entry in context_blocks or []:
+            if isinstance(entry, dict):
+                source = entry.get('source', '')
+                translation = entry.get('translation', '')
+            elif isinstance(entry, (tuple, list)) and len(entry) == 2:
+                source, translation = entry
+            else:
+                source = getattr(entry, 'text', '')
+                translation = getattr(entry, 'translation', '')
+            source = (source or '').strip().replace('\n', ' ')
+            translation = (translation or '').strip().replace('\n', ' ')
+            if source and translation:
+                lines.append(f"{source} → {translation}")
+        return "\n".join(lines)
+
+    def _build_user_prompt(self, chunk: list[TextBlock], extra_context: str, context_blocks: list) -> str:
         target_hint = f"Target language: {self.target_lang}." if self.target_lang else ""
-        user_prompt = f"{extra_context}\nMake the translation sound as natural as possible.\n{target_hint}\nTranslate this:\n{entire_raw_text}"
-        
-        entire_translated_text = self._perform_translation(user_prompt, system_prompt, image)
-        success = set_texts_from_json(blk_list, entire_translated_text)
-            
-        return blk_list, success
+        parts = [extra_context, "Make the translation sound as natural as possible.", target_hint]
+
+        context_section = self._format_context(context_blocks)
+        if context_section:
+            parts.append(
+                "Earlier lines of this comic, already translated. Use them for "
+                "consistent names, pronouns, honorifics and tone. "
+                "DO NOT translate or return them:\n"
+                f"{context_section}"
+            )
+
+        parts.append(f"Translate this:\n{get_raw_text(chunk)}")
+        return "\n".join(part for part in parts if part)
+
+    def _translate_chunk(
+        self,
+        chunk: list[TextBlock],
+        image: np.ndarray,
+        extra_context: str,
+        system_prompt: str,
+        context_blocks: list,
+    ) -> list[str] | None:
+        """Translate one chunk. Returns translations, or None if the chunk failed.
+
+        Network/API errors are retried; an unparseable or empty response is not,
+        since repeating the same prompt yields the same malformed JSON.
+        """
+        user_prompt = self._build_user_prompt(chunk, extra_context, context_blocks)
+        expects_text = any((blk.text or '').strip() for blk in chunk)
+
+        for attempt in range(1, CHUNK_ATTEMPTS + 1):
+            try:
+                response = self._perform_translation(user_prompt, system_prompt, image)
+            except InsufficientCreditsException:
+                raise
+            except Exception:
+                if attempt == CHUNK_ATTEMPTS:
+                    raise
+                logger.warning(
+                    "Translation request failed (attempt %d/%d), retrying.",
+                    attempt,
+                    CHUNK_ATTEMPTS,
+                )
+                time.sleep(CHUNK_RETRY_DELAY * attempt)
+                continue
+
+            slots = [_TranslationSlot() for _ in chunk]
+            if not set_texts_from_json(slots, response):
+                return None
+
+            translations = [
+                slot.translation if isinstance(slot.translation, str) else str(slot.translation)
+                for slot in slots
+            ]
+            if expects_text and not any(t.strip() for t in translations):
+                # Valid JSON, but not a single block_N key matched: the model
+                # answered something else entirely. set_texts_from_json only
+                # warns about this, so catch it here.
+                logger.warning("LLM response contained no usable block translations.")
+                return None
+
+            return translations
+
+        return None
     
     def rephrase(self, text: str, target_lang: str) -> str:
         """Produce a fresh, natural translation from the original source text.

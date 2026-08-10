@@ -79,7 +79,14 @@ class UserTranslator(TranslationEngine):
             logger.error(f"Failed to retrieve access token: {e}")
             return None
 
-    def translate(self, blk_list: List[TextBlock], image: np.ndarray = None, extra_context: str = "") -> tuple[List[TextBlock], bool]:
+    def translate(
+        self,
+        blk_list: List[TextBlock],
+        image: np.ndarray = None,
+        extra_context: str = "",
+        context_blocks: list = None,
+        batch_size: int = None,
+    ) -> tuple[List[TextBlock], bool]:
         """
         Sends the translation request to the web API.
 
@@ -87,6 +94,8 @@ class UserTranslator(TranslationEngine):
             blk_list: List of TextBlock objects (desktop version) to translate.
             image: Image as numpy array (Optional, for LLM context).
             extra_context: Additional context information for translation.
+            context_blocks: Ignored. Chunking and context are handled server-side.
+            batch_size: Ignored. Chunking and context are handled server-side.
 
         Returns:
             Tuple of (List of updated TextBlock objects with translations, success flag).

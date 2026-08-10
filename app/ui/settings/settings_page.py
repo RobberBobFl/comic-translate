@@ -136,6 +136,8 @@ class SettingsPage(QtWidgets.QWidget):
             'reasoning_effort': self.ui.value_mappings.get(
                 self.ui.thinking_combo.currentText(), 'Auto'
             ),
+            'batch_size': self.ui.batch_size_spinbox.value(),
+            'context_window': self.ui.context_window_spinbox.value(),
         }
 
     def get_export_settings(self):
@@ -440,6 +442,12 @@ class SettingsPage(QtWidgets.QWidget):
         if reasoning_effort:
             translated_thinking = self.ui.reverse_mappings.get(reasoning_effort, reasoning_effort)
             self.ui.thinking_combo.setCurrentText(translated_thinking)
+        self.ui.batch_size_spinbox.setValue(
+            settings.value('batch_size', self.ui.llms_page.DEFAULT_BATCH_SIZE, type=int)
+        )
+        self.ui.context_window_spinbox.setValue(
+            settings.value('context_window', self.ui.llms_page.DEFAULT_CONTEXT_WINDOW, type=int)
+        )
         settings.endGroup()
 
         # Load export settings
