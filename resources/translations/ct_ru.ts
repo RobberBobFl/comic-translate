@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>Дополнительный контекст:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>Батчи и контекст (только пакетный режим)</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>Блоков на запрос:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0 — вся страница отправляется одним запросом.</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>Окно контекста:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>Сколько ранее переведённых строк отправляется для связности. 0 отключает скользящий контекст.</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>Меньшие запросы не дают моделям с рассуждениями обрезать ответ, а окно контекста сохраняет имена и стиль между страницами.</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

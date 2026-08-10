@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>追加のコンテキスト:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>バッチとコンテキスト（バッチモードのみ）</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>リクエストあたりのブロック数:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0 にするとページ全体を 1 回のリクエストで送信します。</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>コンテキストウィンドウ:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>一貫性のために一緒に送る翻訳済みの行数。0 でスライディングコンテキストを無効にします。</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>リクエストを小さくすると推論モデルの回答が途中で切れるのを防げます。コンテキストウィンドウはページをまたいで名前や口調を一貫させます。</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

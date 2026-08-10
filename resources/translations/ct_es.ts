@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>Contexto Extra:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>Lotes y Contexto (solo modo por lotes)</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>Bloques por Solicitud:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0 envía la página entera en una sola solicitud.</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>Ventana de Contexto:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>Cuántas líneas ya traducidas se envían para mantener la coherencia. 0 desactiva el contexto deslizante.</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>Las solicitudes más pequeñas evitan que los modelos de razonamiento trunquen su respuesta, y la ventana de contexto mantiene los nombres y el tono coherentes entre páginas.</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

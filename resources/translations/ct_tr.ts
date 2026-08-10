@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>Ek Bağlam:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>Toplu İşlem ve Bağlam (yalnızca toplu mod)</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>İstek Başına Blok:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0, sayfanın tamamını tek istekte gönderir.</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>Bağlam Penceresi:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>Tutarlılık için gönderilen, daha önce çevrilmiş satır sayısı. 0 kayan bağlamı kapatır.</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>Daha küçük istekler, akıl yürüten modellerin yanıtı kesmesini önler; bağlam penceresi ise isimleri ve üslubu sayfalar arasında tutarlı tutar.</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

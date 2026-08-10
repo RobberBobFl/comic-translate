@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>추가 컨텍스트:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>배치 및 컨텍스트 (배치 모드 전용)</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>요청당 블록 수:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0이면 페이지 전체를 한 번의 요청으로 보냅니다.</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>컨텍스트 창:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>일관성을 위해 함께 보낼 이전 번역 줄 수입니다. 0이면 슬라이딩 컨텍스트를 끕니다.</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>요청을 작게 나누면 추론 모델이 답변을 잘라먹는 것을 막을 수 있고, 컨텍스트 창은 여러 페이지에 걸쳐 이름과 어조를 일관되게 유지합니다.</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

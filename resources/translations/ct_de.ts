@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>Zusätzlicher Kontext:</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>Stapel und Kontext (nur Stapelmodus)</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>Blöcke pro Anfrage:</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>0 sendet die ganze Seite in einer Anfrage.</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>Kontextfenster:</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>Wie viele zuvor übersetzte Zeilen zur Konsistenz mitgesendet werden. 0 schaltet den gleitenden Kontext aus.</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>Kleinere Anfragen verhindern, dass Reasoning-Modelle ihre Antwort abschneiden, und das Kontextfenster hält Namen und Tonfall über Seiten hinweg konsistent.</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>

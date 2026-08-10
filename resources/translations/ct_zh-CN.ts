@@ -449,6 +449,30 @@
         <source>Extra Context:</source>
         <translation>额外上下文：</translation>
     </message>
+    <message>
+        <source>Batch and Context (batch mode only)</source>
+        <translation>批处理与上下文（仅批处理模式）</translation>
+    </message>
+    <message>
+        <source>Blocks per Request:</source>
+        <translation>每次请求的文本块数：</translation>
+    </message>
+    <message>
+        <source>0 sends the whole page in one request.</source>
+        <translation>填 0 表示整页在一次请求中发送。</translation>
+    </message>
+    <message>
+        <source>Context Window:</source>
+        <translation>上下文窗口：</translation>
+    </message>
+    <message>
+        <source>How many previously translated lines are sent along for consistency. 0 turns the sliding context off.</source>
+        <translation>为保持一致性而一并发送的已翻译行数。填 0 关闭滑动上下文。</translation>
+    </message>
+    <message>
+        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
+        <translation>较小的请求可避免推理模型截断回答，上下文窗口则让跨页的人名和语气保持一致。</translation>
+    </message>
 </context>
 <context>
     <name>Messages</name>
