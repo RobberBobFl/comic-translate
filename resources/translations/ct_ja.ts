@@ -470,8 +470,16 @@
         <translation>一貫性のために一緒に送る翻訳済みの行数。0 でスライディングコンテキストを無効にします。</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>リクエストを小さくすると推論モデルの回答が途中で切れるのを防げます。コンテキストウィンドウはページをまたいで名前や口調を一貫させます。</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>「リクエストあたりのブロック数」はページを複数の小さなリクエストに分割します。「コンテキストウィンドウ」は直前に翻訳した行を次のリクエストへ引き継ぎます。どちらもバッチ実行と複数ページ実行にのみ適用され、手動翻訳は常に 1 ページにつき 1 回のリクエストです。</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>システムプロンプト:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>システムプロンプトを保存</translation>
     </message>
 </context>
 <context>

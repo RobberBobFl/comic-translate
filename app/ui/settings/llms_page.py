@@ -82,9 +82,10 @@ class LlmsPage(QtWidgets.QWidget):
 
         batch_hint = MLabel(
             self.tr(
-                "Smaller requests keep reasoning models from truncating their "
-                "answer, and the context window keeps names and tone "
-                "consistent across pages."
+                "Blocks per Request splits a page into several smaller "
+                "requests. Context Window carries the last translated lines "
+                "into the next request. Both apply to batch and multi-page "
+                "runs; manual translation always sends one request per page."
             )
         )
         batch_hint.setWordWrap(True)

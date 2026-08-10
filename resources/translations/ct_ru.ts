@@ -470,8 +470,16 @@
         <translation>Сколько ранее переведённых строк отправляется для связности. 0 отключает скользящий контекст.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Меньшие запросы не дают моделям с рассуждениями обрезать ответ, а окно контекста сохраняет имена и стиль между страницами.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>«Блоков на запрос» разбивает страницу на несколько запросов поменьше. «Окно контекста» передаёт последние переведённые строки в следующий запрос. Оба параметра работают только в пакетном и многостраничном прогоне; ручной перевод всегда отправляет один запрос на страницу.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>Системный промпт:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>Сохранять системный промпт</translation>
     </message>
 </context>
 <context>

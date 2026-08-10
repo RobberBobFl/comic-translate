@@ -470,8 +470,16 @@
         <translation>Cuántas líneas ya traducidas se envían para mantener la coherencia. 0 desactiva el contexto deslizante.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Las solicitudes más pequeñas evitan que los modelos de razonamiento trunquen su respuesta, y la ventana de contexto mantiene los nombres y el tono coherentes entre páginas.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>«Bloques por Solicitud» divide una página en varias solicitudes más pequeñas. «Ventana de Contexto» lleva las últimas líneas traducidas a la solicitud siguiente. Ambos solo se aplican a las ejecuciones por lotes y de varias páginas; la traducción manual siempre envía una solicitud por página.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>Prompt del sistema:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>Guardar prompt del sistema</translation>
     </message>
 </context>
 <context>

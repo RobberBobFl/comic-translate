@@ -470,8 +470,16 @@
         <translation>为保持一致性而一并发送的已翻译行数。填 0 关闭滑动上下文。</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>较小的请求可避免推理模型截断回答，上下文窗口则让跨页的人名和语气保持一致。</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>「每次请求的文本块数」把一页拆成多次较小的请求。「上下文窗口」把最近翻译的行带入下一次请求。两者仅用于批处理和多页运行；手动翻译始终是每页一次请求。</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>系统提示词：</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>保存系统提示词</translation>
     </message>
 </context>
 <context>

@@ -470,8 +470,16 @@
         <translation>일관성을 위해 함께 보낼 이전 번역 줄 수입니다. 0이면 슬라이딩 컨텍스트를 끕니다.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>요청을 작게 나누면 추론 모델이 답변을 잘라먹는 것을 막을 수 있고, 컨텍스트 창은 여러 페이지에 걸쳐 이름과 어조를 일관되게 유지합니다.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>&apos;요청당 블록 수&apos;는 한 페이지를 여러 개의 작은 요청으로 나눕니다. &apos;컨텍스트 창&apos;은 마지막으로 번역한 줄을 다음 요청으로 넘깁니다. 둘 다 배치 및 여러 페이지 실행에만 적용되며, 수동 번역은 항상 페이지당 한 번의 요청을 보냅니다.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>시스템 프롬프트:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>시스템 프롬프트 저장</translation>
     </message>
 </context>
 <context>

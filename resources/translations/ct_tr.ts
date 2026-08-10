@@ -470,8 +470,16 @@
         <translation>Tutarlılık için gönderilen, daha önce çevrilmiş satır sayısı. 0 kayan bağlamı kapatır.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Daha küçük istekler, akıl yürüten modellerin yanıtı kesmesini önler; bağlam penceresi ise isimleri ve üslubu sayfalar arasında tutarlı tutar.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>«İstek Başına Blok», bir sayfayı birden fazla küçük isteğe böler. «Bağlam Penceresi», en son çevrilen satırları bir sonraki isteğe taşır. Her ikisi de yalnızca toplu ve çok sayfalı çalıştırmalarda geçerlidir; manuel çeviri her zaman sayfa başına tek istek gönderir.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>Sistem İstemi:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>Sistem İstemini Kaydet</translation>
     </message>
 </context>
 <context>

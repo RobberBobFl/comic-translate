@@ -443,7 +443,7 @@
     <name>LlmsPage</name>
     <message>
         <source>Provide Image as Input to AI</source>
-        <translation>Fornisci immagine come input all&apos;IAcome input all&apos;IAcome input all&apos;IA</translation>
+        <translation>Fornisci immagine come input all&apos;IA</translation>
     </message>
     <message>
         <source>Extra Context:</source>
@@ -470,8 +470,16 @@
         <translation>Quante righe già tradotte vengono inviate per la coerenza. 0 disattiva il contesto scorrevole.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Richieste più piccole evitano che i modelli di ragionamento tronchino la risposta, e la finestra di contesto mantiene nomi e tono coerenti tra le pagine.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>«Blocchi per richiesta» divide una pagina in più richieste piccole. «Finestra di contesto» porta le ultime righe tradotte nella richiesta successiva. Entrambi valgono solo per le esecuzioni batch e multipagina; la traduzione manuale invia sempre una richiesta per pagina.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>Prompt di sistema:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>Salva il prompt di sistema</translation>
     </message>
 </context>
 <context>

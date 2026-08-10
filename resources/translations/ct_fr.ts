@@ -470,8 +470,16 @@
         <translation>Nombre de lignes déjà traduites envoyées pour assurer la cohérence. 0 désactive le contexte glissant.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Des requêtes plus petites empêchent les modèles de raisonnement de tronquer leur réponse, et la fenêtre de contexte garde les noms et le ton cohérents d&apos;une page à l&apos;autre.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>« Blocs par requête » découpe une page en plusieurs requêtes plus petites. « Fenêtre de contexte » transmet les dernières lignes traduites à la requête suivante. Les deux ne s&apos;appliquent qu&apos;aux traitements par lots et multipages ; la traduction manuelle envoie toujours une requête par page.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>Invite système :</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>Enregistrer l&apos;invite système</translation>
     </message>
 </context>
 <context>

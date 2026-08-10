@@ -470,8 +470,16 @@
         <translation>Wie viele zuvor übersetzte Zeilen zur Konsistenz mitgesendet werden. 0 schaltet den gleitenden Kontext aus.</translation>
     </message>
     <message>
-        <source>Smaller requests keep reasoning models from truncating their answer, and the context window keeps names and tone consistent across pages.</source>
-        <translation>Kleinere Anfragen verhindern, dass Reasoning-Modelle ihre Antwort abschneiden, und das Kontextfenster hält Namen und Tonfall über Seiten hinweg konsistent.</translation>
+        <source>Blocks per Request splits a page into several smaller requests. Context Window carries the last translated lines into the next request. Both apply to batch and multi-page runs; manual translation always sends one request per page.</source>
+        <translation>„Blöcke pro Anfrage“ teilt eine Seite in mehrere kleinere Anfragen auf. „Kontextfenster“ überträgt die zuletzt übersetzten Zeilen in die nächste Anfrage. Beides gilt nur für Stapel- und Mehrseiten-Läufe; die manuelle Übersetzung sendet immer eine Anfrage pro Seite.</translation>
+    </message>
+    <message>
+        <source>System Prompt:</source>
+        <translation>System-Prompt:</translation>
+    </message>
+    <message>
+        <source>Save System Prompt</source>
+        <translation>System-Prompt speichern</translation>
     </message>
 </context>
 <context>
