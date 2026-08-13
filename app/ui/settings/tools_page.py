@@ -8,8 +8,9 @@ from .utils import create_title_and_combo, set_combo_box_width
 from modules.utils.device import is_gpu_available
 
 class ToolsPage(QtWidgets.QWidget):
-    # Emitted when the user wants to configure the custom OCR provider.
+    # Emitted when the user wants to configure a custom vision provider.
     custom_ocr_requested = Signal()
+    scene_analyzer_requested = Signal()
 
     def __init__(
         self, 
@@ -41,6 +42,10 @@ class ToolsPage(QtWidgets.QWidget):
 
         self.custom_ocr_button = MPushButton(self.tr("Add Custom Model")).small()
         self.custom_ocr_button.clicked.connect(lambda: self.custom_ocr_requested.emit())
+        self.scene_analyzer_button = MPushButton(self.tr("Scene Description Model")).small()
+        self.scene_analyzer_button.clicked.connect(
+            lambda: self.scene_analyzer_requested.emit()
+        )
 
         self.stitch_webtoon_cb = QtWidgets.QCheckBox(
             self.tr("Webtoon: stitch pages into one image (experimental)")
@@ -129,41 +134,13 @@ class ToolsPage(QtWidgets.QWidget):
         layout.addWidget(translator_widget)
         layout.addSpacing(10)
 
-        # Thinking (reasoning) effort control -- only affects LLM-based
-        # translators that support it (GPT, Claude, Gemini, Custom/Ollama,
-        # DeepSeek). Traditional translators ignore it.
-        thinking_options = [
-            self.tr("Auto"),
-            self.tr("Off"),
-            self.tr("Low"),
-            self.tr("Medium"),
-            self.tr("High"),
-        ]
-        thinking_widget, self.thinking_combo = create_title_and_combo(
-            self.tr("Thinking or Reasoning (OpenAI-compatible only)*"),
-            thinking_options,
-            h4=True,
-        )
-        set_combo_box_width(self.thinking_combo, thinking_options)
-        self.thinking_combo.setCurrentIndex(0)  # Auto by default
-
-        thinking_hint = MLabel(
-            self.tr(
-                "* Only affects LLM translators that support it. "
-                "Does not apply to DeepL / Microsoft / Google."
-            )
-        )
-        thinking_hint.setWordWrap(True)
-        layout.addWidget(thinking_widget)
-        layout.addWidget(thinking_hint)
-        layout.addSpacing(10)
-
         layout.addWidget(detector_widget)
         layout.addSpacing(10)
         layout.addWidget(ocr_widget)
         button_row = QtWidgets.QHBoxLayout()
         button_row.addSpacing(8)
         button_row.addWidget(self.custom_ocr_button)
+        button_row.addWidget(self.scene_analyzer_button)
         button_row.addStretch()
         layout.addLayout(button_row)
         layout.addWidget(self.stitch_webtoon_cb)

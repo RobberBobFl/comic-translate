@@ -1510,6 +1510,7 @@ class ProjectController:
             self.add_recent_project(normalized_path)
             self._refresh_home_screen()
             self.update_ui_from_project()
+            self.main.update_visual_button_state()
             if callable(on_success):
                 on_success()
 

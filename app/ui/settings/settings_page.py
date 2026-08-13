@@ -12,6 +12,8 @@ from PySide6.QtGui import QFont, QFontDatabase, QDesktopServices
 from app.shortcuts import get_default_shortcuts
 from .settings_ui import SettingsPageUI
 from .custom_ocr_dialog import CustomOCRDialog, DEFAULT_API_URL
+from .scene_analyzer_dialog import SceneAnalyzerDialog
+from modules.translation.scene_analyzer import SceneAnalyzer
 from modules.utils.device import is_gpu_available
 from app.account.auth.auth_client import AuthClient, USER_INFO_GROUP, \
     EMAIL_KEY, TIER_KEY, CREDITS_KEY, MONTHLY_CREDITS_KEY
@@ -98,6 +100,7 @@ class SettingsPage(QtWidgets.QWidget):
         self.ui.sign_out_button.clicked.connect(self.sign_out)
         self.ui.check_update_button.clicked.connect(self.check_for_updates)
         self.ui.tools_page.custom_ocr_requested.connect(self._open_custom_ocr_dialog)
+        self.ui.tools_page.scene_analyzer_requested.connect(self._open_scene_analyzer_dialog)
         self._sync_extra_context_limit(self.ui.translator_combo.currentText())
 
     def _sync_extra_context_limit(self, translator: str) -> None:
@@ -133,11 +136,9 @@ class SettingsPage(QtWidgets.QWidget):
             'image_input_enabled': self.ui.image_checkbox.isChecked(),
             'system_prompt': self.ui.system_prompt.toPlainText(),
             'save_system_prompt': self.ui.save_system_prompt_checkbox.isChecked(),
-            'reasoning_effort': self.ui.value_mappings.get(
-                self.ui.thinking_combo.currentText(), 'Auto'
-            ),
             'batch_size': self.ui.batch_size_spinbox.value(),
             'context_window': self.ui.context_window_spinbox.value(),
+            'use_scene_description': self.ui.use_scene_description_checkbox.isChecked(),
         }
 
     def get_export_settings(self):
@@ -218,8 +219,41 @@ class SettingsPage(QtWidgets.QWidget):
 
     def _open_custom_ocr_dialog(self) -> None:
         """Open the custom OCR provider configuration dialog."""
-        dialog = CustomOCRDialog(self, parent=self)
-        dialog.exec()
+        CustomOCRDialog(self, parent=self).exec()
+
+    def get_scene_analyzer_credentials(self) -> dict:
+        """Return scene analyzer credentials from their isolated settings group."""
+        settings = QSettings("ComicLabs", "ComicTranslate")
+        settings.beginGroup("scene_analyzer")
+        save_key = settings.value("save_key", False, type=bool)
+        credentials = {
+            "api_url": settings.value("api_url", SceneAnalyzer.DEFAULT_API_URL, type=str),
+            "api_key": settings.value("api_key", "", type=str) if save_key else "",
+            "model": settings.value("model", "", type=str),
+            "save_key": save_key,
+        }
+        settings.endGroup()
+        return credentials
+
+    def set_scene_analyzer_credentials(self, data: dict) -> None:
+        """Persist scene analyzer credentials separately from OCR/translation."""
+        settings = QSettings("ComicLabs", "ComicTranslate")
+        settings.beginGroup("scene_analyzer")
+        settings.setValue("api_url", data.get("api_url", SceneAnalyzer.DEFAULT_API_URL))
+        settings.setValue("model", data.get("model", ""))
+        save_key = bool(data.get("save_key", False))
+        settings.setValue("save_key", save_key)
+        if save_key:
+            settings.setValue("api_key", data.get("api_key", ""))
+        else:
+            settings.remove("api_key")
+        settings.endGroup()
+        owner = self.window()
+        if owner is not None and hasattr(owner, "update_visual_button_state"):
+            owner.update_visual_button_state()
+
+    def _open_scene_analyzer_dialog(self) -> None:
+        SceneAnalyzerDialog(self, parent=self).exec()
 
     def get_hd_strategy_settings(self):
         strategy = self.ui.inpaint_strategy_combo.currentText()
@@ -438,15 +472,14 @@ class SettingsPage(QtWidgets.QWidget):
             self.ui.system_prompt.clear()
         self.ui.save_system_prompt_checkbox.setChecked(save_sp)
         self.ui.image_checkbox.setChecked(settings.value('image_input_enabled', False, type=bool))
-        reasoning_effort = settings.value('reasoning_effort', 'Auto')
-        if reasoning_effort:
-            translated_thinking = self.ui.reverse_mappings.get(reasoning_effort, reasoning_effort)
-            self.ui.thinking_combo.setCurrentText(translated_thinking)
         self.ui.batch_size_spinbox.setValue(
             settings.value('batch_size', self.ui.llms_page.DEFAULT_BATCH_SIZE, type=int)
         )
         self.ui.context_window_spinbox.setValue(
             settings.value('context_window', self.ui.llms_page.DEFAULT_CONTEXT_WINDOW, type=int)
+        )
+        self.ui.use_scene_description_checkbox.setChecked(
+            settings.value('use_scene_description', False, type=bool)
         )
         settings.endGroup()
 

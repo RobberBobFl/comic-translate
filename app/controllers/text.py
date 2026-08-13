@@ -1058,6 +1058,13 @@ class TextController:
         target_lang = self.main.t_combo.currentText()
         target_lang_en = self.main.lang_mapping.get(target_lang, target_lang)
 
+        scene_description = ""
+        if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
+            current_file = self.main.image_files[self.main.curr_img_idx]
+            scene_description = self.main.image_states.get(current_file, {}).get(
+                "scene_description", ""
+            ) or ""
+
         translator = Translator(self.main, target_lang, target_lang)
         if not translator.is_llm_engine:
             return  # only LLM engines can rephrase
@@ -1069,7 +1076,7 @@ class TextController:
 
         def _do_rephrase() -> str | None:
             try:
-                return engine.rephrase(original, target_lang_en)
+                return engine.rephrase(original, target_lang_en, scene_description)
             except Exception:
                 return None
 

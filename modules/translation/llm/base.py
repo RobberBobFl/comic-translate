@@ -67,7 +67,6 @@ class BaseLLMTranslation(LLMTranslation):
         self.target_lang = target_lang
         self.img_as_llm_input = llm_settings.get('image_input_enabled', True)
         self.custom_system_prompt = llm_settings.get('system_prompt', '')
-        self.reasoning_effort = llm_settings.get('reasoning_effort', 'Auto')
         self.context_window = llm_settings.get('context_window', 8)
         self.temperature = 1.0
         self.top_p = 0.95
@@ -80,6 +79,7 @@ class BaseLLMTranslation(LLMTranslation):
         extra_context: str,
         context_blocks: list = None,
         batch_size: int = None,
+        scene_description: str = None,
     ) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using LLM.
@@ -118,7 +118,12 @@ class BaseLLMTranslation(LLMTranslation):
             chunk_image = image if index == 0 else None
             try:
                 translations = self._translate_chunk(
-                    chunk, chunk_image, extra_context, system_prompt, window
+                    chunk,
+                    chunk_image,
+                    extra_context,
+                    system_prompt,
+                    window,
+                    scene_description,
                 )
             except InsufficientCreditsException:
                 raise
@@ -197,9 +202,22 @@ class BaseLLMTranslation(LLMTranslation):
                 lines.append(f"{source} → {translation}")
         return "\n".join(lines)
 
-    def _build_user_prompt(self, chunk: list[TextBlock], extra_context: str, context_blocks: list) -> str:
+    def _build_user_prompt(
+        self,
+        chunk: list[TextBlock],
+        extra_context: str,
+        context_blocks: list,
+        scene_description: str = None,
+    ) -> str:
         target_hint = f"Target language: {self.target_lang}." if self.target_lang else ""
         parts = [extra_context, "Make the translation sound as natural as possible.", target_hint]
+
+        if scene_description:
+            parts.append(
+                "SCENE CONTEXT:\n"
+                f"{scene_description.strip()}\n"
+                "Treat this as a potentially imperfect visual hint and use it only when relevant."
+            )
 
         context_section = self._format_context(context_blocks)
         if context_section:
@@ -210,7 +228,7 @@ class BaseLLMTranslation(LLMTranslation):
                 f"{context_section}"
             )
 
-        parts.append(f"Translate this:\n{get_raw_text(chunk)}")
+        parts.append(f"TEXT TO TRANSLATE:\n{get_raw_text(chunk)}")
         return "\n".join(part for part in parts if part)
 
     def _translate_chunk(
@@ -220,13 +238,16 @@ class BaseLLMTranslation(LLMTranslation):
         extra_context: str,
         system_prompt: str,
         context_blocks: list,
+        scene_description: str = None,
     ) -> list[str] | None:
         """Translate one chunk. Returns translations, or None if the chunk failed.
 
         Network/API errors are retried; an unparseable or empty response is not,
         since repeating the same prompt yields the same malformed JSON.
         """
-        user_prompt = self._build_user_prompt(chunk, extra_context, context_blocks)
+        user_prompt = self._build_user_prompt(
+            chunk, extra_context, context_blocks, scene_description
+        )
         expects_text = any((blk.text or '').strip() for blk in chunk)
 
         for attempt in range(1, CHUNK_ATTEMPTS + 1):
@@ -264,22 +285,32 @@ class BaseLLMTranslation(LLMTranslation):
 
         return None
     
-    def rephrase(self, text: str, target_lang: str) -> str:
+    def rephrase(self, text: str, target_lang: str, scene_description: str = None) -> str:
         """Produce a fresh, natural translation from the original source text.
 
         Uses the same LLM engine as translation but sends the *original*
         source text and asks for a natural, idiomatic translation — instead
         of rephrasing an existing (possibly clunky) translation.
+
+        ``scene_description`` (optional) is the visual context for the page,
+        matching what ``_build_user_prompt`` injects during batch translation,
+        so the rephrase benefits from the same disambiguation cues.
         """
         system_prompt = (
             f"You are an expert translator. Translate to {target_lang}, "
             "making it sound natural and idiomatic, like a native speaker. "
             "Output ONLY the translation, no explanations, no prefixes."
         )
-        user_prompt = (
-            f"Translate this to {target_lang}, phrasing it as naturally as possible:\n"
-            f"{text}"
-        )
+        parts = [
+            f"Translate this to {target_lang}, phrasing it as naturally as possible:\n{text}"
+        ]
+        if scene_description:
+            parts.append(
+                "SCENE CONTEXT:\n"
+                f"{scene_description.strip()}\n"
+                "Treat this as a potentially imperfect visual hint and use it only when relevant."
+            )
+        user_prompt = "\n\n".join(parts)
         # Pass a tiny dummy image so the engine does not crash on None.
         dummy = np.zeros((1, 1, 3), dtype=np.uint8)
         return self._perform_translation(user_prompt, system_prompt, dummy)

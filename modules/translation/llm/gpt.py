@@ -5,6 +5,7 @@ import requests
 import json
 
 from .base import BaseLLMTranslation
+from ..reasoning import get_reasoning_off_params, is_ollama_endpoint
 from ...utils.translator_utils import MODEL_MAP
 
 logger = logging.getLogger(__name__)
@@ -92,13 +93,11 @@ class GPTTranslation(BaseLLMTranslation):
             "top_p": self.top_p,
         }
 
-        # Reasoning effort (OpenAI-compatible models only).
-        # "Off" maps to "none" (accepted by LM Studio / OpenRouter);
-        # "Auto" omits the param so the server/model decides.
-        effort = getattr(self, 'reasoning_effort', 'Auto')
-        if effort and effort != 'Auto':
-            effort_val = 'none' if effort.lower() == 'off' else effort.lower()
-            payload["reasoning_effort"] = effort_val
+        payload.update(
+            get_reasoning_off_params(
+                self.api_base_url, self.model, is_ollama_endpoint(self.api_base_url)
+            )
+        )
 
         return self._make_api_request(payload, headers)
     

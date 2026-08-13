@@ -3,6 +3,7 @@ import requests
 import json
 
 from .base import OCREngine
+from ..translation.reasoning import get_reasoning_off_params, is_ollama_endpoint
 from ..utils.textblock import TextBlock, adjust_text_line_coordinates
 
 
@@ -111,6 +112,12 @@ class CustomOCR(OCREngine):
             ],
             "max_completion_tokens": self.max_tokens,
         }
+
+        payload.update(
+            get_reasoning_off_params(
+                self.api_base_url, self.model, is_ollama_endpoint(self.api_base_url)
+            )
+        )
 
         try:
             response = requests.post(

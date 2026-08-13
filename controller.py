@@ -145,6 +145,10 @@ class ComicTranslate(ComicTranslateUI):
 
         self.project_ctrl.load_main_page_settings()
         self.settings_page.load_settings()
+        self.settings_page.ui.use_scene_description_checkbox.toggled.connect(
+            self.update_visual_button_state
+        )
+        self.update_visual_button_state()
         self.project_ctrl.initialize_autosave()
 
         # Populate the home screen with any previously-saved recent projects
@@ -188,12 +192,14 @@ class ComicTranslate(ComicTranslateUI):
         self.webtoon_toggle.clicked.connect(self.webtoon_ctrl.toggle_webtoon_mode)
 
         # Connect buttons from button_groups
-        self.hbutton_group.get_button_group().buttons()[0].clicked.connect(lambda: self.block_detect())
-        self.hbutton_group.get_button_group().buttons()[1].clicked.connect(self.ocr)
-        self.hbutton_group.get_button_group().buttons()[2].clicked.connect(self.translate_image)
-        self.hbutton_group.get_button_group().buttons()[3].clicked.connect(self.load_segmentation_points)
-        self.hbutton_group.get_button_group().buttons()[4].clicked.connect(self.inpaint_and_set)
-        self.hbutton_group.get_button_group().buttons()[5].clicked.connect(self.text_ctrl.render_text)
+        buttons = self.hbutton_group.get_button_group().buttons()
+        buttons[0].clicked.connect(lambda: self.block_detect())
+        buttons[1].clicked.connect(self.ocr)
+        buttons[2].clicked.connect(self.describe_scene)
+        buttons[3].clicked.connect(self.translate_image)
+        buttons[4].clicked.connect(self.load_segmentation_points)
+        buttons[5].clicked.connect(self.inpaint_and_set)
+        buttons[6].clicked.connect(self.text_ctrl.render_text)
 
         self.undo_tool_group.get_button_group().buttons()[0].clicked.connect(self.undo_group.undo)
         self.undo_tool_group.get_button_group().buttons()[1].clicked.connect(self.undo_group.redo)
@@ -489,18 +495,21 @@ class ComicTranslate(ComicTranslateUI):
         self.disable_hbutton_group()
         self.translate_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
+        self.update_visual_button_state()
 
     def manual_mode_selected(self):
         self.semi_auto_mode = False
         self.enable_hbutton_group()
         self.translate_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
+        self.update_visual_button_state()
 
     def semi_auto_mode_selected(self):
         self.semi_auto_mode = True
         self.enable_hbutton_group()
         self.translate_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
+        self.update_visual_button_state()
 
     def on_manual_finished(self):
         self.loading.setVisible(False)
@@ -767,6 +776,35 @@ class ComicTranslate(ComicTranslateUI):
     def enable_hbutton_group(self):
         for button in self.hbutton_group.get_button_group().buttons():
             button.setEnabled(True)
+        self.update_visual_button_state()
+
+    def update_visual_button_state(self):
+        buttons = self.hbutton_group.get_button_group().buttons()
+        if len(buttons) < 3:
+            return
+        button = buttons[2]
+        credentials = self.settings_page.get_scene_analyzer_credentials()
+        configured = bool(
+            credentials.get("api_url", "").strip()
+            and credentials.get("model", "").strip()
+        )
+        has_pages = bool(self.image_files)
+        automatic = self.automatic_radio.isChecked()
+        button.setEnabled(configured and has_pages and not automatic)
+        if automatic:
+            tooltip = self.tr(
+                "Scene descriptions are generated automatically in Automatic mode."
+            )
+        elif not configured:
+            tooltip = self.tr(
+                "Configure a Scene Description Model in Settings > Tools to enable this action."
+            )
+        else:
+            tooltip = self.tr("Generate an English scene description for the target page(s).")
+        button.setToolTip(tooltip)
+
+    def describe_scene(self):
+        self.manual_workflow_ctrl.describe_scene()
 
     def block_detect(self, load_rects: bool = True):
         self.manual_workflow_ctrl.block_detect(load_rects)

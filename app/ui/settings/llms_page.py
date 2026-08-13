@@ -1,9 +1,12 @@
+import os
+
 from PySide6 import QtWidgets, QtCore
 from ..dayu_widgets.label import MLabel
 from ..dayu_widgets.text_edit import MTextEdit
 from ..dayu_widgets.check_box import MCheckBox
 from ..dayu_widgets.collapse import MCollapse
 from ..dayu_widgets.spin_box import MSpinBox
+from ..dayu_widgets.push_button import MPushButton
 
 class LlmsPage(QtWidgets.QWidget):
     DEFAULT_EXTRA_CONTEXT_LIMIT = 1000
@@ -37,7 +40,43 @@ class LlmsPage(QtWidgets.QWidget):
         self.save_system_prompt_checkbox = MCheckBox(self.tr("Save System Prompt"))
         self.save_system_prompt_checkbox.setChecked(True)
         left_layout.addWidget(self.save_system_prompt_checkbox)
+        self.use_scene_description_checkbox = MCheckBox(
+            self.tr("Use Scene Description")
+        )
+        left_layout.addWidget(self.use_scene_description_checkbox)
+
+        self.scene_descriptions_group = QtWidgets.QGroupBox(
+            self.tr("Scene Descriptions")
+        )
+        scene_layout = QtWidgets.QVBoxLayout(self.scene_descriptions_group)
+        scene_hint = MLabel(
+            self.tr("Descriptions are generated in English and can be edited per page.")
+        ).secondary()
+        scene_hint.setWordWrap(True)
+        scene_layout.addWidget(scene_hint)
+        self.scene_descriptions_scroll = QtWidgets.QScrollArea()
+        self.scene_descriptions_scroll.setWidgetResizable(True)
+        self.scene_descriptions_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.scene_descriptions_widget = QtWidgets.QWidget()
+        self.scene_descriptions_layout = QtWidgets.QVBoxLayout(
+            self.scene_descriptions_widget
+        )
+        self.scene_descriptions_layout.addStretch(1)
+        self.scene_descriptions_scroll.setWidget(self.scene_descriptions_widget)
+        scene_layout.addWidget(self.scene_descriptions_scroll)
+        self.apply_scene_descriptions_button = MPushButton(self.tr("Apply"))
+        self.apply_scene_descriptions_button.set_dayu_type(MPushButton.PrimaryType)
+        self.apply_scene_descriptions_button.clicked.connect(
+            self.apply_scene_descriptions
+        )
+        scene_layout.addWidget(
+            self.apply_scene_descriptions_button,
+            0,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+        left_layout.addWidget(self.scene_descriptions_group)
         left_layout.addStretch(1)
+        self._scene_description_edits = {}
 
         # Right
         right_layout = QtWidgets.QVBoxLayout()
@@ -105,6 +144,48 @@ class LlmsPage(QtWidgets.QWidget):
     def set_extra_context_unlimited(self, enabled: bool) -> None:
         self._extra_context_limit = None if enabled else self.DEFAULT_EXTRA_CONTEXT_LIMIT
         self._limit_extra_context()
+
+    def refresh_scene_descriptions(self) -> None:
+        """Rebuild per-page editors from the current project state."""
+        main = self.window()
+        while self.scene_descriptions_layout.count() > 1:
+            item = self.scene_descriptions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._scene_description_edits = {}
+        image_files = list(getattr(main, "image_files", [])) if main is not None else []
+        image_states = getattr(main, "image_states", {}) if main is not None else {}
+        for index, file_path in enumerate(image_files, 1):
+            row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QVBoxLayout(row)
+            row_layout.setContentsMargins(0, 4, 0, 4)
+            row_layout.addWidget(MLabel(f"Page {index} - {os.path.basename(file_path)}"))
+            edit = MTextEdit()
+            edit.setMinimumHeight(65)
+            edit.setPlainText(
+                image_states.get(file_path, {}).get("scene_description", "")
+            )
+            row_layout.addWidget(edit)
+            self.scene_descriptions_layout.insertWidget(
+                self.scene_descriptions_layout.count() - 1, row
+            )
+            self._scene_description_edits[file_path] = edit
+        self.scene_descriptions_group.setVisible(bool(image_files))
+
+    def apply_scene_descriptions(self) -> None:
+        main = self.window()
+        if main is None:
+            return
+        changed = False
+        for file_path, edit in self._scene_description_edits.items():
+            state = main.image_states.setdefault(file_path, {})
+            value = edit.toPlainText().strip()
+            if state.get("scene_description", "") != value:
+                state["scene_description"] = value
+                changed = True
+        if changed and hasattr(main, "mark_project_dirty"):
+            main.mark_project_dirty()
 
     def _limit_extra_context(self):
         max_length = self._extra_context_limit

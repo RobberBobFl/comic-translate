@@ -50,10 +50,27 @@ class TranslationHandler:
             upper_case = settings_page.ui.uppercase_checkbox.isChecked()
 
             translator = Translator(self.main_page, source_lang, target_lang)
+            current_path = None
+            if 0 <= self.main_page.curr_img_idx < len(self.main_page.image_files):
+                current_path = self.main_page.image_files[self.main_page.curr_img_idx]
+            state = self.main_page.image_states.get(current_path, {})
+            scene_description = ""
+            if (
+                llm_settings.get("use_scene_description", False)
+                and translator.is_llm_engine
+            ):
+                scene_description = state.get("scene_description", "") or ""
             
             # Get translation cache key
             translation_cache_key = self.cache_manager._get_translation_cache_key(
-                image, source_lang, target_lang, translator_key, extra_context, system_prompt, settings=settings_page
+                image,
+                source_lang,
+                target_lang,
+                translator_key,
+                extra_context,
+                system_prompt,
+                settings=settings_page,
+                scene_description=scene_description,
             )
             
             if single_block:
@@ -79,7 +96,12 @@ class TranslationHandler:
                     
                     # If we reach here, need to process the block
                     single_block_list = [blk]
-                    _, success = translator.translate(single_block_list, image, extra_context)
+                    _, success = translator.translate(
+                        single_block_list,
+                        image,
+                        extra_context,
+                        scene_description=scene_description,
+                    )
                     if not success:
                         raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     
@@ -99,7 +121,12 @@ class TranslationHandler:
                         all_blocks_copy.append(copy_blk)
                     
                     if all_blocks_copy:  
-                        _, success = translator.translate(all_blocks_copy, image, extra_context)
+                        _, success = translator.translate(
+                            all_blocks_copy,
+                            image,
+                            extra_context,
+                            scene_description=scene_description,
+                        )
                         if not success:
                             raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                         # Cache using the original blocks to maintain consistent IDs
@@ -117,7 +144,12 @@ class TranslationHandler:
                     logger.info(f"Using cached translation results for all {len(self.main_page.blk_list)} blocks")
                 else:
                     # Need to run translation and cache results
-                    _, success = translator.translate(self.main_page.blk_list, image, extra_context)
+                    _, success = translator.translate(
+                        self.main_page.blk_list,
+                        image,
+                        extra_context,
+                        scene_description=scene_description,
+                    )
                     if not success:
                         raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list)
@@ -157,11 +189,24 @@ class TranslationHandler:
         
         # Perform translation on the visible image with filtered blocks
         settings_page = self.main_page.settings_page
-        extra_context = settings_page.get_llm_settings()['extra_context']
+        llm_settings = settings_page.get_llm_settings()
+        extra_context = llm_settings['extra_context']
         upper_case = settings_page.ui.uppercase_checkbox.isChecked()
+        current_path = None
+        if 0 <= self.main_page.curr_img_idx < len(self.main_page.image_files):
+            current_path = self.main_page.image_files[self.main_page.curr_img_idx]
+        state = self.main_page.image_states.get(current_path, {})
         
         translator = Translator(self.main_page, source_lang, target_lang)
-        _, success = translator.translate(visible_blocks, visible_image, extra_context)
+        scene_description = ""
+        if llm_settings.get("use_scene_description", False) and translator.is_llm_engine:
+            scene_description = state.get("scene_description", "") or ""
+        _, success = translator.translate(
+            visible_blocks,
+            visible_image,
+            extra_context,
+            scene_description=scene_description,
+        )
         if not success:
             raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
         

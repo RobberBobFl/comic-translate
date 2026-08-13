@@ -236,6 +236,7 @@ class ComicTranslateUI(
     def show_settings_page(self):
         if not self.settings_page:
             self.settings_page = SettingsPage(self)
+        self.settings_page.ui.llms_page.refresh_scene_descriptions()
         self._finish_settings_resize_preview()
         self._center_stack.setCurrentWidget(self.settings_page)
         self._set_active_nav_button("settings")
@@ -247,6 +248,9 @@ class ComicTranslateUI(
             self._set_document_tools_visible(True)
             self._center_stack.setCurrentWidget(self.main_content_widget)
             self._set_active_nav_button("home")
+            update_visual = getattr(self, "update_visual_button_state", None)
+            if callable(update_visual):
+                update_visual()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)

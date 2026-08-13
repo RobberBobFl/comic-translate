@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any, Sequence
 
@@ -11,6 +12,7 @@ from modules.detection.processor import TextBlockDetector
 from modules.ocr.processor import OCRProcessor
 from modules.rendering.render import pyside_word_wrap, is_vertical_block, get_best_render_area
 from modules.translation.processor import Translator
+from modules.translation.scene_analyzer import SceneAnalyzer
 from modules.utils.common_utils import is_close
 from modules.utils.device import resolve_device
 from modules.utils.language_utils import get_language_code, is_no_space_lang
@@ -29,6 +31,9 @@ if TYPE_CHECKING:
     from app.ui.canvas.text_item import TextBlockItem
     from controller import ComicTranslate
     from modules.utils.textblock import TextBlock
+
+
+logger = logging.getLogger(__name__)
 
 
 class ManualWorkflowController:
@@ -382,6 +387,127 @@ class ManualWorkflowController:
                 lambda: self._on_ocr_finished(single_block, then_translate),
             )
 
+    def describe_scene(self) -> None:
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            current = self._current_file_path()
+            selected_paths = [current] if current else []
+        if not selected_paths:
+            return
+
+        previous_descriptions: dict[str, str] = {}
+
+        # Manual mode targets the current page and protects an existing/user-edited
+        # description. Semi-auto skips non-empty descriptions without prompting.
+        if not getattr(self.main, "semi_auto_mode", False):
+            current = self._current_file_path()
+            selected_paths = [current] if current else []
+            if not selected_paths:
+                return
+            if not is_there_text(self.main.blk_list):
+                QtWidgets.QMessageBox.information(
+                    self.main,
+                    self.main.tr("Scene Description"),
+                    self.main.tr(
+                        "Run Recognize first so the scene analyzer can read the "
+                        "page text."
+                    ),
+                )
+                return
+            existing = self.main.image_states.get(current, {}).get(
+                "scene_description", ""
+            ).strip()
+            if existing:
+                answer = QtWidgets.QMessageBox.question(
+                    self.main,
+                    self.main.tr("Replace Scene Description"),
+                    self.main.tr(
+                        "This page already has a scene description. Replace it?"
+                    ),
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No,
+                )
+                if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+                previous_descriptions[current] = existing
+        else:
+            selected_paths = [
+                path
+                for path in selected_paths
+                if not self.main.image_states.get(path, {}).get(
+                    "scene_description", ""
+                ).strip()
+            ]
+            if not selected_paths:
+                QtWidgets.QMessageBox.information(
+                    self.main,
+                    self.main.tr("Scene Description"),
+                    self.main.tr("All target pages already have scene descriptions."),
+                )
+                return
+
+        total = len(selected_paths)
+        self.main.loading.setVisible(True)
+        self.main.disable_hbutton_group()
+        analyzer = SceneAnalyzer.from_settings(self.main.settings_page)
+
+        def get_source_text(file_path: str) -> str:
+            if file_path == self._current_file_path():
+                blocks = self.main.blk_list
+            else:
+                blocks = self.main.image_states.get(file_path, {}).get(
+                    "blk_list", []
+                )
+            return SceneAnalyzer.format_source_blocks(blocks)
+
+        def analyze_pages() -> dict[str, str]:
+            results = {}
+            for file_path in selected_paths:
+                try:
+                    image = self._load_page_image(file_path)
+                    previous_description = previous_descriptions.get(file_path)
+                    description = analyzer.analyze(
+                        image,
+                        source_text=get_source_text(file_path),
+                        previous_description=previous_description,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Scene analysis failed while loading page %s", file_path
+                    )
+                    continue
+                if description:
+                    results[file_path] = description
+            return results
+
+        def on_ready(results: dict[str, str]) -> None:
+            for file_path, description in (results or {}).items():
+                self.main.image_states.setdefault(file_path, {})[
+                    "scene_description"
+                ] = description
+            succeeded = len(results or {})
+            failed = total - succeeded
+            if succeeded:
+                self.main.mark_project_dirty()
+            self.main.settings_page.ui.llms_page.refresh_scene_descriptions()
+            QtWidgets.QMessageBox.information(
+                self.main,
+                self.main.tr("Scene Description"),
+                self.main.tr("{done}/{total}, {failed} failed").format(
+                    done=succeeded,
+                    total=total,
+                    failed=failed,
+                ),
+            )
+
+        self.main.run_threaded(
+            analyze_pages,
+            on_ready,
+            self.main.default_error_handler,
+            self.main.on_manual_finished,
+        )
+
     def translate_image(self, single_block: bool = False) -> None:
         selected_paths = self._filter_skipped(self._selected_page_paths())
         if not selected_paths:
@@ -451,6 +577,12 @@ class ManualWorkflowController:
                         buffer_source = page_source
 
                     translator = Translator(self.main, source_lang, target_lang)
+                    scene_description = ""
+                    if (
+                        llm_settings.get("use_scene_description", False)
+                        and translator.is_llm_engine
+                    ):
+                        scene_description = state.get("scene_description", "") or ""
                     cache_key = cache_manager._get_translation_cache_key(
                         image,
                         source_lang,
@@ -458,6 +590,8 @@ class ManualWorkflowController:
                         translator_key,
                         extra_context,
                         system_prompt,
+                        settings=settings_page,
+                        scene_description=scene_description,
                     )
                     if cache_manager._can_serve_all_blocks_from_translation_cache(cache_key, blk_list):
                         cache_manager._apply_cached_translations_to_blocks(cache_key, blk_list)
@@ -469,6 +603,7 @@ class ManualWorkflowController:
                             extra_context,
                             context_blocks=context_blocks,
                             batch_size=batch_size,
+                            scene_description=scene_description,
                         )
                         if not success:
                             result_holder = [None]

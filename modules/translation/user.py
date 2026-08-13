@@ -86,6 +86,7 @@ class UserTranslator(TranslationEngine):
         extra_context: str = "",
         context_blocks: list = None,
         batch_size: int = None,
+        scene_description: str = None,
     ) -> tuple[List[TextBlock], bool]:
         """
         Sends the translation request to the web API.
@@ -155,6 +156,12 @@ class UserTranslator(TranslationEngine):
         if llm_options_payload is not None:
             request_payload["llm_options"] = llm_options_payload
             request_payload["extra_context"] = extra_context
+            if scene_description:
+                request_payload["extra_context"] = (
+                    f"{extra_context}\n\nSCENE CONTEXT:\n{scene_description}"
+                    if extra_context
+                    else f"SCENE CONTEXT:\n{scene_description}"
+                )
 
         # 6. Make the HTTP Request
         client_os = get_client_os()

@@ -223,7 +223,17 @@ class CacheManager:
             logger.debug(f"Available block IDs in cache: {list(cached_results.keys())}")
             return None  # Indicate block needs processing
 
-    def _get_translation_cache_key(self, image, source_lang, target_lang, translator_key, extra_context, system_prompt="", settings=None):
+    def _get_translation_cache_key(
+        self,
+        image,
+        source_lang,
+        target_lang,
+        translator_key,
+        extra_context,
+        system_prompt="",
+        settings=None,
+        scene_description="",
+    ):
         """Generate cache key for translation results.
 
         For the custom translator the model and endpoint are user-selected, so
@@ -235,6 +245,7 @@ class CacheManager:
         # Include extra_context in cache key since it affects translation results
         context_hash = hashlib.md5(extra_context.encode()).hexdigest() if extra_context else "no_context"
         prompt_hash = hashlib.md5(system_prompt.encode()).hexdigest() if system_prompt else "no_system_prompt"
+        scene_hash = hashlib.md5(scene_description.encode()).hexdigest() if scene_description else "no_scene"
         key = translator_key
         if settings is not None:
             internal = settings.ui.value_mappings.get(translator_key, translator_key)
@@ -246,7 +257,15 @@ class CacheManager:
                     key = f"Custom:{endpoint}:{model}"
                 except Exception:
                     pass
-        return (image_hash, key, source_lang, target_lang, context_hash, prompt_hash)
+        return (
+            image_hash,
+            key,
+            source_lang,
+            target_lang,
+            context_hash,
+            prompt_hash,
+            scene_hash,
+        )
 
     def _is_translation_cached(self, cache_key):
         """Check if translation results are cached for this image/translator/language combination"""

@@ -42,7 +42,10 @@ class Translator:
         )
         
         # Track engine type for method dispatching
-        self.is_llm_engine = isinstance(self.engine, LLMTranslation)
+        self.is_llm_engine = (
+            isinstance(self.engine, LLMTranslation)
+            or bool(getattr(self.engine, "is_llm", False))
+        )
     
     def _get_translator_key(self, localized_translator: str) -> str:
         """
@@ -89,6 +92,7 @@ class Translator:
         extra_context: str = "",
         context_blocks: list = None,
         batch_size: int = None,
+        scene_description: str = None,
     ) -> tuple[list[TextBlock], bool]:
         """
         Translate text in text blocks using the configured translation engine.
@@ -109,6 +113,7 @@ class Translator:
             return self.engine.translate(
                 blk_list, image, extra_context,
                 context_blocks=context_blocks, batch_size=batch_size,
+                scene_description=scene_description,
             )
         else:
             # Text-based translators only need the text blocks

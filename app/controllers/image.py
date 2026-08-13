@@ -85,6 +85,7 @@ class ImageStateController:
             "brush_strokes": brush_strokes,
             "blk_list": blk_list,
             "skip": skip_status,
+            "scene_description": str(state.get("scene_description", "") or ""),
             "paint_overlay": paint_overlay,
             "export_group_name": str(
                 state.get("export_group_name") or self._default_export_group_name(file_path)
@@ -422,6 +423,7 @@ class ImageStateController:
         self.main.loaded_images.append(self.main.image_files[0])
         self.main.image_viewer.resetTransform()
         self.main.image_viewer.fitInView()
+        self.main.update_visual_button_state()
         self.main.mark_project_dirty()
         unique_warnings = list(dict.fromkeys(warnings))
         if unique_warnings:
@@ -534,6 +536,7 @@ class ImageStateController:
 
         self.main.image_viewer.resetTransform()
         self.main.image_viewer.fitInView()
+        self.main.update_visual_button_state()
         if self.main.image_files:
             self.main.mark_project_dirty()
 
@@ -967,9 +970,8 @@ class ImageStateController:
             self.main.loaded_images.append(file_path)
             if len(self.main.loaded_images) > self.main.max_images_in_memory:
                 oldest_image = self.main.loaded_images.pop(0)
-                del self.main.image_data[oldest_image]
-                self.main.in_memory_history[oldest_image] = []
-
+                self.main.image_data.pop(oldest_image, None)
+                self.main.in_memory_history.pop(oldest_image, None)
                 self.main.in_memory_patches.pop(oldest_image, None)
 
     def set_image(self, rgb_img: np.ndarray, push: bool = True):

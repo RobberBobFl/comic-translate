@@ -11,6 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from app.ui.messages import Messages
 from modules.detection.processor import TextBlockDetector
 from modules.translation.processor import Translator
+from modules.translation.scene_analyzer import SceneAnalyzer
 from modules.utils.device import resolve_device
 from modules.utils.exceptions import InsufficientCreditsException
 from modules.utils.image_utils import generate_mask
@@ -148,9 +149,29 @@ class ChunkMixin:
         if not blocks:
             return
         extra_context = self.main_page.settings_page.get_llm_settings()["extra_context"]
+        llm_settings = self.main_page.settings_page.get_llm_settings()
         translator = Translator(self.main_page, source_lang, target_lang)
+        scene_description = ""
+        state = self.main_page.image_states.get(image_path, {})
+        if llm_settings.get("use_scene_description", False) and translator.is_llm_engine:
+            scene_description = state.get("scene_description", "") or ""
+            if not scene_description:
+                scene_description = (
+                    SceneAnalyzer.from_settings(self.main_page.settings_page).analyze(
+                        image,
+                        source_text=SceneAnalyzer.format_source_blocks(blocks),
+                    )
+                    or ""
+                )
+                if scene_description:
+                    state["scene_description"] = scene_description
         try:
-            translator.translate(blocks, image, extra_context)
+            translator.translate(
+                blocks,
+                image,
+                extra_context,
+                scene_description=scene_description,
+            )
         except InsufficientCreditsException:
             raise
         except Exception as error:

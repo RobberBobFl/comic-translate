@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor
 
 from modules.detection.processor import TextBlockDetector
 from modules.translation.processor import Translator
+from modules.translation.scene_analyzer import SceneAnalyzer
 from modules.utils.textblock import sort_blk_list
 from modules.utils.pipeline_config import get_config
 from modules.utils.image_utils import generate_mask, get_smart_text_color
@@ -224,13 +225,34 @@ class BatchProcessor:
             system_prompt = llm_settings.get('system_prompt', '')
             translator_key = settings_page.get_tool_selection('translator')
             translator = Translator(self.main_page, source_lang, target_lang)
+            use_scene_description = bool(llm_settings.get("use_scene_description", False))
+            scene_description = ""
+            if use_scene_description and translator.is_llm_engine:
+                scene_description = state.get("scene_description", "") or ""
+                if not scene_description:
+                    scene_description = (
+                        SceneAnalyzer.from_settings(settings_page).analyze(
+                            image,
+                            source_text=SceneAnalyzer.format_source_blocks(blk_list),
+                        )
+                        or ""
+                    )
+                    if scene_description:
+                        state["scene_description"] = scene_description
             
             batch_size = llm_settings.get('batch_size', 5)
             context_window = llm_settings.get('context_window', 8)
             
             # Get translation cache key for batch processing
             translation_cache_key = self.cache_manager._get_translation_cache_key(
-                image, source_lang, target_lang, translator_key, extra_context, system_prompt, settings=settings_page
+                image,
+                source_lang,
+                target_lang,
+                translator_key,
+                extra_context,
+                system_prompt,
+                settings=settings_page,
+                scene_description=scene_description,
             )
             
             try:
@@ -244,6 +266,7 @@ class BatchProcessor:
                     _, success = translator.translate(
                         blk_list, image, extra_context,
                         context_blocks=context_blocks, batch_size=batch_size,
+                        scene_description=scene_description,
                     )
                     if not success:
                         err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
