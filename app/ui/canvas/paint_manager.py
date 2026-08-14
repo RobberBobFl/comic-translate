@@ -75,6 +75,8 @@ class PaintManager:
     def end_stroke(self):
         if not self.painting:
             return
+        # Reset the live stroke state first so the stroke can never "stick"
+        # even if the snapshot/undo emission below raises.
         self.painting = False
         after = self.viewer.get_paint_overlay()
         before = self._before

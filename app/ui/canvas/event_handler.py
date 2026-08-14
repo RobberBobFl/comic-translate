@@ -32,6 +32,11 @@ class EventHandler:
                 if self.viewer.current_tool == 'eyedropper':
                     self.viewer.sample_color_at(scene_pos)
                 else:
+                    # If a previous paint stroke never ended (e.g. release was
+                    # swallowed by an item interaction), flush it so it lands in
+                    # the undo stack instead of being silently dropped.
+                    if self.viewer.paint_manager.painting:
+                        self.viewer.paint_manager.end_stroke()
                     self.viewer.paint_manager.start_stroke(
                         scene_pos, erase=(self.viewer.current_tool == 'paint_eraser')
                     )
@@ -119,7 +124,10 @@ class EventHandler:
         scene_pos = self.viewer.mapToScene(event.position().toPoint())
 
         # Retouch painting takes precedence over item dragging.
-        if self.viewer.current_tool in ('paint', 'paint_eraser') and self.viewer.paint_manager.painting and self._is_on_image(scene_pos):
+        # Guard with buttons() so a stuck `painting` flag cannot draw without an active left button.
+        if self.viewer.current_tool in ('paint', 'paint_eraser') and \
+                self.viewer.paint_manager.painting and \
+                event.buttons() == Qt.LeftButton and self._is_on_image(scene_pos):
             self.viewer.paint_manager.continue_stroke(scene_pos)
             self.last_scene_pos = scene_pos
             return
@@ -150,9 +158,19 @@ class EventHandler:
         self.last_scene_pos = scene_pos
 
     def handle_mouse_release(self, event: QtGui.QMouseEvent):
-        interaction_finished = False # Flag to track if we handled the event
+        interaction_finished = False  # Flag to track if we handled the event.
 
         if event.button() == Qt.LeftButton:
+            # Finalize any retouch/stroke tool *before* delegating to the base
+            # QGraphicsView, so the stroke flag is always reset on release and
+            # the command lands on the undo stack exactly once.
+            if self.viewer.current_tool in ('paint', 'paint_eraser') and \
+                    self.viewer.paint_manager.painting:
+                self.viewer.paint_manager.end_stroke()
+            if self.viewer.current_tool in ['brush', 'eraser'] and \
+                    self.viewer.drawing_manager.current_path is not None:
+                self.viewer.drawing_manager.end_stroke()
+
             interaction_finished = self._release_handle_item_interaction()
 
             # If a custom drag, resize, or rotate was just finished, stop the event here
@@ -170,22 +188,15 @@ class EventHandler:
                         sel_item.last_selection = current_selection
                     except Exception:
                         pass
-                return 
+                return
 
         # Let QGraphicsView handle its release events (e.g., for ScrollHandDrag)
         QtWidgets.QGraphicsView.mouseReleaseEvent(self.viewer, event)
 
-        if self.viewer.current_tool in ('paint', 'paint_eraser') and self.viewer.paint_manager.painting:
-            self.viewer.paint_manager.end_stroke()
-            return
-
         if event.button() == Qt.MiddleButton:
             self._release_handle_pan()
             return
-        
-        if self.viewer.current_tool in ['brush', 'eraser']:
-            self.viewer.drawing_manager.end_stroke()
-            
+
         if self.viewer.current_tool in ('box', 'manual_text'):
             self._release_handle_box_creation()
 
