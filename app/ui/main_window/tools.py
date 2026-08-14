@@ -61,6 +61,12 @@ class ToolStateMixin:
         else:
             self.set_tool(None)
 
+    def toggle_paint_fill_rect_tool(self):
+        if self.paint_fill_rect_button.isChecked():
+            self.set_tool("paint_fill_rect")
+        else:
+            self.set_tool(None)
+
     def set_paint_slider_size(self, size: int):
         self.paint_slider.blockSignals(True)
         self.paint_slider.setValue(size)

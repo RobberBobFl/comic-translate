@@ -42,6 +42,14 @@ class EventHandler:
                     )
             return
 
+        # RectFill tool: drag-to-fill rectangle.
+        if self.viewer.current_tool == 'paint_fill_rect' and event.button() == Qt.LeftButton:
+            if self.viewer.hasPhoto() and self._is_on_image(scene_pos):
+                if self.viewer.paint_manager.painting:
+                    self.viewer.paint_manager.end_rectfill()
+                self.viewer.paint_manager.start_rectfill(scene_pos)
+            return
+
         if isinstance(clicked_item, (TextBlockItem, MoveableRectItem)):
             if isinstance(clicked_item, TextBlockItem):
                 if ctrl_pressed and not clicked_item.editing_mode:
@@ -132,6 +140,13 @@ class EventHandler:
             self.last_scene_pos = scene_pos
             return
 
+        # RectFill preview update during drag.
+        if self.viewer.current_tool == 'paint_fill_rect' and \
+                self.viewer.paint_manager.painting and \
+                event.buttons() == Qt.LeftButton:
+            self.viewer.paint_manager.continue_rectfill(scene_pos)
+            return
+
         # Explicitly handle dragging our items first
         if self._move_handle_drag(event, scene_pos):
             self.last_scene_pos = scene_pos
@@ -167,6 +182,9 @@ class EventHandler:
             if self.viewer.current_tool in ('paint', 'paint_eraser') and \
                     self.viewer.paint_manager.painting:
                 self.viewer.paint_manager.end_stroke()
+            if self.viewer.current_tool == 'paint_fill_rect' and \
+                    self.viewer.paint_manager.painting:
+                self.viewer.paint_manager.end_rectfill()
             if self.viewer.current_tool in ['brush', 'eraser'] and \
                     self.viewer.drawing_manager.current_path is not None:
                 self.viewer.drawing_manager.end_stroke()

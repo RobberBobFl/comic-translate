@@ -375,6 +375,11 @@ class WorkspaceMixin:
         self.paint_eraser_button.clicked.connect(self.toggle_paint_eraser_tool)
         self.tool_buttons["paint_eraser"] = self.paint_eraser_button
 
+        self.paint_fill_rect_button = self.create_tool_button(svg="rect_fill.svg", checkable=True)
+        self.paint_fill_rect_button.setToolTip(self.tr("Fill a rectangular area with the sampled color"))
+        self.paint_fill_rect_button.clicked.connect(self.toggle_paint_fill_rect_tool)
+        self.tool_buttons["paint_fill_rect"] = self.paint_fill_rect_button
+
         self.paint_color_swatch = QtWidgets.QLabel()
         self.paint_color_swatch.setFixedSize(22, 22)
         self.paint_color_swatch.setStyleSheet(
@@ -385,6 +390,7 @@ class WorkspaceMixin:
         retouch_tools_lay.addWidget(self.eyedropper_button)
         retouch_tools_lay.addWidget(self.paint_button)
         retouch_tools_lay.addWidget(self.paint_eraser_button)
+        retouch_tools_lay.addWidget(self.paint_fill_rect_button)
         retouch_tools_lay.addWidget(self.paint_color_swatch)
         retouch_tools_lay.addStretch()
         tools_layout.addLayout(retouch_tools_lay)
@@ -499,9 +505,10 @@ class WorkspaceMixin:
         )
         disable_retouch = checked and not stitch_enabled
         enabled = not disable_retouch
-        for btn in (self.eyedropper_button, self.paint_button, self.paint_eraser_button):
+        for btn in (self.eyedropper_button, self.paint_button, self.paint_eraser_button,
+                    self.paint_fill_rect_button):
             btn.setEnabled(enabled)
         self.paint_slider.setEnabled(enabled)
         self.paint_color_swatch.setEnabled(enabled)
-        if disable_retouch and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser'):
+        if disable_retouch and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser', 'paint_fill_rect'):
             self.set_tool(None)

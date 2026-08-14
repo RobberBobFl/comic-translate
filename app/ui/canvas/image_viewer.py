@@ -177,7 +177,7 @@ class ImageViewer(QGraphicsView):
         elif tool == 'eyedropper':
             self.setDragMode(QGraphicsView.NoDrag)
             self.setCursor(self._eyedropper_cursor)
-        elif tool == 'manual_text':
+        elif tool in ('manual_text', 'paint_fill_rect'):
             self.setDragMode(QGraphicsView.NoDrag)
             self.setCursor(Qt.CursorShape.CrossCursor)
         else:
@@ -472,6 +472,29 @@ class ImageViewer(QGraphicsView):
             pen = QtGui.QPen(c, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         painter.setPen(pen)
         painter.drawLine(QtCore.QPointF(x0, y0), QtCore.QPointF(x1, y1))
+        painter.end()
+        if self.paint_layer is not None:
+            self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
+
+    def fill_rect_on_overlay(self, bbox, color, erase: bool = False):
+        if self.paint_overlay is None or self.paint_qimage is None:
+            return
+        h, w = self.paint_overlay.shape[:2]
+        x = max(0, int(round(bbox.x())))
+        y = max(0, int(round(bbox.y())))
+        x2 = min(w, int(round(bbox.x() + bbox.width())))
+        y2 = min(h, int(round(bbox.y() + bbox.height())))
+        if x2 <= x or y2 <= y:
+            return
+        painter = QtGui.QPainter(self.paint_qimage)
+        if erase:
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Clear)
+            painter.fillRect(x, y, x2 - x, y2 - y, QtGui.QColor(0, 0, 0, 0))
+        else:
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Source)
+            c = QtGui.QColor(color)
+            c.setAlpha(255)
+            painter.fillRect(x, y, x2 - x, y2 - y, c)
         painter.end()
         if self.paint_layer is not None:
             self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))

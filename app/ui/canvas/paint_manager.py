@@ -10,7 +10,7 @@ QImage); this manager only tracks color/size, stroke state and undo.
 """
 
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QColor, QPen, QPainter, QCursor, QPixmap
 
 import numpy as np
@@ -35,6 +35,8 @@ class PaintManager:
         self._last_pos = None
         self._cursor_scaled_size = 25
         self.paint_cursor = self._make_cursor(self._cursor_scaled_size, self.paint_color)
+        self._rect_origin = None
+        self._rect_item = None
 
     # ------------------------------------------------------------------ cursor
     def _make_cursor(self, size, color):
@@ -86,4 +88,42 @@ class PaintManager:
             return
         from app.ui.commands.paint import PaintCommand
 
+        self.viewer.command_emitted.emit(PaintCommand(self.viewer, before, after))
+
+    # -------------------------------------------------------------- rect fill
+    def start_rectfill(self, scene_pos: QPointF):
+        self._before = self.viewer.get_paint_overlay()
+        self.painting = True
+        self._rect_origin = scene_pos
+        self._last_pos = scene_pos
+        self._rect_item = QtWidgets.QGraphicsRectItem(QRectF(scene_pos, scene_pos))
+        self._rect_item.setPen(QPen(QColor(255, 255, 255, 180), 1, Qt.DashLine))
+        self._rect_item.setBrush(Qt.NoBrush)
+        self._rect_item.setZValue(0.7)
+        self.viewer._scene.addItem(self._rect_item)
+
+    def continue_rectfill(self, scene_pos: QPointF):
+        if not self.painting or self._rect_item is None:
+            return
+        self._last_pos = scene_pos
+        self._rect_item.setRect(QRectF(self._rect_origin, scene_pos).normalized())
+
+    def end_rectfill(self):
+        if not self.painting:
+            return
+        self.painting = False
+        if self._rect_item is not None:
+            self.viewer._scene.removeItem(self._rect_item)
+            self._rect_item = None
+        if self._rect_origin is not None and self._last_pos is not None:
+            bbox = QRectF(self._rect_origin, self._last_pos).normalized()
+            self.viewer.fill_rect_on_overlay(bbox, self.paint_color)
+        self._rect_origin = None
+        self._last_pos = None
+        after = self.viewer.get_paint_overlay()
+        before = self._before
+        self._before = None
+        if _same_overlay(before, after):
+            return
+        from app.ui.commands.paint import PaintCommand
         self.viewer.command_emitted.emit(PaintCommand(self.viewer, before, after))
