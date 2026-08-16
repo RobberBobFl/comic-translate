@@ -189,6 +189,7 @@ class TextBlockItem(QGraphicsTextItem):
             self.setHtml(text)
             self.setTextWidth(width)
             self.set_outline(self.outline_color, self.outline_width)
+            self.apply_all_attributes()
         else:
             self.set_plain_text(text)
 

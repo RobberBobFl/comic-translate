@@ -575,7 +575,8 @@ class ImageViewer(QGraphicsView):
         if getattr(properties, "v_margin", 0) and not getattr(properties, "vertical", False):
             _doc = item.document()
             _cursor = QtGui.QTextCursor(_doc)
-            _cursor.select(QtGui.QTextCursor.SelectionType.Document)
+            _cursor.movePosition(QtGui.QTextCursor.MoveOperation.Start)
+            _cursor.select(QtGui.QTextCursor.SelectionType.BlockUnderCursor)
             _bf = QtGui.QTextBlockFormat()
             _bf.setTopMargin(properties.v_margin)
             _bf.setAlignment(properties.alignment)

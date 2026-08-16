@@ -65,6 +65,15 @@ class ImageSaveRenderer:
             text_item.setScale(text_props.scale)
             text_item.set_vertical(bool(text_props.vertical))
             text_item.set_color(text_props.text_color)
+            if text_props.v_margin and not text_props.vertical:
+                _doc = text_item.document()
+                _cursor = QtGui.QTextCursor(_doc)
+                _cursor.movePosition(QtGui.QTextCursor.MoveOperation.Start)
+                _cursor.select(QtGui.QTextCursor.SelectionType.BlockUnderCursor)
+                _bf = QtGui.QTextBlockFormat()
+                _bf.setTopMargin(text_props.v_margin)
+                _bf.setAlignment(text_props.alignment)
+                _cursor.mergeBlockFormat(_bf)
             text_item.selection_outlines = text_props.selection_outlines.copy()
             text_item.update()
 

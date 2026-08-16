@@ -172,7 +172,8 @@ class TextController:
             top = max(0.0, (bh - text_height) / 2.0)
             if top > 0:
                 _cursor = QTextCursor(text_item.document())
-                _cursor.select(QTextCursor.SelectionType.Document)
+                _cursor.movePosition(QTextCursor.MoveOperation.Start)
+                _cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
                 _bf = QTextBlockFormat()
                 _bf.setTopMargin(top)
                 _bf.setAlignment(alignment)
