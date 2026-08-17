@@ -471,6 +471,7 @@ class ManualWorkflowController:
                         image,
                         source_text=get_source_text(file_path),
                         previous_description=previous_description,
+                        is_webtoon=self.main.webtoon_mode,
                     )
                 except Exception:
                     logger.exception(

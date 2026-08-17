@@ -51,6 +51,7 @@ class ComicTranslate(ComicTranslateUI):
     image_skipped = QtCore.Signal(str, str, str)
     blk_rendered = QtCore.Signal(str, int, object, str)
     render_state_ready = QtCore.Signal(str)
+    batch_report_ready = QtCore.Signal(str)  # report text
     download_event = QtCore.Signal(str, str)  # status, name
 
     def __init__(self, parent=None):
@@ -138,6 +139,7 @@ class ComicTranslate(ComicTranslateUI):
         self.blk_rendered.connect(self.text_ctrl.on_blk_rendered)
         self.render_state_ready.connect(self.image_ctrl.on_render_state_ready)
         self.render_state_ready.connect(self.project_ctrl._on_batch_page_done)
+        self.batch_report_ready.connect(self._on_batch_report)
         self.download_event.connect(self.on_download_event)
 
         self.connect_ui_elements()
@@ -900,6 +902,11 @@ class ComicTranslate(ComicTranslateUI):
             return
         self.progress_bar.setFormat(f"{label} %p%")
         self.progress_bar.setValue(int(round(current / total * 100)))
+
+    def _on_batch_report(self, report_text: str):
+        """Show batch processing report in a dialog."""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(self, self.tr("Batch Report"), report_text)
 
     def on_download_event(self, status: str, name: str):
         """Show a loading-type MMessage while models/files are being downloaded."""

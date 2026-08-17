@@ -89,6 +89,7 @@ class BatchProcessor:
         timestamp = datetime.now().strftime("%b-%d-%Y_%I-%M-%S%p")
         image_list = selected_paths if selected_paths is not None else self.main_page.image_files
         total_images = len(image_list)
+        batch_report = []
         try:
             if self.main_page.file_handler.should_pre_materialize(image_list):
                 count = self.main_page.file_handler.pre_materialize(image_list)
@@ -174,6 +175,19 @@ class BatchProcessor:
                 self.ocr_handler.ocr.initialize(self.main_page, source_lang)
                 try:
                     self.ocr_handler.ocr.process(image, blk_list)
+
+                    # Retry empty OCR bubbles with backoff
+                    empty_ocr = [blk for blk in blk_list if not (blk.text or "").strip()]
+                    for retry_attempt in range(2):
+                        if not empty_ocr:
+                            break
+                        wait = 1.5 * (retry_attempt + 1)
+                        logger.info("OCR retry %d: %d empty blocks on '%s', waiting %.1fs...",
+                                    retry_attempt + 1, len(empty_ocr), base_name, wait)
+                        time.sleep(wait)
+                        self.ocr_handler.ocr.process(image, empty_ocr)
+                        empty_ocr = [blk for blk in empty_ocr if not (blk.text or "").strip()]
+
                     # Cache the OCR results for potential future use
                     self.cache_manager._cache_ocr_results(cache_key, self.main_page.blk_list)
                     rtl = True if source_lang == 'Japanese' else False
@@ -272,9 +286,37 @@ class BatchProcessor:
                         err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
                         if self.progress_callback:
                             self.progress_callback(error=err_msg)
+                        empty_tr_blocks = [
+                            (list(blk.xyxy), getattr(blk, 'translation', ''))
+                            for blk in blk_list
+                            if not (blk.translation or "").strip()
+                        ]
+                        batch_report.append({
+                            "page": os.path.basename(image_path),
+                            "page_index": index,
+                            "total_blocks": len(blk_list),
+                            "empty_ocr": [],
+                            "empty_translation": empty_tr_blocks,
+                        })
                         continue
                     # Cache the translation results for potential future use
                     self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
+
+                    # Retry empty translations with backoff
+                    empty_tr = [blk for blk in blk_list if not (blk.translation or "").strip()]
+                    for retry_attempt in range(2):
+                        if not empty_tr:
+                            break
+                        wait = 1.5 * (retry_attempt + 1)
+                        logger.info("Translation retry %d: %d empty blocks on '%s', waiting %.1fs...",
+                                    retry_attempt + 1, len(empty_tr), base_name, wait)
+                        time.sleep(wait)
+                        translator.translate(
+                            empty_tr, image, extra_context,
+                            context_blocks=None, batch_size=batch_size,
+                            scene_description=scene_description,
+                        )
+                        empty_tr = [blk for blk in empty_tr if not (blk.translation or "").strip()]
 
                 if context_window:
                     sliding_buffer.extend(get_context_entries(blk_list))
@@ -519,4 +561,74 @@ class BatchProcessor:
                 self.main_page.blk_list = blk_list
 
             self.emit_progress(index, total_images, 10, 10, False)
+
+            # Collect batch report data
+            empty_ocr_blocks = [
+                (list(blk.xyxy), getattr(blk, 'text', ''))
+                for blk in blk_list
+                if not (blk.text or "").strip()
+            ]
+            empty_tr_blocks = [
+                (list(blk.xyxy), getattr(blk, 'translation', ''))
+                for blk in blk_list
+                if not (blk.translation or "").strip()
+            ]
+            batch_report.append({
+                "page": os.path.basename(image_path),
+                "page_index": index,
+                "total_blocks": len(blk_list),
+                "empty_ocr": empty_ocr_blocks,
+                "empty_translation": empty_tr_blocks,
+            })
+
+        # Final batch report
+        self._log_batch_report(batch_report)
+
+    def _log_batch_report(self, batch_report: list):
+        """Log a summary report of empty OCR/translation blocks across all pages."""
+        if not batch_report:
+            return
+
+        issues = [p for p in batch_report if p["empty_ocr"] or p["empty_translation"]]
+        total_empty_ocr = sum(len(p["empty_ocr"]) for p in batch_report)
+        total_empty_tr = sum(len(p["empty_translation"]) for p in batch_report)
+
+        lines = []
+        lines.append("=" * 60)
+        lines.append(f"BATCH REPORT: {len(batch_report)} pages processed")
+        lines.append("=" * 60)
+
+        if not issues:
+            lines.append("✓ All pages OK — no empty OCR or translations")
+        else:
+            ok_count = len(batch_report) - len(issues)
+            lines.append(f"✓ {ok_count} pages fully OK")
+            lines.append(f"⚠ {len(issues)} page(s) with issues:\n")
+            for p in issues:
+                page_name = p["page"]
+                total = p["total_blocks"]
+                e_ocr = len(p["empty_ocr"])
+                e_tr = len(p["empty_translation"])
+                lines.append(f"  {page_name} ({total} blocks)")
+                if e_ocr:
+                    lines.append(f"    OCR empty: {e_ocr} block(s)")
+                    for coords, _ in p["empty_ocr"]:
+                        lines.append(f"      → {coords}")
+                if e_tr:
+                    lines.append(f"    Translation empty: {e_tr} block(s)")
+                    for coords, _ in p["empty_translation"]:
+                        lines.append(f"      → {coords}")
+                lines.append("")
+
+        lines.append(f"TOTAL: {total_empty_ocr} empty OCR, {total_empty_tr} empty translation across {len(batch_report)} pages")
+        lines.append("=" * 60)
+
+        report_text = "\n".join(lines)
+        logger.warning(report_text)
+
+        # Emit signal for UI dialog
+        try:
+            self.main_page.batch_report_ready.emit(report_text)
+        except Exception as e:
+            logger.error("Failed to emit batch_report_ready signal: %s", e)
 

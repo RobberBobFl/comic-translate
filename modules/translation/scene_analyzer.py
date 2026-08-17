@@ -18,7 +18,8 @@ class SceneAnalyzer:
     DEFAULT_API_URL = "http://localhost:11434/v1"
     MAX_COMPLETION_TOKENS = 1500
     MAX_CONTEXT_WORDS = 150
-    MAX_IMAGE_SIDE = 896
+    MAX_PAGE_SIDE = 650
+    WEBTOON_MAX_WIDTH = 300
     CONNECT_TIMEOUT_SECONDS = 10
     READ_TIMEOUT_SECONDS = 300
     SYSTEM_PROMPT = """You help translate a comic page. The OCR already gives the words; you add visual context.
@@ -53,16 +54,24 @@ Example:
         )
 
     @classmethod
-    def _prepare_image(cls, image: np.ndarray) -> np.ndarray:
-        """Downscale large pages to reduce vision prompt processing time."""
-        height, width = image.shape[:2]
-        longest_side = max(height, width)
-        if longest_side <= cls.MAX_IMAGE_SIDE:
-            return image
+    def _prepare_image(cls, image: np.ndarray, is_webtoon: bool = False) -> np.ndarray:
+        """Downscale before sending to the VLM for scene description.
 
+        Ordinary pages are capped on their longest side. Webtoon strips are
+        capped only on width so their (very large) height is preserved.
+        """
         import imkit as imk
 
-        scale = cls.MAX_IMAGE_SIDE / longest_side
+        height, width = image.shape[:2]
+        if is_webtoon:
+            if width <= cls.WEBTOON_MAX_WIDTH:
+                return image
+            scale = cls.WEBTOON_MAX_WIDTH / width
+        else:
+            longest_side = max(height, width)
+            if longest_side <= cls.MAX_PAGE_SIDE:
+                return image
+            scale = cls.MAX_PAGE_SIDE / longest_side
         resized_width = max(1, int(round(width * scale)))
         resized_height = max(1, int(round(height * scale)))
         return imk.resize(image, (resized_width, resized_height))
@@ -217,6 +226,7 @@ Example:
         image: np.ndarray,
         source_text: str = "",
         previous_description: str | None = None,
+        is_webtoon: bool = False,
     ) -> str | None:
         if image is None:
             logger.warning("Scene analysis skipped: no page image available.")
@@ -245,7 +255,7 @@ Example:
                 f"{source_text.strip()}"
             )
 
-            prepared_image = self._prepare_image(image)
+            prepared_image = self._prepare_image(image, is_webtoon)
             prepared_shape = getattr(prepared_image, "shape", None)
             encoded_image = self._encode_image(prepared_image)
 

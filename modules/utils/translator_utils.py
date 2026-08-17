@@ -90,13 +90,14 @@ def _extract_json_value(text: str):
 
 
 def _parse_lenient(json_text: str):
-    """Fallback tolerant parse: accept trailing commas / // line comments."""
+    """Fallback tolerant parse: accept trailing commas / // line comments / missing commas."""
     try:
         return json.loads(json_text)
     except json.JSONDecodeError:
         pass
     cleaned = re.sub(r"//[^\n]*", "", json_text)
     cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    cleaned = re.sub(r'"\s+"(block_\d+)', r'", "\1', cleaned)
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:

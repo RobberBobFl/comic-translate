@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
@@ -667,6 +668,75 @@ class FlowMixin:
                 cached_current = next_record
 
             logger.info("Seam-aware virtual streaming webtoon batch processing completed.")
+
+            # Webtoon batch report
+            batch_report = []
+            for page_info in physical_pages:
+                if page_info.get("skip", False):
+                    continue
+                page_path = page_info["path"]
+                blocks = page_accum.get(page_path, {}).get("blocks", [])
+                empty_ocr = [
+                    (list(blk.xyxy), getattr(blk, 'text', ''))
+                    for blk in blocks
+                    if not (blk.text or "").strip()
+                ]
+                empty_tr = [
+                    (list(blk.xyxy), getattr(blk, 'translation', ''))
+                    for blk in blocks
+                    if not (blk.translation or "").strip()
+                ]
+                if empty_ocr or empty_tr:
+                    batch_report.append({
+                        "page": os.path.basename(page_path),
+                        "page_index": page_info["selected_index"],
+                        "total_blocks": len(blocks),
+                        "empty_ocr": empty_ocr,
+                        "empty_translation": empty_tr,
+                    })
+
+            if batch_report:
+                self._log_webtoon_batch_report(batch_report)
         except Exception:
             logger.exception("Webtoon batch processing failed.")
             raise
+
+    def _log_webtoon_batch_report(self, batch_report: list):
+        """Log a summary report of empty OCR/translation blocks for webtoon batch."""
+        if not batch_report:
+            return
+
+        total_empty_ocr = sum(len(p["empty_ocr"]) for p in batch_report)
+        total_empty_tr = sum(len(p["empty_translation"]) for p in batch_report)
+
+        lines = []
+        lines.append("=" * 60)
+        lines.append(f"WEBTOON BATCH REPORT: {len(batch_report)} page(s) with issues")
+        lines.append("=" * 60)
+
+        for p in batch_report:
+            page_name = p["page"]
+            total = p["total_blocks"]
+            e_ocr = len(p["empty_ocr"])
+            e_tr = len(p["empty_translation"])
+            lines.append(f"  {page_name} ({total} blocks)")
+            if e_ocr:
+                lines.append(f"    OCR empty: {e_ocr} block(s)")
+                for coords, _ in p["empty_ocr"]:
+                    lines.append(f"      -> {coords}")
+            if e_tr:
+                lines.append(f"    Translation empty: {e_tr} block(s)")
+                for coords, _ in p["empty_translation"]:
+                    lines.append(f"      -> {coords}")
+            lines.append("")
+
+        lines.append(f"TOTAL: {total_empty_ocr} empty OCR, {total_empty_tr} empty translation")
+        lines.append("=" * 60)
+
+        report_text = "\n".join(lines)
+        logger.warning(report_text)
+
+        try:
+            self.main_page.batch_report_ready.emit(report_text)
+        except Exception as e:
+            logger.error("Failed to emit batch_report_ready signal: %s", e)

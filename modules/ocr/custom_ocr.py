@@ -1,3 +1,6 @@
+import logging
+import time
+
 import numpy as np
 import requests
 import json
@@ -5,6 +8,12 @@ import json
 from .base import OCREngine
 from ..translation.reasoning import get_reasoning_off_params, is_ollama_endpoint
 from ..utils.textblock import TextBlock, adjust_text_line_coordinates
+
+logger = logging.getLogger(__name__)
+
+# Retry config for transient server errors (rate limits, OOM, etc.)
+_MAX_RETRIES = 3
+_RETRY_BACKOFF = [1.0, 2.0, 4.0]  # seconds between attempts
 
 
 class CustomOCR(OCREngine):
@@ -83,7 +92,12 @@ class CustomOCR(OCREngine):
         return blk_list
 
     def _get_ocr(self, base64_image: str) -> str:
-        """Get OCR result from the custom vision model via REST API call."""
+        """Get OCR result from the custom vision model via REST API call.
+
+        Retries up to ``_MAX_RETRIES`` times with exponential back-off on
+        transient errors (connection failures, server 4xx/5xx) so that a
+        single hiccup does not silently drop a bubble.
+        """
         if not self.model:
             raise ValueError("Model not initialized. Call initialize() first.")
 
@@ -119,34 +133,48 @@ class CustomOCR(OCREngine):
             )
         )
 
-        try:
-            response = requests.post(
-                self.api_base_url,
-                headers=headers,
-                data=json.dumps(payload),
-                timeout=60,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Custom OCR API request failed: {str(e)}"
-            detail = ""
-            if hasattr(e, "response") and e.response is not None:
-                try:
-                    error_details = e.response.json()
-                    detail = json.dumps(error_details)
-                    error_msg += f" - {detail}"
-                except Exception:
-                    error_msg += f" - Status code: {e.response.status_code}"
-            lowered = (str(e) + detail).lower()
-            if "multimodal" in lowered or "does not support" in lowered or "invalid_request_error" in lowered:
-                error_msg += (
-                    "\nHint: the selected model likely does not support image (vision) "
-                    "input. Choose a vision-capable model (e.g. llama3.2-vision for Ollama, "
-                    "llava, qwen2.5-vl, etc.)."
+        last_err: Exception | None = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = requests.post(
+                    self.api_base_url,
+                    headers=headers,
+                    data=json.dumps(payload),
+                    timeout=60,
                 )
-            print(error_msg)
-            return ""
+                response.raise_for_status()
+                response_json = response.json()
+                text = response_json["choices"][0]["message"]["content"]
+                return text.replace("\n", " ") if "\n" in text else text
+            except requests.exceptions.RequestException as e:
+                last_err = e
+                detail = ""
+                if hasattr(e, "response") and e.response is not None:
+                    try:
+                        error_details = e.response.json()
+                        detail = json.dumps(error_details)
+                    except Exception:
+                        detail = f"Status code: {e.response.status_code}"
+                # Non-retryable errors: auth failures, invalid model, etc.
+                lowered = (str(e) + detail).lower()
+                if any(kw in lowered for kw in ("multimodal", "does not support", "invalid_request_error", "authorization", "invalid api key")):
+                    break
+                # Retryable: connection errors, 429, 5xx
+                if attempt < _MAX_RETRIES - 1:
+                    wait = _RETRY_BACKOFF[min(attempt, len(_RETRY_BACKOFF) - 1)]
+                    logger.warning("Custom OCR attempt %d/%d failed (%s), retrying in %.1fs...",
+                                   attempt + 1, _MAX_RETRIES, str(e)[:120], wait)
+                    time.sleep(wait)
 
-        response_json = response.json()
-        text = response_json["choices"][0]["message"]["content"]
-        return text.replace("\n", " ") if "\n" in text else text
+        # All retries exhausted — log and return empty
+        error_msg = f"Custom OCR API request failed after {_MAX_RETRIES} attempts: {str(last_err)}"
+        detail = ""
+        if hasattr(last_err, "response") and last_err.response is not None:
+            try:
+                error_details = last_err.response.json()
+                detail = json.dumps(error_details)
+                error_msg += f" - {detail}"
+            except Exception:
+                error_msg += f" - Status code: {last_err.response.status_code}"
+        logger.error(error_msg)
+        return ""

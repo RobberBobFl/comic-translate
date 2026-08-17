@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import imkit as imk
@@ -125,6 +126,19 @@ class ChunkMixin:
         self.ocr_handler.ocr.initialize(self.main_page, source_lang)
         try:
             self.ocr_handler.ocr.process(image, blocks)
+
+            # Retry empty OCR bubbles with backoff
+            empty_blocks = [blk for blk in blocks if not (blk.text or "").strip()]
+            for retry_attempt in range(2):
+                if not empty_blocks:
+                    break
+                wait = 1.5 * (retry_attempt + 1)
+                logger.info("Webtoon OCR retry %d: %d empty blocks, waiting %.1fs...",
+                            retry_attempt + 1, len(empty_blocks), wait)
+                time.sleep(wait)
+                self.ocr_handler.ocr.process(image, empty_blocks)
+                empty_blocks = [blk for blk in empty_blocks if not (blk.text or "").strip()]
+
             if sort_after:
                 rtl = source_lang_en == "Japanese"
                 return sort_blk_list(blocks, rtl)
@@ -160,6 +174,7 @@ class ChunkMixin:
                     SceneAnalyzer.from_settings(self.main_page.settings_page).analyze(
                         image,
                         source_text=SceneAnalyzer.format_source_blocks(blocks),
+                        is_webtoon=True,
                     )
                     or ""
                 )
@@ -172,6 +187,22 @@ class ChunkMixin:
                 extra_context,
                 scene_description=scene_description,
             )
+
+            # Retry empty translations with backoff
+            empty_tr = [blk for blk in blocks if not (blk.translation or "").strip()]
+            for retry_attempt in range(2):
+                if not empty_tr:
+                    break
+                wait = 1.5 * (retry_attempt + 1)
+                logger.info("Webtoon translation retry %d: %d empty blocks on '%s', waiting %.1fs...",
+                            retry_attempt + 1, len(empty_tr), image_path, wait)
+                time.sleep(wait)
+                translator.translate(
+                    empty_tr, image, extra_context,
+                    scene_description=scene_description,
+                )
+                empty_tr = [blk for blk in empty_tr if not (blk.translation or "").strip()]
+
         except InsufficientCreditsException:
             raise
         except Exception as error:

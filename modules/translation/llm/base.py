@@ -268,6 +268,14 @@ class BaseLLMTranslation(LLMTranslation):
 
             slots = [_TranslationSlot() for _ in chunk]
             if not set_texts_from_json(slots, response):
+                if attempt < CHUNK_ATTEMPTS:
+                    logger.warning(
+                        "JSON parse failed (attempt %d/%d), retrying.",
+                        attempt,
+                        CHUNK_ATTEMPTS,
+                    )
+                    time.sleep(CHUNK_RETRY_DELAY * attempt)
+                    continue
                 return None
 
             translations = [
@@ -275,9 +283,14 @@ class BaseLLMTranslation(LLMTranslation):
                 for slot in slots
             ]
             if expects_text and not any(t.strip() for t in translations):
-                # Valid JSON, but not a single block_N key matched: the model
-                # answered something else entirely. set_texts_from_json only
-                # warns about this, so catch it here.
+                if attempt < CHUNK_ATTEMPTS:
+                    logger.warning(
+                        "No usable block translations (attempt %d/%d), retrying.",
+                        attempt,
+                        CHUNK_ATTEMPTS,
+                    )
+                    time.sleep(CHUNK_RETRY_DELAY * attempt)
+                    continue
                 logger.warning("LLM response contained no usable block translations.")
                 return None
 
