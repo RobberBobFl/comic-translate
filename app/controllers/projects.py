@@ -565,16 +565,25 @@ class ProjectController:
         all_pages_current_state = self._build_all_pages_current_state()
         # Split the stitched webtoon back into the original pages on export,
         # but only when we are actually in stitched mode and the option is on.
-        split_stitched = bool(getattr(self.main, "webtoon_strip", False))
-        if split_stitched:
+        # If a stitched webtoon is being exported with splitting disabled,
+        # confirm the choice so a giant stitched image is not exported by
+        # accident (most users want the original separate pages).
+        webtoon_strip = bool(getattr(self.main, "webtoon_strip", False))
+        split_stitched = webtoon_strip
+        if webtoon_strip:
+            split_setting = True
             try:
-                split_stitched = bool(
+                split_setting = bool(
                     self.main.settings_page.get_export_settings().get(
                         "webtoon_stitch_split_export", True
                     )
                 )
             except Exception:
+                split_setting = True
+            if split_setting:
                 split_stitched = True
+            else:
+                split_stitched = self._prompt_export_split_webtoon()
         self.main.loading.setVisible(True)
         if split_stitched:
             self.main.progress_bar.setVisible(True)
@@ -589,6 +598,38 @@ class ProjectController:
             all_pages_current_state,
             split_stitched,
         )
+
+    def _prompt_export_split_webtoon(self) -> bool:
+        """Ask whether to split a stitched webtoon back into pages on export.
+
+        Only shown when a stitched webtoon is being exported and the
+        "split on export" option is disabled. Returns True to split (the
+        recommended, safe choice) or False to export the stitched image as one
+        file. Cancelling the dialog defaults to splitting.
+        """
+        msg = QtWidgets.QMessageBox(self.main)
+        msg.setIcon(QtWidgets.QMessageBox.Icon.Question)
+        msg.setWindowTitle(self.main.tr("Webtoon export"))
+        msg.setText(
+            self.main.tr(
+                "This webtoon was stitched into one image. Export it back as "
+                "the original separate pages (recommended), or as a single file?"
+            )
+        )
+        split_btn = msg.addButton(
+            self.main.tr("Separate pages (recommended)"),
+            QtWidgets.QMessageBox.ButtonRole.ActionRole,
+        )
+        single_btn = msg.addButton(
+            self.main.tr("Single file"),
+            QtWidgets.QMessageBox.ButtonRole.ActionRole,
+        )
+        msg.setDefaultButton(split_btn)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked is single_btn:
+            return False
+        return True
 
     def _prompt_for_partition(
         self,

@@ -128,6 +128,22 @@
         <source>Не удалось склеить вебтун:</source>
         <translation>Не удалось склеить вебтун:</translation>
     </message>
+    <message>
+        <source>Webtoon export</source>
+        <translation>Esportazione webtoon</translation>
+    </message>
+    <message>
+        <source>This webtoon was stitched into one image. Export it back as the original separate pages (recommended), or as a single file?</source>
+        <translation>Questo webtoon è stato unito in un'unica immagine. Esportarlo di nuovo come pagine separate originali (consigliato) o come un unico file?</translation>
+    </message>
+    <message>
+        <source>Separate pages (recommended)</source>
+        <translation>Pagine separate (consigliato)</translation>
+    </message>
+    <message>
+        <source>Single file</source>
+        <translation>Un solo file</translation>
+    </message>
 </context>
 <context>
     <name>ComicTranslateUI</name>

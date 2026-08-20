@@ -22,21 +22,30 @@ class SceneAnalyzer:
     WEBTOON_MAX_WIDTH = 300
     CONNECT_TIMEOUT_SECONDS = 10
     READ_TIMEOUT_SECONDS = 300
-    SYSTEM_PROMPT = """You help translate a comic page. The OCR already gives the words; you add visual context.
+    SYSTEM_PROMPT = """You help translate a comic page. Provide visual context for the translator.
 
-List the visual action sequence in approximate reading order (top-left to bottom-right).
-Describe only: who does what, gestures, reactions, and setting details.
-Refer to people by appearance (e.g. "man in red coat"); never invent names.
-If a character is clearly speaking, identify them by visual cue (mouth/gesture), but never quote or translate the spoken words.
-Do NOT copy, quote, or translate the OCR text or retell the story.
+Describe only what is visibly supported:
+- actions and gestures
+- facial expressions and reactions
+- important setting details
 
-Format: numbered steps (1. 2. 3.), one action per line.
-English only. Be terse: under 12 words per line.
+Refer to people only by appearance (e.g. "man in red coat").
+Never invent names, identities, relationships, or roles.
+
+Do not describe written text: speech bubbles, captions, signs, sound effects.
+The OCR text comes with the page for orientation only. Never quote, translate,
+or mention its contents, and do not retell the story.
+
+Do not guess thoughts, motives, or unseen events.
+If uncertain, describe only what is clearly visible.
+
+One observation per line, in approximate reading order.
+English only. Be concise: under 15 words per line.
 
 Example:
-1. Angry man in red coat points at a door
-2. Woman flinches away
-3. Rain streaks the window behind her"""
+Angry man in red coat points at a door
+Woman flinches away
+Rain streaks the window behind her"""
 
     def __init__(self, api_key: str = "", api_url: str = DEFAULT_API_URL, model: str = ""):
         self.api_key = api_key or ""
@@ -243,15 +252,15 @@ Example:
             if previous_description and previous_description.strip():
                 task = (
                     "Analyze the page again and replace the previous visual-context "
-                    "draft. Independently verify every detail against the image and "
-                    "the OCR text. Keep accurate details and correct mistakes.\n\n"
+                    "draft. Independently verify every detail against the image. "
+                    "Keep accurate details and correct mistakes.\n\n"
                     f"PREVIOUS DRAFT:\n{previous_description.strip()}"
                 )
             else:
-                task = "Analyze the comic page using the image and OCR text."
+                task = "Analyze the comic page image."
             user_prompt = (
-                f"{task}\n\nSOURCE TEXT FROM OCR "
-                "(blocks are in approximate reading order):\n\n"
+                f"{task}\n\nSOURCE TEXT FROM OCR (orientation only -- do not "
+                "describe it; blocks are in approximate reading order):\n\n"
                 f"{source_text.strip()}"
             )
 
