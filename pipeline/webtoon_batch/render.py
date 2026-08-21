@@ -12,7 +12,7 @@ from app.path_materialization import ensure_path_materialized
 from app.ui.canvas.save_renderer import ImageSaveRenderer
 from app.ui.canvas.text.text_item_properties import TextItemProperties
 from app.ui.canvas.text_item import OutlineInfo, OutlineType
-from modules.rendering.render import get_best_render_area, is_vertical_block, pyside_word_wrap
+from modules.rendering.render import get_best_render_area, is_vertical_block, pyside_word_wrap, render_box_for_block
 from modules.utils.image_utils import get_smart_text_color
 from modules.utils.language_utils import get_language_code, is_no_space_lang
 from modules.utils.textblock import TextBlock
@@ -99,9 +99,10 @@ class RenderMixin:
         page_scene_offset = self._get_page_scene_offset(page_index)
 
         for block in blocks:
-            x1, y1, x2, y2 = [float(v) for v in block.xyxy]
-            width = max(1.0, x2 - x1)
-            height = max(1.0, y2 - y1)
+            # Anchor the translation to the (shrunk) speech bubble when one was
+            # detected, so text centers inside the bubble rather than the tight
+            # text-line box (which for horizontal bubbles sits at the top).
+            x1, y1, width, height = render_box_for_block(block)
 
             translation = block.translation
             if not is_renderable_translation(translation):
@@ -147,6 +148,18 @@ class RenderMixin:
                     wrapped_translation, font_size, render_block, image_path
                 )
 
+            # pyside_word_wrap was called with the block width, so
+            # rendered_height is the exact wrapped height at that width.
+            # Widen the document to the block width and vertically center via
+            # v_margin (every non-vertical block, rotated included). Vertical
+            # text keeps the rendered-size box.
+            if not vertical:
+                item_width = width
+                item_v_margin = max(0.0, (height - rendered_height) / 2.0)
+            else:
+                item_width = rendered_width
+                item_v_margin = 0.0
+
             text_props = TextItemProperties(
                 text=wrapped_translation,
                 font_family=font,
@@ -163,8 +176,9 @@ class RenderMixin:
                 rotation=block.angle,
                 scale=1.0,
                 transform_origin=block.tr_origin_point if block.tr_origin_point else (0, 0),
-                width=rendered_width,
+                width=item_width,
                 height=rendered_height,
+                v_margin=item_v_margin,
                 direction=direction,
                 vertical=vertical,
                 selection_outlines=[

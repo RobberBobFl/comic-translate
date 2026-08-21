@@ -1,8 +1,31 @@
 from dataclasses import dataclass, field
 from typing import Optional, List, Any
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QTextFrameFormat
 from PySide6.QtCore import Qt
 from app.ui.canvas.text_item import OutlineType
+
+# Qt's default root-frame top margin. The vertical-centering margin is stored
+# as BASE + requested so the document keeps its normal top padding; get_center_
+# v_margin subtracts the base back out.
+FRAME_MARGIN_BASE = 4.0
+
+
+def set_center_v_margin(doc, margin: float) -> None:
+    """Apply the vertical-centering margin to a document's root frame.
+
+    QTextBlockFormat top margins are ignored by Qt for the first paragraph of
+    a document, so the centering margin lives on the root frame, whose top
+    margin the layout engine honors. The Qt default top margin (4.0) is kept
+    and the requested margin is added on top.
+    """
+    fmt = doc.rootFrame().frameFormat()
+    fmt.setTopMargin(FRAME_MARGIN_BASE + max(0.0, float(margin)))
+    doc.rootFrame().setFrameFormat(fmt)
+
+
+def get_center_v_margin(doc) -> float:
+    """Read the vertical-centering margin back from a document's root frame."""
+    return max(0.0, doc.rootFrame().frameFormat().topMargin() - FRAME_MARGIN_BASE)
 
 @dataclass
 class TextItemProperties:
@@ -137,6 +160,16 @@ class TextItemProperties:
         props.width = item.boundingRect().width()
         props.height = item.boundingRect().height()
         props.vertical = getattr(item, 'vertical', False)
+        # Persist the vertical-centering top margin so it survives a project
+        # save/load (the save renderer re-applies props.v_margin).
+        if not props.vertical and hasattr(item, 'document'):
+            try:
+                # The centering margin lives on the root frame, not the first
+                # block: Qt ignores QTextBlockFormat top margins for the first
+                # paragraph, so the frame is the only place it is honored.
+                props.v_margin = get_center_v_margin(item.document())
+            except Exception:
+                props.v_margin = 0.0
         
         # Advanced properties
         props.selection_outlines = getattr(item, 'selection_outlines', []).copy()

@@ -12,10 +12,13 @@ from app.ui.commands.textformat import TextFormatCommand
 from app.ui.commands.box import AddTextItemCommand, ResizeBlocksCommand
 from app.ui.commands.text_edit import TextEditCommand
 from app.ui.canvas.text_item import TextBlockItem
-from app.ui.canvas.text.text_item_properties import TextItemProperties
+from app.ui.canvas.text.text_item_properties import (
+    TextItemProperties,
+    set_center_v_margin,
+)
 
 from modules.utils.textblock import TextBlock
-from modules.rendering.render import TextRenderingSettings, manual_wrap, is_vertical_block, pyside_word_wrap
+from modules.rendering.render import TextRenderingSettings, manual_wrap, is_vertical_block, pyside_word_wrap, render_box_for_block
 from modules.utils.pipeline_config import font_selected
 from modules.utils.language_utils import get_language_code, get_layout_direction, is_no_space_lang
 from modules.utils.language_utils import to_canonical_language_name
@@ -28,6 +31,46 @@ from app.ui.rephrase_dialog import RephraseDialog
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
+
+
+def fit_and_center_text_item(text_item: "TextBlockItem", bw: float, bh: float,
+                             min_font: float, alignment, max_font: float = 0.0) -> None:
+    """Shrink the font (if needed) so the wrapped text fits ``bw`` x ``bh``, then
+    grow it back up to ``max_font`` when the box has spare room (so re-translated
+    text fills the bubble instead of staying at a stale small size), and
+    vertically center it inside the box via a top margin on the root frame.
+
+    QTextBlockFormat top margins are ignored by Qt for the first paragraph of a
+    document, so the margin goes on the root frame, whose top margin the layout
+    engine honors. The margin is clamped to >= 0: when the text still overflows
+    at the minimum font size it stays top-aligned instead of feeding Qt a
+    negative frame margin (which collapses the layout). ``text_item`` must
+    already have its width set to ``bw``. Growth is skipped when ``max_font``
+    is <= 0.
+    """
+    while text_item.font_size > min_font:
+        doc_w = text_item.document().size().width()
+        doc_h = text_item.document().size().height()
+        if doc_w <= bw and doc_h <= bh:
+            break
+        text_item.set_font_size(text_item.font_size - 0.5)
+
+    if max_font > 0:
+        while text_item.font_size < max_font:
+            probe = min(text_item.font_size + 0.5, max_font)
+            prev_size = text_item.font_size
+            text_item.set_font_size(probe)
+            doc_w = text_item.document().size().width()
+            doc_h = text_item.document().size().height()
+            if doc_w > bw or doc_h > bh:
+                text_item.set_font_size(prev_size)
+                break
+
+    text_height = text_item.document().size().height()
+    extra = max(0.0, (bh - text_height) / 2.0)
+    set_center_v_margin(text_item.document(), extra)
+    text_item.update()
+
 
 class TextController:
     def __init__(self, main: ComicTranslate):
@@ -80,6 +123,10 @@ class TextController:
                 text_item.change_undo.disconnect(self.main.rect_item_ctrl.rect_change_undo)
             except (TypeError, RuntimeError):
                 pass
+            try:
+                text_item.change_undo.disconnect(self.main.rect_item_ctrl.text_overlay_change_undo)
+            except (TypeError, RuntimeError):
+                pass
 
         if not hasattr(text_item, "_ct_text_changed_slot"):
             text_item._ct_text_changed_slot = (
@@ -90,7 +137,10 @@ class TextController:
         text_item.item_deselected.connect(self.on_text_item_deselected)
         text_item.text_changed.connect(text_item._ct_text_changed_slot)
         text_item.text_highlighted.connect(self.set_values_from_highlight)
-        text_item.change_undo.connect(self.main.rect_item_ctrl.rect_change_undo)
+        # A TextBlockItem is a rendered-text overlay: moving it must not clear
+        # the block's source/translated text or its bubble region. Routing to
+        # text_overlay_change_undo keeps that data intact (see rect_item.py).
+        text_item.change_undo.connect(self.main.rect_item_ctrl.text_overlay_change_undo)
         self._last_item_text[text_item] = text_item.toPlainText()
         self._last_item_html[text_item] = text_item.document().toHtml()
         text_item._ct_signals_connected = True
@@ -153,31 +203,33 @@ class TextController:
             rotation=blk.angle,
             vertical=vertical,
         )
-        
+
+        # Anchor the translation to the speech bubble (when detected) instead of
+        # the tight text-line box: bubbles keep their xyxy at the bubble's top,
+        # so using it would pin the text to the top. render_box_for_block returns
+        # the (shrunk) bubble box for bubble text and falls back to xyxy otherwise.
+        bx, by, bw, bh = render_box_for_block(blk)
+        properties.position = (bx, by)
+
         # Widen the text document to the block width so the user's alignment
-        # (default: center) centers the text inside the bubble instead of pinning
-        # it to the block's top-left. pos() stays at the block top-left so
-        # position-based block lookups keep working.
-        bw = bh = 0
-        if blk.angle == 0 and not vertical:
-            _, _, bw, bh = blk.xywh
+        # (default: center) centers the text inside the bubble instead of
+        # pinning it to the block's top-left. This now applies to every
+        # non-vertical block (including rotated ones), so the text wraps to the
+        # bubble width and can be centered vertically regardless of angle.
+        if not vertical:
             properties.width = bw
 
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text(text)
 
-        # Vertically center the text within the block box using a top margin.
-        if blk.angle == 0 and not vertical and bh:
-            text_height = text_item.document().size().height()
-            top = max(0.0, (bh - text_height) / 2.0)
-            if top > 0:
-                _cursor = QTextCursor(text_item.document())
-                _cursor.movePosition(QTextCursor.MoveOperation.Start)
-                _cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
-                _bf = QTextBlockFormat()
-                _bf.setTopMargin(top)
-                _bf.setAlignment(alignment)
-                _cursor.mergeBlockFormat(_bf)
+        # Vertically center the text inside the bubble and shrink the font if it
+        # would overflow, so the translation sits in the middle of the bubble
+        # for every block (rotated included). Vertical text is laid out by the
+        # VerticalTextDocumentLayout, which centers it on its own axis.
+        if not vertical and bw and bh:
+            min_font = max(1.0, blk.min_font_size if blk.min_font_size > 0 else 4.0)
+            fit_and_center_text_item(text_item, bw, bh, min_font, alignment,
+                                     render_settings.max_font_size)
 
         # Update or append the block in the main controller's blk_list
         existing_idx = next(
@@ -202,17 +254,7 @@ class TextController:
         self._last_item_text[text_item] = text_item.toPlainText()
         self._last_item_html[text_item] = text_item.document().toHtml()
 
-        x1, y1 = int(text_item.pos().x()), int(text_item.pos().y())
-        rotation = text_item.rotation()
-
-        self.main.curr_tblock = next(
-            (
-            blk for blk in self.main.blk_list
-            if is_close(blk.xyxy[0], x1, 5) and is_close(blk.xyxy[1], y1, 5)
-            and is_close(blk.angle, rotation, 1)
-            ),
-            None
-        )
+        self.main.curr_tblock = self._find_text_block_for_item(text_item)
 
         # Update both s_text_edit and t_text_edit
         if self.main.curr_tblock:
@@ -402,9 +444,25 @@ class TextController:
         if not text_item:
             return None
 
+        # Prefer the block whose bubble region contains the center of the text
+        # overlay. This survives the overlay being manually dragged within (or
+        # just outside) its bubble, since blk.xyxy keeps tracking the bubble.
+        center = text_item.mapToScene(text_item.boundingRect().center())
+        cx, cy = center.x(), center.y()
+        match = next(
+            (
+                blk for blk in self.main.blk_list
+                if blk.xyxy[0] <= cx <= blk.xyxy[2] and blk.xyxy[1] <= cy <= blk.xyxy[3]
+            ),
+            None,
+        )
+        if match is not None:
+            return match
+
+        # Fallback: exact top-left + rotation match (handles edge cases where the
+        # overlay center lands outside every block's region).
         x1, y1 = int(text_item.pos().x()), int(text_item.pos().y())
         rotation = text_item.rotation()
-
         return next(
             (
                 blk for blk in self.main.blk_list
@@ -865,7 +923,9 @@ class TextController:
                         if blk_key in existing_keys:
                             continue
 
-                        x1, y1, block_width, block_height = blk.xywh
+                        # Anchor to the (shrunk) bubble when detected, so text
+                        # centers inside the bubble, not the tight text-line box.
+                        x1, y1, block_width, block_height = render_box_for_block(blk)
                         translation = blk.translation
                         if not is_renderable_translation(translation):
                             continue
@@ -894,11 +954,12 @@ class TextController:
 
                         # Center the rendered text inside its block box (matches the
                         # single-page path): widen the text document to the block
-                        # width and add a top margin for vertical centering. The
-                        # item's pos() stays at the block's top-left so position
-                        # based block lookups keep working. Rotated / vertical
-                        # blocks keep the legacy rendered-size box.
-                        if blk.angle == 0 and not vertical:
+                        # width and add a top margin for vertical centering. This
+                        # now applies to every non-vertical block, including
+                        # rotated ones. Vertical text is centered by its own
+                        # layout, so it keeps the legacy rendered-size box and no
+                        # top margin.
+                        if not vertical:
                             render_width = block_width
                             render_v_margin = max(0.0, (block_height - rendered_height) / 2.0)
                         else:
@@ -1048,6 +1109,29 @@ class TextController:
         self.main.enable_hbutton_group()
         self._end_render_macro()
 
+    def _refit_text_item_to_block(self, text_item: TextBlockItem, blk: TextBlock) -> None:
+        """Re-wrap and re-center a text item after its text changed in place
+        (re-translate / rephrase). ``set_plain_text`` rebuilds the document,
+        which drops the root-frame centering margin and resets the item width
+        to the natural text width, so both are re-applied from the block's
+        render box. Vertical text is laid out by its own layout and is left
+        untouched.
+        """
+        if text_item is None or blk is None:
+            return
+        if text_item.vertical:
+            return
+        bx, by, bw, bh = render_box_for_block(blk)
+        if not bw or not bh:
+            return
+        text_item.setTextWidth(bw)
+        settings = self.render_settings()
+        min_font = max(1.0, blk.min_font_size if blk.min_font_size > 0 else 4.0)
+        fit_and_center_text_item(
+            text_item, bw, bh, min_font, text_item.alignment,
+            settings.max_font_size,
+        )
+
     def rephrase_block(self):
         """Send current block's original source text to the LLM for a fresh,
         natural translation (instead of rephrasing the existing translation)."""
@@ -1091,6 +1175,7 @@ class TextController:
             blk.translation = result
             if self.main.curr_tblock_item:
                 self.main.curr_tblock_item.set_plain_text(result)
+                self._refit_text_item_to_block(self.main.curr_tblock_item, blk)
             self.main.t_text_edit.blockSignals(True)
             self.main.t_text_edit.setPlainText(result)
             self.main.t_text_edit.blockSignals(False)

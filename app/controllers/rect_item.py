@@ -7,7 +7,12 @@ from PySide6.QtGui import QColor
 
 from app.ui.canvas.rectangle import MoveableRectItem
 from app.ui.canvas.text.text_item_properties import TextItemProperties
-from app.ui.commands.box import AddRectangleCommand, AddTextItemCommand, BoxesChangeCommand
+from app.ui.commands.box import (
+    AddRectangleCommand,
+    AddTextItemCommand,
+    BoxesChangeCommand,
+    TextItemMoveCommand,
+)
 
 from modules.detection.utils.geometry import do_rectangles_overlap
 from modules.utils.textblock import TextBlock
@@ -225,6 +230,19 @@ class RectItemController:
             new_state.rotation,
             new_state.transform_origin
         )
+
+    def text_overlay_change_undo(self, old_state, new_state):
+        """Handle moving/rotating a rendered text overlay (TextBlockItem).
+
+        Unlike rect_change_undo this must NOT clear the block's source text or
+        translation, nor overwrite its bubble region (``xyxy``/``bubble_xyxy``).
+        Dragging the rendered text only changes where it is drawn -- the
+        recognized block and its text stay intact so the user can still
+        re-translate. The overlay's new position is persisted automatically via
+        the canvas text_items_state (item.pos()).
+        """
+        command = TextItemMoveCommand(self.main.image_viewer, old_state, new_state)
+        self.main.undo_group.activeStack().push(command)
 
 
     def find_corresponding_text_block(self, rect: tuple[float], iou_threshold: int = 0.5):

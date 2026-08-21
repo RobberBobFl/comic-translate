@@ -705,10 +705,16 @@ class ManualWorkflowController:
         def set_new_text(
             text_item: TextBlockItem, 
             wrapped: str, 
-            font_size: int
+            font_size: int,
+            blk,
         ) -> None:
             text_item.set_plain_text(wrapped)
             text_item.set_font_size(font_size)
+            # set_plain_text rebuilds the document: it drops the root-frame
+            # centering margin and resets the item width to the natural text
+            # width. Re-apply both so re-translated text stays centered inside
+            # its bubble and (re)grows to fill it.
+            self.main.text_ctrl._refit_text_item_to_block(text_item, blk)
 
         text_items_to_process = self._get_visible_text_items()
         if not text_items_to_process:
@@ -760,8 +766,8 @@ class ManualWorkflowController:
 
                 self.main.run_threaded(
                     pyside_word_wrap,
-                    lambda wrap_res, ti=text_item: set_new_text(
-                        ti, wrap_res[0], wrap_res[1]
+                    lambda wrap_res, ti=text_item, b=blk: set_new_text(
+                        ti, wrap_res[0], wrap_res[1], b
                     ),
                     self.main.default_error_handler,
                     None,

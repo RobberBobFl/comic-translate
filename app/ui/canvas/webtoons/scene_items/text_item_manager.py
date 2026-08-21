@@ -8,6 +8,52 @@ from PySide6.QtCore import QPointF, Qt, QRectF
 from PySide6.QtGui import QTextDocument, QTextCursor
 from app.ui.canvas.text_item import TextBlockItem
 from app.ui.canvas.text.text_item_properties import TextItemProperties
+from modules.rendering.render import pyside_word_wrap
+
+
+def compute_merged_v_margin(base_data: dict, merged_text: str,
+                            merged_width: float, merged_height: float) -> float:
+    """Vertical centering margin for a merged (stitched) webtoon text item.
+
+    Mirrors the renderer's logic: non-vertical items are centered inside the
+    merged box via a top margin of (height - rendered_text_height) / 2; vertical
+    items keep their natural layout (no margin). Returns 0.0 on any failure so
+    callers can fall back to the base item's stored margin.
+    """
+    if base_data.get('vertical', False):
+        return 0.0
+    try:
+        _doc = QTextDocument()
+        _doc.setHtml(merged_text)
+        _plain = _doc.toPlainText()
+        _font_size = base_data.get('font_size', 12)
+        _direction = base_data.get('direction')
+        if not isinstance(_direction, Qt.LayoutDirection):
+            try:
+                _direction = Qt.LayoutDirection(int(_direction))
+            except (TypeError, ValueError):
+                _direction = Qt.LayoutDirection.LeftToRight
+        _, _, _, _rendered_h = pyside_word_wrap(
+            _plain,
+            base_data.get('font_family'),
+            merged_width,
+            merged_height,
+            base_data.get('line_spacing', 1.2),
+            base_data.get('outline_width', 0.0),
+            base_data.get('bold', False),
+            base_data.get('italic', False),
+            base_data.get('underline', False),
+            base_data.get('alignment'),
+            _direction,
+            _font_size,
+            _font_size,
+            False,
+            False,
+            return_metrics=True,
+        )
+        return max(0.0, (merged_height - _rendered_h) / 2.0)
+    except Exception:
+        return base_data.get('v_margin', 0.0)
 
 
 class TextItemManager:
@@ -587,11 +633,20 @@ class TextItemManager:
         local_pos = self.coordinate_converter.scene_to_page_local_position(scene_pos, target_page)
         
         # Update merged item data
+        # Recompute the vertical centering margin for the merged (stitched)
+        # box so the translation stays centered inside the bubble. The merge
+        # rebuilds width/height, which would otherwise discard the v_margin
+        # written by the renderer and pin the text to the top of the block.
+        merged_width = right_x - left_x
+        merged_height = bottom_y - top_y
+        merged_v_margin = compute_merged_v_margin(base_data, merged_text, merged_width, merged_height)
+
         base_data.update({
             'text': merged_text,
             'position': (local_pos.x(), local_pos.y()),
-            'width': right_x - left_x,
-            'height': bottom_y - top_y
+            'width': merged_width,
+            'height': merged_height,
+            'v_margin': merged_v_margin,
         })
         
         # Remove all items from their current pages

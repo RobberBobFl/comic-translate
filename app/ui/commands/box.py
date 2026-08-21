@@ -98,6 +98,48 @@ class BoxesChangeCommand(QUndoCommand, RectCommandBase):
                 item.setRotation(new_angle)
 
 
+class TextItemMoveCommand(QUndoCommand):
+    """Move/rotate a TextBlockItem overlay without touching its TextBlock.
+
+    Used when the user manually drags the rendered text inside a bubble. Unlike
+    BoxesChangeCommand this must NOT mutate ``blk.xyxy``/``text``/``translation``
+    -- moving the overlay only changes where the text is drawn, not the
+    recognized block region or its source/translated text.
+    """
+
+    def __init__(self, viewer, old_state, new_state):
+        super().__init__()
+        self.scene = viewer._scene
+        self.old_xyxy = [int(c) for c in old_state.rect]
+        self.old_angle = old_state.rotation
+        self.old_tr_origin = (old_state.transform_origin.x(), old_state.transform_origin.y())
+
+        self.new_xyxy = [int(c) for c in new_state.rect]
+        self.new_angle = new_state.rotation
+        self.new_tr_origin = (new_state.transform_origin.x(), new_state.transform_origin.y())
+
+    def _apply(self, from_xyxy, from_angle, to_xyxy, to_angle, to_tr_origin):
+        for item in self.scene.items():
+            if not isinstance(item, TextBlockItem):
+                continue
+            if (int(item.pos().x()) == int(from_xyxy[0]) and
+                    int(item.pos().y()) == int(from_xyxy[1]) and
+                    int(item.rotation()) == int(from_angle)):
+                item.setTransformOriginPoint(QPointF(*to_tr_origin))
+                item.setPos(to_xyxy[0], to_xyxy[1])
+                item.setRotation(to_angle)
+                self.scene.update()
+                return
+
+    def redo(self):
+        self._apply(self.old_xyxy, self.old_angle,
+                    self.new_xyxy, self.new_angle, self.new_tr_origin)
+
+    def undo(self):
+        self._apply(self.new_xyxy, self.new_angle,
+                    self.old_xyxy, self.old_angle, self.old_tr_origin)
+
+
 class ResizeBlocksCommand(QUndoCommand):
     def __init__(self, main_page, blk_list, diff: int):
         super().__init__()

@@ -3,7 +3,7 @@ import imkit as imk
 import numpy as np
 from app.path_materialization import ensure_path_materialized
 from .text_item import TextBlockItem
-from .text.text_item_properties import TextItemProperties
+from .text.text_item_properties import TextItemProperties, set_center_v_margin
 
 class ImageSaveRenderer:
     def __init__(self, image: np.ndarray):
@@ -66,14 +66,9 @@ class ImageSaveRenderer:
             text_item.set_vertical(bool(text_props.vertical))
             text_item.set_color(text_props.text_color)
             if text_props.v_margin and not text_props.vertical:
-                _doc = text_item.document()
-                _cursor = QtGui.QTextCursor(_doc)
-                _cursor.movePosition(QtGui.QTextCursor.MoveOperation.Start)
-                _cursor.select(QtGui.QTextCursor.SelectionType.BlockUnderCursor)
-                _bf = QtGui.QTextBlockFormat()
-                _bf.setTopMargin(text_props.v_margin)
-                _bf.setAlignment(text_props.alignment)
-                _cursor.mergeBlockFormat(_bf)
+                # Root-frame margin: QTextBlockFormat top margins are ignored
+                # by Qt for the first paragraph, which would pin text to top.
+                set_center_v_margin(text_item.document(), text_props.v_margin)
             text_item.selection_outlines = text_props.selection_outlines.copy()
             text_item.update()
 

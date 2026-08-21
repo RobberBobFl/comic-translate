@@ -16,6 +16,11 @@ from modules.utils.language_utils import get_language_code, is_no_space_lang
 
 from dataclasses import dataclass
 
+# Fraction of the speech bubble reserved as empty margin around the text
+# (shrunk away from each side before fitting the font). Shared by every render
+# path so the anchor box and the font-fit box never drift apart.
+BUBBLE_SHRINK = 0.15
+
 @dataclass
 class TextRenderingSettings:
     alignment_id: int
@@ -208,7 +213,7 @@ def draw_text(image: np.ndarray, blk_list: List[TextBlock], font_pth: str, colou
     font = ImageFont.truetype(font_pth, size=init_font_size)
 
     for blk in blk_list:
-        x1, y1, width, height = blk.xywh
+        x1, y1, width, height = render_box_for_block(blk)
         tbbox_top_left = (x1, y1)
 
         translation = blk.translation
@@ -246,7 +251,7 @@ def get_best_render_area(blk_list: List[TextBlock], img, inpainted_img=None):
         if blk.text_class == 'text_bubble' and blk.bubble_xyxy is not None:
             
             if blk.source_lang_direction == 'vertical':
-                text_draw_bounds = shrink_bbox(blk.bubble_xyxy, shrink_percent=0.3)
+                text_draw_bounds = shrink_bbox(blk.bubble_xyxy, shrink_percent=BUBBLE_SHRINK)
                 bdx1, bdy1, bdx2, bdy2 = text_draw_bounds
                 blk.xyxy[:] = [bdx1, bdy1, bdx2, bdy2]
 
@@ -254,6 +259,23 @@ def get_best_render_area(blk_list: List[TextBlock], img, inpainted_img=None):
         adjust_blks_size(blk_list, img, -5, -5)
 
     return blk_list
+
+
+def render_box_for_block(blk) -> tuple:
+    """Render box (x, y, w, h) for a block.
+
+    Anchors translated text to the speech bubble when one was detected, so the
+    text is centered inside the bubble instead of the tight text-line box (which
+    for horizontal bubbles sits at the bubble's top). Falls back to the block's
+    own xyxy when no bubble is available. Does NOT mutate the block's xyxy, so
+    the editor's editable box stays unchanged.
+    """
+    if getattr(blk, "text_class", None) == "text_bubble" and getattr(blk, "bubble_xyxy", None) is not None:
+        bx1, by1, bx2, by2 = [float(v) for v in blk.bubble_xyxy[:4]]
+        bx1, by1, bx2, by2 = shrink_bbox([bx1, by1, bx2, by2], shrink_percent=BUBBLE_SHRINK)
+        return bx1, by1, bx2 - bx1, by2 - by1
+    x1, y1, x2, y2 = [float(v) for v in blk.xyxy]
+    return x1, y1, x2 - x1, y2 - y1
 
 
 def pyside_word_wrap(
@@ -447,7 +469,7 @@ def manual_wrap(
     trg_lng_cd = get_language_code(target_lang)
 
     for blk in blk_list:
-        x1, y1, width, height = blk.xywh
+        x1, y1, width, height = render_box_for_block(blk)
 
         translation = blk.translation
         if not translation or len(translation) == 1:

@@ -21,7 +21,7 @@ from modules.utils.pipeline_config import get_config
 from modules.utils.image_utils import generate_mask, get_smart_text_color
 from modules.utils.language_utils import get_language_code, is_no_space_lang
 from modules.utils.translator_utils import get_context_entries, get_raw_translation, get_raw_text, format_translations, is_renderable_translation
-from modules.rendering.render import get_best_render_area, pyside_word_wrap, is_vertical_block
+from modules.rendering.render import get_best_render_area, pyside_word_wrap, is_vertical_block, render_box_for_block
 from modules.utils.device import resolve_device
 from modules.utils.exceptions import InsufficientCreditsException
 from app.path_materialization import ensure_path_materialized
@@ -470,7 +470,10 @@ class BatchProcessor:
                 
             text_items_state = []
             for blk in blk_list:
-                x1, y1, block_width, block_height = blk.xywh
+                # Anchor the translation to the (shrunk) speech bubble when one
+                # was detected, so text centers inside the bubble rather than the
+                # tight text-line box (horizontal bubbles sit at the bubble top).
+                x1, y1, block_width, block_height = render_box_for_block(blk)
 
                 translation = blk.translation
                 if not is_renderable_translation(translation):
@@ -505,7 +508,19 @@ class BatchProcessor:
                 # Smart Color Override
                 font_color = get_smart_text_color(blk.font_color, setting_font_color)
 
-                # Use TextItemProperties for consistent text item creation
+                # Use TextItemProperties for consistent text item creation.
+                # pyside_word_wrap was called with the block width, so
+                # rendered_height is the exact wrapped height at that width.
+                # Widen the document to the block width and vertically center
+                # the text via v_margin (every non-vertical block, rotated
+                # included). Vertical text keeps the rendered-size box.
+                if not vertical:
+                    item_width = block_width
+                    item_v_margin = max(0.0, (block_height - rendered_height) / 2.0)
+                else:
+                    item_width = rendered_width
+                    item_v_margin = 0.0
+
                 text_props = TextItemProperties(
                     text=translation,
                     font_family=font,
@@ -522,8 +537,9 @@ class BatchProcessor:
                     rotation=blk.angle,
                     scale=1.0,
                     transform_origin=blk.tr_origin_point,
-                    width=rendered_width,
+                    width=item_width,
                     height=rendered_height,
+                    v_margin=item_v_margin,
                     direction=direction,
                     vertical=vertical,
                     selection_outlines=[

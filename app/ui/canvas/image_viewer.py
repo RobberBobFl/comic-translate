@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 
 from .text_item import TextBlockItem
-from .text.text_item_properties import TextItemProperties
+from .text.text_item_properties import TextItemProperties, set_center_v_margin
 from .rectangle import MoveableRectItem
 from .rotate_cursor import RotateHandleCursors
 from .drawing_manager import DrawingManager
@@ -572,15 +572,11 @@ class ImageViewer(QGraphicsView):
         
         # Apply a top margin to vertically center the text within its block box
         # (used by the text-centering fix). Only for non-vertical documents.
+        # The margin goes on the root frame: QTextBlockFormat top margins are
+        # ignored by Qt for the first paragraph, so a block-level margin would
+        # silently pin the text to the top.
         if getattr(properties, "v_margin", 0) and not getattr(properties, "vertical", False):
-            _doc = item.document()
-            _cursor = QtGui.QTextCursor(_doc)
-            _cursor.movePosition(QtGui.QTextCursor.MoveOperation.Start)
-            _cursor.select(QtGui.QTextCursor.SelectionType.BlockUnderCursor)
-            _bf = QtGui.QTextBlockFormat()
-            _bf.setTopMargin(properties.v_margin)
-            _bf.setAlignment(properties.alignment)
-            _cursor.mergeBlockFormat(_bf)
+            set_center_v_margin(item.document(), properties.v_margin)
         
         # Set direction if specified
         item.set_direction(properties.direction)
