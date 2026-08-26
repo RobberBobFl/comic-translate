@@ -598,15 +598,21 @@ class ManualWorkflowController:
                         cache_manager._apply_cached_translations_to_blocks(cache_key, blk_list)
                     else:
                         context_blocks = sliding_buffer[-context_window:] if context_window else None
-                        _, success = translator.translate(
-                            blk_list,
-                            image,
-                            extra_context,
-                            context_blocks=context_blocks,
-                            batch_size=batch_size,
-                            scene_description=scene_description,
-                        )
-                        if not success:
+                        try:
+                            # Retry transient server errors and empty results up to
+                            # MAX_ATTEMPTS times before surfacing a failure.
+                            from modules.utils.retry_utils import retry_translate
+                            retry_translate(
+                                translator,
+                                blk_list,
+                                image,
+                                extra_context,
+                                context_blocks=context_blocks,
+                                batch_size=batch_size,
+                                scene_description=scene_description,
+                                label=f"Translation:{os.path.basename(file_path)}",
+                            )
+                        except Exception:
                             result_holder = [None]
                             event = QtCore.QEventLoop()
 

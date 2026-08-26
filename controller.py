@@ -906,7 +906,11 @@ class ComicTranslate(ComicTranslateUI):
     def _on_batch_report(self, report_text: str):
         """Show batch processing report in a dialog."""
         from PySide6.QtWidgets import QMessageBox
-        QMessageBox.information(self, self.tr("Batch Report"), report_text)
+        has_issues = "with issues" in report_text or "⚠" in report_text
+        if has_issues:
+            QMessageBox.warning(self, self.tr("Batch Report"), report_text)
+        else:
+            QMessageBox.information(self, self.tr("Batch Report"), report_text)
 
     def on_download_event(self, status: str, name: str):
         """Show a loading-type MMessage while models/files are being downloaded."""

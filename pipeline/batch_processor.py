@@ -174,19 +174,10 @@ class BatchProcessor:
                 # Use the shared OCR processor from the handler
                 self.ocr_handler.ocr.initialize(self.main_page, source_lang)
                 try:
-                    self.ocr_handler.ocr.process(image, blk_list)
-
-                    # Retry empty OCR bubbles with backoff
-                    empty_ocr = [blk for blk in blk_list if not (blk.text or "").strip()]
-                    for retry_attempt in range(2):
-                        if not empty_ocr:
-                            break
-                        wait = 1.5 * (retry_attempt + 1)
-                        logger.info("OCR retry %d: %d empty blocks on '%s', waiting %.1fs...",
-                                    retry_attempt + 1, len(empty_ocr), base_name, wait)
-                        time.sleep(wait)
-                        self.ocr_handler.ocr.process(image, empty_ocr)
-                        empty_ocr = [blk for blk in empty_ocr if not (blk.text or "").strip()]
+                    # Retry transient server errors and empty bubbles up to
+                    # MAX_ATTEMPTS times before giving up on the page.
+                    from modules.utils.retry_utils import retry_ocr
+                    retry_ocr(self.ocr_handler.ocr, image, blk_list, label=f"OCR:{base_name}")
 
                     # Cache the OCR results for potential future use
                     self.cache_manager._cache_ocr_results(cache_key, self.main_page.blk_list)
@@ -222,6 +213,15 @@ class BatchProcessor:
                     self.skip_save(directory, timestamp, base_name, extension, archive_bname, image)
                     self.main_page.image_skipped.emit(image_path, "OCR", err_msg)
                     self.log_skipped_image(directory, timestamp, image_path, reason, full_traceback)
+                    batch_report.append({
+                        "page": os.path.basename(image_path),
+                        "page_index": index,
+                        "total_blocks": len(blk_list),
+                        "empty_ocr": [(list(blk.xyxy), getattr(blk, 'text', '')) for blk in blk_list],
+                        "empty_translation": [],
+                        "skipped": True,
+                        "skip_reason": f"OCR: {err_msg}",
+                    })
                     continue
             else:
                 self.skip_save(directory, timestamp, base_name, extension, archive_bname, image)
@@ -277,46 +277,19 @@ class BatchProcessor:
                     logger.info("Using cached translations for '%s'", base_name)
                 else:
                     context_blocks = sliding_buffer[-context_window:] if context_window else None
-                    _, success = translator.translate(
-                        blk_list, image, extra_context,
+                    # Retry transient server errors and empty bubbles up to
+                    # MAX_ATTEMPTS times. Hard failures raise and are handled by
+                    # the except block below (page skipped); residual empty
+                    # bubbles are reported in the final batch report instead of
+                    # skipping the whole page.
+                    from modules.utils.retry_utils import retry_translate
+                    retry_translate(
+                        translator, blk_list, image, extra_context,
                         context_blocks=context_blocks, batch_size=batch_size,
-                        scene_description=scene_description,
+                        scene_description=scene_description, label=f"Translation:{base_name}",
                     )
-                    if not success:
-                        err_msg = QCoreApplication.translate("Messages", "Translation failed. The API may be unreachable or returned an empty response.")
-                        if self.progress_callback:
-                            self.progress_callback(error=err_msg)
-                        empty_tr_blocks = [
-                            (list(blk.xyxy), getattr(blk, 'translation', ''))
-                            for blk in blk_list
-                            if not (blk.translation or "").strip()
-                        ]
-                        batch_report.append({
-                            "page": os.path.basename(image_path),
-                            "page_index": index,
-                            "total_blocks": len(blk_list),
-                            "empty_ocr": [],
-                            "empty_translation": empty_tr_blocks,
-                        })
-                        continue
                     # Cache the translation results for potential future use
                     self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
-
-                    # Retry empty translations with backoff
-                    empty_tr = [blk for blk in blk_list if not (blk.translation or "").strip()]
-                    for retry_attempt in range(2):
-                        if not empty_tr:
-                            break
-                        wait = 1.5 * (retry_attempt + 1)
-                        logger.info("Translation retry %d: %d empty blocks on '%s', waiting %.1fs...",
-                                    retry_attempt + 1, len(empty_tr), base_name, wait)
-                        time.sleep(wait)
-                        translator.translate(
-                            empty_tr, image, extra_context,
-                            context_blocks=None, batch_size=batch_size,
-                            scene_description=scene_description,
-                        )
-                        empty_tr = [blk for blk in empty_tr if not (blk.translation or "").strip()]
 
                 if context_window:
                     sliding_buffer.extend(get_context_entries(blk_list))
@@ -344,12 +317,27 @@ class BatchProcessor:
                 else:
                     err_msg = str(e)
 
+                if self.progress_callback:
+                    self.progress_callback(error=err_msg)
                 logger.exception(f"Translation failed: {err_msg}")
                 reason = f"Translator: {err_msg}"
                 full_traceback = traceback.format_exc()
                 self.skip_save(directory, timestamp, base_name, extension, archive_bname, image)
                 self.main_page.image_skipped.emit(image_path, "Translator", err_msg)
                 self.log_skipped_image(directory, timestamp, image_path, reason, full_traceback)
+                batch_report.append({
+                    "page": os.path.basename(image_path),
+                    "page_index": index,
+                    "total_blocks": len(blk_list),
+                    "empty_ocr": [],
+                    "empty_translation": [
+                        (list(blk.xyxy), getattr(blk, 'translation', ''))
+                        for blk in blk_list
+                        if not (blk.translation or "").strip()
+                    ],
+                    "skipped": True,
+                    "skip_reason": f"Translator: {err_msg}",
+                })
                 continue
 
             if self._is_cancelled():
@@ -367,6 +355,15 @@ class BatchProcessor:
                     self.skip_save(directory, timestamp, base_name, extension, archive_bname, image)
                     self.main_page.image_skipped.emit(image_path, "Translator", "")
                     self.log_skipped_image(directory, timestamp, image_path, "Translator: empty JSON")
+                    batch_report.append({
+                        "page": os.path.basename(image_path),
+                        "page_index": index,
+                        "total_blocks": len(blk_list),
+                        "empty_ocr": [],
+                        "empty_translation": [],
+                        "skipped": True,
+                        "skip_reason": "Translator: empty JSON",
+                    })
                     continue
             except json.JSONDecodeError as e:
                 # Handle invalid JSON
@@ -377,6 +374,15 @@ class BatchProcessor:
                 self.skip_save(directory, timestamp, base_name, extension, archive_bname, image)
                 self.main_page.image_skipped.emit(image_path, "Translator", error_message)
                 self.log_skipped_image(directory, timestamp, image_path, reason, full_traceback)
+                batch_report.append({
+                    "page": os.path.basename(image_path),
+                    "page_index": index,
+                    "total_blocks": len(blk_list),
+                    "empty_ocr": [],
+                    "empty_translation": [],
+                    "skipped": True,
+                    "skip_reason": reason,
+                })
                 continue
 
             export_settings = settings_page.get_export_settings()
@@ -605,9 +611,10 @@ class BatchProcessor:
         if not batch_report:
             return
 
-        issues = [p for p in batch_report if p["empty_ocr"] or p["empty_translation"]]
-        total_empty_ocr = sum(len(p["empty_ocr"]) for p in batch_report)
-        total_empty_tr = sum(len(p["empty_translation"]) for p in batch_report)
+        issues = [p for p in batch_report if p.get("empty_ocr") or p.get("empty_translation") or p.get("skipped")]
+        total_empty_ocr = sum(len(p.get("empty_ocr", [])) for p in batch_report)
+        total_empty_tr = sum(len(p.get("empty_translation", [])) for p in batch_report)
+        skipped = [p for p in batch_report if p.get("skipped")]
 
         lines = []
         lines.append("=" * 60)
@@ -618,14 +625,16 @@ class BatchProcessor:
             lines.append("✓ All pages OK — no empty OCR or translations")
         else:
             ok_count = len(batch_report) - len(issues)
-            lines.append(f"✓ {ok_count} pages fully OK")
+            lines.append(f"✓ {ok_count} page(s) fully OK")
             lines.append(f"⚠ {len(issues)} page(s) with issues:\n")
             for p in issues:
                 page_name = p["page"]
                 total = p["total_blocks"]
-                e_ocr = len(p["empty_ocr"])
-                e_tr = len(p["empty_translation"])
+                e_ocr = len(p.get("empty_ocr", []))
+                e_tr = len(p.get("empty_translation", []))
                 lines.append(f"  {page_name} ({total} blocks)")
+                if p.get("skipped"):
+                    lines.append(f"    SKIPPED: {p.get('skip_reason', 'unknown error')}")
                 if e_ocr:
                     lines.append(f"    OCR empty: {e_ocr} block(s)")
                     for coords, _ in p["empty_ocr"]:
@@ -636,7 +645,7 @@ class BatchProcessor:
                         lines.append(f"      → {coords}")
                 lines.append("")
 
-        lines.append(f"TOTAL: {total_empty_ocr} empty OCR, {total_empty_tr} empty translation across {len(batch_report)} pages")
+        lines.append(f"TOTAL: {total_empty_ocr} empty OCR, {total_empty_tr} empty translation, {len(skipped)} skipped across {len(batch_report)} pages")
         lines.append("=" * 60)
 
         report_text = "\n".join(lines)

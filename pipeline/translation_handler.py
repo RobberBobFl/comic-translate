@@ -16,6 +16,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _translate_with_retries(translator, blk_list, image, extra_context, scene_description=None):
+    """Translate ``blk_list`` retrying transient/server errors and empty results
+    up to MAX_ATTEMPTS times (see :func:`modules.utils.retry_utils.retry_translate`).
+
+    Hard failures (network/API errors after retries) propagate to the caller so
+    the controller can surface them with the proper message. When the blocks end
+    up entirely untranslated after all retries (e.g. malformed/empty LLM JSON),
+    raise :class:`LLMInvalidResponseError` for the dedicated popup.
+    """
+    from modules.utils.retry_utils import retry_translate
+
+    retry_translate(
+        translator, blk_list, image, extra_context,
+        scene_description=scene_description,
+    )
+    if blk_list and all(not (getattr(b, "translation", "") or "").strip() for b in blk_list):
+        raise LLMInvalidResponseError(
+            "LLM response could not be parsed as JSON or returned empty results after retries"
+        )
+
+
 class TranslationHandler:
     """Handles translation processing with caching support."""
     
@@ -96,14 +117,13 @@ class TranslationHandler:
                     
                     # If we reach here, need to process the block
                     single_block_list = [blk]
-                    _, success = translator.translate(
+                    _translate_with_retries(
+                        translator,
                         single_block_list,
                         image,
                         extra_context,
                         scene_description=scene_description,
                     )
-                    if not success:
-                        raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     
                     # Update the cache with this new result using the cache manager's method
                     self.cache_manager.update_translation_cache_for_block(translation_cache_key, blk)
@@ -121,14 +141,13 @@ class TranslationHandler:
                         all_blocks_copy.append(copy_blk)
                     
                     if all_blocks_copy:  
-                        _, success = translator.translate(
+                        _translate_with_retries(
+                            translator,
                             all_blocks_copy,
                             image,
                             extra_context,
                             scene_description=scene_description,
                         )
-                        if not success:
-                            raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                         # Cache using the original blocks to maintain consistent IDs
                         self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list, all_blocks_copy)
                         cached_translation = self.cache_manager._get_cached_translation_for_block(translation_cache_key, blk)
@@ -144,14 +163,13 @@ class TranslationHandler:
                     logger.info(f"Using cached translation results for all {len(self.main_page.blk_list)} blocks")
                 else:
                     # Need to run translation and cache results
-                    _, success = translator.translate(
+                    _translate_with_retries(
+                        translator,
                         self.main_page.blk_list,
                         image,
                         extra_context,
                         scene_description=scene_description,
                     )
-                    if not success:
-                        raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
                     self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list)
                     logger.info("Translation completed and cached for %d blocks", len(self.main_page.blk_list))
                 
@@ -201,15 +219,14 @@ class TranslationHandler:
         scene_description = ""
         if llm_settings.get("use_scene_description", False) and translator.is_llm_engine:
             scene_description = state.get("scene_description", "") or ""
-        _, success = translator.translate(
+        _translate_with_retries(
+            translator,
             visible_blocks,
             visible_image,
             extra_context,
             scene_description=scene_description,
         )
-        if not success:
-            raise LLMInvalidResponseError("LLM response could not be parsed as JSON")
-        
+
         # Translation is set, now restore original coordinates
         restore_original_block_coordinates(visible_blocks)
         

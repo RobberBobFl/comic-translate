@@ -125,19 +125,10 @@ class ChunkMixin:
 
         self.ocr_handler.ocr.initialize(self.main_page, source_lang)
         try:
-            self.ocr_handler.ocr.process(image, blocks)
-
-            # Retry empty OCR bubbles with backoff
-            empty_blocks = [blk for blk in blocks if not (blk.text or "").strip()]
-            for retry_attempt in range(2):
-                if not empty_blocks:
-                    break
-                wait = 1.5 * (retry_attempt + 1)
-                logger.info("Webtoon OCR retry %d: %d empty blocks, waiting %.1fs...",
-                            retry_attempt + 1, len(empty_blocks), wait)
-                time.sleep(wait)
-                self.ocr_handler.ocr.process(image, empty_blocks)
-                empty_blocks = [blk for blk in empty_blocks if not (blk.text or "").strip()]
+            # Retry transient server errors and empty bubbles up to MAX_ATTEMPTS
+            # times before giving up on the page.
+            from modules.utils.retry_utils import retry_ocr
+            retry_ocr(self.ocr_handler.ocr, image, blocks, label=f"OCR:{reason}")
 
             if sort_after:
                 rtl = source_lang_en == "Japanese"
@@ -181,27 +172,17 @@ class ChunkMixin:
                 if scene_description:
                     state["scene_description"] = scene_description
         try:
-            translator.translate(
+            # Retry transient server errors and empty bubbles up to MAX_ATTEMPTS
+            # times. Hard failures raise and are surfaced as a skipped page.
+            from modules.utils.retry_utils import retry_translate
+            retry_translate(
+                translator,
                 blocks,
                 image,
                 extra_context,
                 scene_description=scene_description,
+                label=f"Translation:{os.path.basename(image_path)}",
             )
-
-            # Retry empty translations with backoff
-            empty_tr = [blk for blk in blocks if not (blk.translation or "").strip()]
-            for retry_attempt in range(2):
-                if not empty_tr:
-                    break
-                wait = 1.5 * (retry_attempt + 1)
-                logger.info("Webtoon translation retry %d: %d empty blocks on '%s', waiting %.1fs...",
-                            retry_attempt + 1, len(empty_tr), image_path, wait)
-                time.sleep(wait)
-                translator.translate(
-                    empty_tr, image, extra_context,
-                    scene_description=scene_description,
-                )
-                empty_tr = [blk for blk in empty_tr if not (blk.translation or "").strip()]
 
         except InsufficientCreditsException:
             raise

@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # them would only multiply the reasoning-token overhead paid per request.
 SINGLE_BATCH_MAX_BLOCKS = 8
 
-# A chunk that fails with a network/API error is retried this many times in
-# total. Malformed JSON is not retried -- it is a model behaviour, not a glitch.
-CHUNK_ATTEMPTS = 2
-CHUNK_RETRY_DELAY = 1.0
+# A chunk that fails with a network/API error or comes back with malformed/empty
+# JSON is retried this many times in total before the chunk is treated as failed.
+CHUNK_ATTEMPTS = 3
+CHUNK_RETRY_DELAY = 1.5
 
 
 class _TranslationSlot:
