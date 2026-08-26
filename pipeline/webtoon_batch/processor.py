@@ -46,6 +46,9 @@ class WebtoonBatchProcessor(FlowMixin, ChunkMixin, RenderMixin):
         self.final_patches_for_save = defaultdict(list)
         self._reported_image_load_failures = set()
 
+        # Sliding context window carried across virtual pages of a webtoon run.
+        self.sliding_buffer: list = []
+
         # Seam matching / crop settings.
         self.min_virtual_chunk_height = 2000
         self.max_virtual_chunk_height = 3500

@@ -16,9 +16,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _translate_with_retries(translator, blk_list, image, extra_context, scene_description=None):
+def _translate_with_retries(translator, blk_list, image, extra_context, scene_description=None,
+                             batch_size=None, context_blocks=None):
     """Translate ``blk_list`` retrying transient/server errors and empty results
     up to MAX_ATTEMPTS times (see :func:`modules.utils.retry_utils.retry_translate`).
+
+    ``batch_size`` and ``context_blocks`` enable the LLM batching + sliding
+    context window (see ``BaseLLMTranslation.translate``); without them the whole
+    page is sent in a single request, which times out on large/stripped pages.
 
     Hard failures (network/API errors after retries) propagate to the caller so
     the controller can surface them with the proper message. When the blocks end
@@ -30,6 +35,8 @@ def _translate_with_retries(translator, blk_list, image, extra_context, scene_de
     retry_translate(
         translator, blk_list, image, extra_context,
         scene_description=scene_description,
+        batch_size=batch_size,
+        context_blocks=context_blocks,
     )
     if blk_list and all(not (getattr(b, "translation", "") or "").strip() for b in blk_list):
         raise LLMInvalidResponseError(
@@ -67,6 +74,7 @@ class TranslationHandler:
             extra_context = llm_settings['extra_context']
             system_prompt = llm_settings.get('system_prompt', '')
             translator_key = settings_page.get_tool_selection('translator')
+            batch_size = llm_settings.get('batch_size', 5)
 
             upper_case = settings_page.ui.uppercase_checkbox.isChecked()
 
@@ -123,6 +131,7 @@ class TranslationHandler:
                         image,
                         extra_context,
                         scene_description=scene_description,
+                        batch_size=batch_size,
                     )
                     
                     # Update the cache with this new result using the cache manager's method
@@ -147,6 +156,7 @@ class TranslationHandler:
                             image,
                             extra_context,
                             scene_description=scene_description,
+                            batch_size=batch_size,
                         )
                         # Cache using the original blocks to maintain consistent IDs
                         self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list, all_blocks_copy)
@@ -169,6 +179,7 @@ class TranslationHandler:
                         image,
                         extra_context,
                         scene_description=scene_description,
+                        batch_size=batch_size,
                     )
                     self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list)
                     logger.info("Translation completed and cached for %d blocks", len(self.main_page.blk_list))
@@ -209,6 +220,7 @@ class TranslationHandler:
         settings_page = self.main_page.settings_page
         llm_settings = settings_page.get_llm_settings()
         extra_context = llm_settings['extra_context']
+        batch_size = llm_settings.get('batch_size', 5)
         upper_case = settings_page.ui.uppercase_checkbox.isChecked()
         current_path = None
         if 0 <= self.main_page.curr_img_idx < len(self.main_page.image_files):
@@ -225,6 +237,7 @@ class TranslationHandler:
             visible_image,
             extra_context,
             scene_description=scene_description,
+            batch_size=batch_size,
         )
 
         # Translation is set, now restore original coordinates

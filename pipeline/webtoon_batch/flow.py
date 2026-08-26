@@ -414,6 +414,7 @@ class FlowMixin:
                 )
 
             self.final_patches_for_save.clear()
+            self.sliding_buffer.clear()
             global_index_by_path = {
                 path: idx for idx, path in enumerate(self.main_page.image_files)
             }

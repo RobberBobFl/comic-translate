@@ -7,6 +7,12 @@ import numpy as np
 from PIL import Image
 from .utils import ensure_uint8
 
+# ComicTranslate stitches entire webtoons into single images that can far exceed
+# PIL's default ~178M-pixel decompression-bomb limit. Disable the check so
+# stitched/recovered projects load. This is a local desktop tool processing the
+# user's own files.
+Image.MAX_IMAGE_PIXELS = None
+
 
 def read_image(path: str) -> np.ndarray:
     """Read an image file and return as RGB numpy array."""

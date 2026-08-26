@@ -18,7 +18,7 @@ from modules.utils.exceptions import InsufficientCreditsException
 from modules.utils.image_utils import generate_mask
 from modules.utils.pipeline_config import get_config, get_inpainter_backend, inpaint_map
 from modules.utils.textblock import TextBlock, sort_blk_list
-from modules.utils.translator_utils import is_renderable_translation
+from modules.utils.translator_utils import get_context_entries, is_renderable_translation
 from pipeline.inpainting import call_inpaint_image
 
 if TYPE_CHECKING:
@@ -155,6 +155,8 @@ class ChunkMixin:
             return
         extra_context = self.main_page.settings_page.get_llm_settings()["extra_context"]
         llm_settings = self.main_page.settings_page.get_llm_settings()
+        batch_size = llm_settings.get("batch_size", 5)
+        context_window = llm_settings.get("context_window", 8)
         translator = Translator(self.main_page, source_lang, target_lang)
         scene_description = ""
         state = self.main_page.image_states.get(image_path, {})
@@ -171,6 +173,10 @@ class ChunkMixin:
                 )
                 if scene_description:
                     state["scene_description"] = scene_description
+        # Sliding context window carried across virtual pages of this run (see
+        # BatchProcessor.batch_process for the same mechanism). Reset at the
+        # start of webtoon_batch_process.
+        context_blocks = self.sliding_buffer[-context_window:] if context_window else None
         try:
             # Retry transient server errors and empty bubbles up to MAX_ATTEMPTS
             # times. Hard failures raise and are surfaced as a skipped page.
@@ -181,9 +187,10 @@ class ChunkMixin:
                 image,
                 extra_context,
                 scene_description=scene_description,
+                batch_size=batch_size,
+                context_blocks=context_blocks,
                 label=f"Translation:{os.path.basename(image_path)}",
             )
-
         except InsufficientCreditsException:
             raise
         except Exception as error:
@@ -192,6 +199,12 @@ class ChunkMixin:
             self.main_page.image_skipped.emit(image_path, "Translation", err_msg)
             for block in blocks:
                 block.translation = ""
+        else:
+            # Success: feed translated lines into the sliding window for the
+            # next virtual page.
+            if context_window:
+                self.sliding_buffer.extend(get_context_entries(blocks))
+                del self.sliding_buffer[:-context_window]
 
     def _inpaint_image_with_blocks(
         self: WebtoonBatchProcessor,
