@@ -2299,4 +2299,69 @@ Taşınmış, yeniden adlandırılmış veya silinmiş olabilir.
         <translation>Çevir</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>Dikişleri ayarla</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>Parça sınırlarını ayarla</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ kesimi aşağı taşır: üst parça büyür.
+− kesimi yukarı taşır: alt parça büyür.</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>Sınır {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ kesimi aşağı taşır (üst parça büyür); − yukarı taşır (alt parça büyür).</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>Tümünü sıfırla</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>İptal</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>Bu birleştirilmiş webtoonda ayarlanacak parça sınırı yok.</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>Webtoon dışa aktar</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>Birleştirilmiş webtoon nasıl dışa aktarılsın?</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>Ayrı sayfalar (böl)</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>Tek dosya</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>Partiler halinde birleştir (≤25 sayfa, ≤10 MB)</translation>
+        </message>
+</context>
 </TS>

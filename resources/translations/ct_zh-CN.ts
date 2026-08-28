@@ -2297,4 +2297,69 @@ It may have been moved, renamed, or deleted.
         <translation>翻译</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>调整接缝</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>调整分块边界</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ 将切割线下移：上方分块变大。
+− 将切割线上移：下方分块变大。</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>边界 {n}：{a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ 将切割线下移（上方分块变大）；− 上移（下方分块变大）。</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>全部重置</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>此拼接网页漫画中没有可调整的分块边界。</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>导出网页漫画</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>如何导出拼接后的网页漫画？</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>拆分单独页面</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>单个文件</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>批量拼接（≤25页，≤10MB）</translation>
+        </message>
+</context>
 </TS>

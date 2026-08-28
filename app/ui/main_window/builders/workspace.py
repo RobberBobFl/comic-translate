@@ -17,6 +17,7 @@ from app.ui.dayu_widgets.slider import MSlider
 from app.ui.dayu_widgets.text_edit import MTextEdit
 from app.ui.dayu_widgets.tool_button import MToolButton
 from app.ui.search_replace_panel import SearchReplacePanel
+from app.ui.webtoon_seam_dialog import SeamAdjustDialog
 from app.ui.main_window.constants import supported_source_languages, supported_target_languages
 
 
@@ -76,6 +77,10 @@ class WorkspaceMixin:
         )
         self.webtoon_toggle.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
 
+        self.adjust_seams_button = MPushButton(QtCore.QCoreApplication.translate("Webtoon", "Adjust seams"))
+        self.adjust_seams_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.adjust_seams_button.setVisible(False)
+
         self.translate_button = MPushButton(self.tr("Translate All"))
         self.translate_button.setEnabled(True)
         self.translate_button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
@@ -90,6 +95,7 @@ class WorkspaceMixin:
         header_layout.addWidget(self.loading)
         header_layout.addStretch()
         header_layout.addWidget(self.webtoon_toggle)
+        header_layout.addWidget(self.adjust_seams_button)
         header_layout.addWidget(self.manual_radio)
         header_layout.addWidget(self.semi_auto_radio)
         header_layout.addWidget(self.automatic_radio)
@@ -418,6 +424,7 @@ class WorkspaceMixin:
         tools_layout.addLayout(text_tools_lay)
 
         self.webtoon_toggle.toggled.connect(self._on_webtoon_toggled)
+        self.adjust_seams_button.clicked.connect(self._on_adjust_seams)
 
         self.brush_eraser_slider = MSlider()
         self.brush_eraser_slider.setMinimum(1)
@@ -512,3 +519,12 @@ class WorkspaceMixin:
         self.paint_color_swatch.setEnabled(enabled)
         if disable_retouch and self.image_viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser', 'paint_fill_rect'):
             self.set_tool(None)
+
+    def _on_adjust_seams(self):
+        ctrl = getattr(self, "webtoon_ctrl", None)
+        if ctrl is None or not getattr(self, "webtoon_strip", False):
+            return
+        dlg = SeamAdjustDialog(ctrl, self)
+        if dlg.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            dlg.apply_offsets()
+            self.mark_project_dirty()

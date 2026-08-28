@@ -2299,4 +2299,69 @@ Möglicherweise wurde es verschoben, umbenannt oder gelöscht.
         <translation>Übersetzen</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>Nähte anpassen</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>Chunk-Grenzen anpassen</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ verschiebt den Schnitt nach unten: der obere Chunk wächst.
+− verschiebt den Schnitt nach oben: der untere Chunk wächst.</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>Grenze {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ verschiebt den Schnitt nach unten (oberer Chunk wächst); − verschiebt ihn nach oben (unterer Chunk wächst).</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>Alles zurücksetzen</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>Keine Chunk-Grenzen in diesem zusammengesetzten Webtoon zum Anpassen.</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>Webtoon-Export</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>Wie soll der zusammengesetzte Webtoon exportiert werden?</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>Einzelne Seiten (aufteilen)</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>Eine Datei</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>In Batches zusammenfügen (≤25 Seiten, ≤10 MB)</translation>
+        </message>
+</context>
 </TS>

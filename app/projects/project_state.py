@@ -182,6 +182,25 @@ def load_state_from_proj_file(comic_translate: ComicTranslate, file_name: str):
     comic_translate.webtoon_mode = state.get('webtoon_mode', False)
     comic_translate.image_viewer.webtoon_view_state = state.get('webtoon_view_state', {})
 
+    # Restore stitched-webtoon bookkeeping if present (legacy .ctpr projects).
+    ctrl = getattr(comic_translate, "webtoon_ctrl", None)
+    if ctrl is not None:
+        ctrl._stitch_choice = state.get("webtoon_stitch_choice")
+        ctrl._stitched_orig_heights = state.get("webtoon_stitched_orig_heights")
+        ctrl._stitched_chunk_bounds = state.get("webtoon_stitched_chunk_bounds")
+        ctrl._default_chunk_bounds = state.get("webtoon_default_chunk_bounds")
+        ctrl._chunk_boundary_offsets = state.get("webtoon_chunk_boundary_offsets")
+        if state.get("webtoon_strip"):
+            comic_translate.webtoon_strip = True
+            try:
+                ctrl._connect_seam_page_change()
+                ctrl.refresh_seam_guides()
+            except Exception:
+                pass
+            btn = getattr(comic_translate, "adjust_seams_button", None)
+            if btn is not None:
+                btn.setVisible(True)
+
     original_image_files = state.get('original_image_files', [])
     comic_translate.image_files = [
         original_to_temp.get(file, file) for file in original_image_files

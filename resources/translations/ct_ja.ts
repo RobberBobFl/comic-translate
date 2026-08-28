@@ -2300,4 +2300,69 @@ It may have been moved, renamed, or deleted.
         <translation>翻訳する</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>シームを調整</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>チャンクの境界を調整</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ で切り取りを下へ: 上のチャンクが大きくなる。
+− で切り取りを上へ: 下のチャンクが大きくなる。</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>境界 {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ で切り取りを下へ（上のチャンクが大きくなる）；− で上へ（下のチャンクが大きくなる）。</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>すべてリセット</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>キャンセル</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>この結合されたウェブトーンには調整するチャンクの境界がありません。</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>ウェブトーンの書き出し</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>結合されたウェブトーンをどう書き出しますか？</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>個別ページ（分割）</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>単一ファイル</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>バッチ結合（≤25ページ、≤10MB）</translation>
+        </message>
+</context>
 </TS>

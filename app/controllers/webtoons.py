@@ -9,8 +9,7 @@ from PySide6.QtCore import QSettings, QTimer
 import numpy as np
 import cv2
 import imkit as imk
-from PySide6 import QtGui
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 
 if TYPE_CHECKING:
@@ -51,6 +50,17 @@ class WebtoonController:
         self._stitched_orig_heights: list[int] | None = None
         self._stitched_chunk_bounds: list[tuple[int, int]] | None = None
         self._stitch_choice: str | None = None
+        # Chunk-boundary offsets (px). offsets[i] shifts the internal chunk
+        # boundary i (between chunk i and i+1) down by that many px. Length =
+        # len(_stitched_chunk_bounds) - 1, all zeros by default. Used to nudge
+        # where the long stitched image is cut into processable OCR/translate
+        # chunks so a speech bubble is not split across two chunks.
+        self._chunk_boundary_offsets: list[int] | None = None
+        # The default (un-adjusted) chunk cuts the offsets are measured
+        # against. Stable anchor so repeated re-cuts stay consistent.
+        self._default_chunk_bounds: list[tuple[int, int]] | None = None
+        # Overlay guide line items (kept for clear_seam_state bookkeeping).
+        self._seam_guide_items: list = []
 
         # Load lazy loading configuration
         config = LazyLoadingConfig()
@@ -452,7 +462,7 @@ class WebtoonController:
             while i < stitched.shape[0]:
                 j = min(i + step, stitched.shape[0])
                 chunk = stitched[i:j]
-                p = os.path.join(self._stitch_temp_dir(), f"webtoon_chunk_{idx:04d}.png")
+                p = os.path.join(self._stitch_temp_dir(), f"webtoon_chunk_{idx+1:04d}.png")
                 imk.write_image(p, chunk)
                 paths.append(p)
                 chunk_bounds.append((i, j))
@@ -470,6 +480,12 @@ class WebtoonController:
             paths = [p]
             chunk_bounds = [(0, stitched.shape[0])]
 
+        # Fresh per-chunk-boundary offsets: every chunk boundary starts flush
+        # at the default 6000px cut. _default_chunk_bounds is the stable anchor
+        # the offsets are measured against for later re-cuts.
+        self._default_chunk_bounds = [tuple(b) for b in chunk_bounds]
+        self._chunk_boundary_offsets = [0] * max(0, len(chunk_bounds) - 1)
+
         # Remember the original per-page heights and the chunk boundaries so we
         # can split the stitched image back into the original pages on export.
         return {
@@ -477,6 +493,8 @@ class WebtoonController:
             "heights": heights,
             "chunk_bounds": chunk_bounds,
             "choice": choice,
+            "default_chunk_bounds": self._default_chunk_bounds,
+            "chunk_boundary_offsets": self._chunk_boundary_offsets,
         }
 
     def _on_stitch_done(self, result):
@@ -489,9 +507,16 @@ class WebtoonController:
         self._stitched_orig_heights = result["heights"]
         self._stitched_chunk_bounds = result["chunk_bounds"]
         self._stitch_choice = result["choice"]
+        self._default_chunk_bounds = result.get("default_chunk_bounds")
+        self._chunk_boundary_offsets = result.get("chunk_boundary_offsets")
+        self._seam_guide_items = []
         self._init_stitched_files(result["paths"])
         self.main.webtoon_mode = False
         self.main.webtoon_strip = True
+        self._connect_seam_page_change()
+        btn = getattr(self.main, "adjust_seams_button", None)
+        if btn is not None:
+            btn.setVisible(True)
         self.main.mark_project_dirty()
 
     def _on_stitch_error(self, error_tuple):
@@ -515,6 +540,139 @@ class WebtoonController:
         self.main.webtoon_toggle.blockSignals(True)
         self.main.webtoon_toggle.setChecked(False)
         self.main.webtoon_toggle.blockSignals(False)
+
+    # ------------------------------------------------------------------
+    # Chunk-boundary adjustment (manual per-boundary vertical nudge)
+    # ------------------------------------------------------------------
+    MIN_CHUNK_H = 500
+
+    def chunk_boundary_positions(self) -> list[int]:
+        """Full-image Y of each internal chunk boundary (after offsets)."""
+        cb = self._stitched_chunk_bounds
+        if not cb:
+            return []
+        return [cb[i][1] for i in range(len(cb) - 1)]
+
+    def compute_chunk_ranges(self, total: int, offsets: list[int]):
+        """Compute chunk (start, end) ranges for a stitched image of ``total`` px.
+
+        Each internal cut is the default boundary shifted by ``offsets[i]``,
+        clamped so the cuts stay strictly increasing and every chunk keeps at
+        least ``MIN_CHUNK_H`` px. Returns a list of (start, end) tuples, or
+        ``None`` if the offset count does not match the boundary count.
+        """
+        default = self._default_chunk_bounds
+        if not default:
+            return None
+        n_bounds = len(default) - 1
+        if len(offsets) != n_bounds:
+            return None
+
+        MIN = self.MIN_CHUNK_H
+        cuts = []
+        lower = 0
+        remaining = n_bounds
+        for i in range(n_bounds):
+            remaining -= 1
+            upper = total - MIN * (remaining + 1)
+            y = default[i][1] + int(offsets[i])
+            y = max(lower + MIN, min(upper, y))
+            cuts.append(y)
+            lower = y
+
+        ranges = []
+        start = 0
+        for y in cuts:
+            ranges.append((start, y))
+            start = y
+        ranges.append((start, total))
+        return ranges
+
+    def _rebuild_stitched_chunks(self, offsets: list[int]):
+        """Re-slice the full stitched image at the offset chunk boundaries.
+
+        Reconstructs the complete stitched array from the current chunk files
+        (they tile the image contiguously and are always available -- even
+        after a project reload, unlike the original source pages), cuts it at
+        the default 6000px boundaries shifted by ``offsets`` (clamped so every
+        chunk stays >= MIN_CHUNK_H), and writes the new chunk PNGs. Returns
+        ``(paths, bounds)``.
+        """
+        if not self._default_chunk_bounds:
+            return None, None
+        chunk_paths = self.main.image_files
+        arrays = []
+        for fp in chunk_paths:
+            arr = self.main.image_data.get(fp)
+            if arr is None:
+                arr = self.main.image_ctrl.load_image(fp)
+            if arr is None:
+                return None, None
+            arr = self._normalize_channels(arr)
+            arrays.append(arr)
+        if not arrays:
+            return None, None
+        stitched = np.concatenate(arrays, axis=0)
+        total = stitched.shape[0]
+        ranges = self.compute_chunk_ranges(total, offsets)
+        if not ranges:
+            return None, None
+
+        paths = []
+        for idx, (s, e) in enumerate(ranges):
+            p = os.path.join(self._stitch_temp_dir(), f"webtoon_chunk_{idx+1:04d}.png")
+            imk.write_image(p, stitched[s:e])
+            paths.append(p)
+        return paths, ranges
+
+    def apply_chunk_offsets(self, offsets: list[int]):
+        """Apply chunk-boundary offsets: re-cut the chunks and reload them.
+
+        Rebuilds the chunk PNGs and re-initialises the stitched project pages,
+        which resets any OCR/translation progress (the user re-runs OCR
+        afterwards). Mirrors entering stitched mode from scratch.
+        """
+        if self._default_chunk_bounds is None:
+            return
+        n_bounds = len(self._default_chunk_bounds) - 1
+        if len(offsets) != n_bounds:
+            return
+        self._chunk_boundary_offsets = [
+            max(-1000, min(1000, int(o))) for o in offsets
+        ]
+        paths, new_bounds = self._rebuild_stitched_chunks(self._chunk_boundary_offsets)
+        if not paths or not new_bounds:
+            return
+        self._stitched_chunk_bounds = new_bounds
+        self._init_stitched_files(paths)
+
+    def refresh_seam_guides(self):
+        """No-op: the chunk-boundary guide overlay was removed by request."""
+        return
+
+    def _connect_seam_page_change(self):
+        # Seam guide overlay was removed; nothing to connect.
+        return
+
+    def _disconnect_seam_page_change(self):
+        return
+
+    def clear_seam_state(self):
+        """Drop all chunk-boundary bookkeeping and remove the guide overlay."""
+        self._chunk_boundary_offsets = None
+        self._default_chunk_bounds = None
+        self._disconnect_seam_page_change()
+        scene = getattr(self.main.image_viewer, "_scene", None)
+        if scene is not None:
+            for it in self._seam_guide_items:
+                try:
+                    scene.removeItem(it)
+                except Exception:
+                    pass
+        self._seam_guide_items = []
+        btn = getattr(self.main, "adjust_seams_button", None)
+        if btn is not None:
+            btn.setVisible(False)
 
     def _init_stitched_files(self, paths: list[str]):
         """Replace the loaded project with the stitched image(s) as regular
@@ -562,10 +720,12 @@ class WebtoonController:
         self.main.mark_project_dirty()
         if self.main.image_files:
             self.main.image_ctrl.display_image(0, switch_page=True)
+        self.refresh_seam_guides()
 
     def _switch_from_stitched_to_regular(self):
         """Restore the original per-page project that was preserved when we
         entered stitched webtoon mode."""
+        self.clear_seam_state()
         src_files = getattr(self, "_webtoon_source_files", None)
         src_states = getattr(self, "_webtoon_source_states", None)
         if not src_files or src_states is None:

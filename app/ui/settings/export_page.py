@@ -18,23 +18,11 @@ class ExportPage(QtWidgets.QWidget):
         self.raw_text_checkbox = MCheckBox(self.tr("Export Raw Text"))
         self.translated_text_checkbox = MCheckBox(self.tr("Export Translated text"))
         self.inpainted_image_checkbox = MCheckBox(self.tr("Export Inpainted Image"))
-        self.split_webtoon_checkbox = MCheckBox(
-            self.tr("Split stitched webtoon into original pages on export")
-        )
-        split_note = MLabel(
-            self.tr(
-                "When a webtoon was stitched into one image, export it back as "
-                "the original separate pages so comic readers load it instantly."
-            )
-        ).secondary()
-        split_note.setWordWrap(True)
 
         layout.addWidget(batch_label)
         layout.addWidget(batch_note)
         layout.addWidget(self.raw_text_checkbox)
         layout.addWidget(self.translated_text_checkbox)
         layout.addWidget(self.inpainted_image_checkbox)
-        layout.addWidget(self.split_webtoon_checkbox)
-        layout.addWidget(split_note)
 
         layout.addStretch(1)

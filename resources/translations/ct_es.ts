@@ -2300,4 +2300,69 @@ Es posible que se haya movido, cambiado de nombre o eliminado.
         <translation>Traducir</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>Ajustar costuras</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>Ajustar límites de fragmentos</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ baja el corte: el fragmento superior crece.
+− sube el corte: el fragmento inferior crece.</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>Límite {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ baja el corte (el fragmento superior crece); − lo sube (el fragmento inferior crece).</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>Restablecer todo</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Cancelar</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>No hay límites de fragmentos que ajustar en este webtoon unido.</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>Exportar webtoon</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>¿Cómo se debe exportar el webtoon unido?</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>Páginas separadas (dividir)</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>Un solo archivo</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>Unir en lotes (≤25 páginas, ≤10 MB)</translation>
+        </message>
+</context>
 </TS>

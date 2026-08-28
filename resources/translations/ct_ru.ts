@@ -446,14 +446,6 @@
         <source>Export Inpainted Image</source>
         <translation>Экспортировать восстановленное изображение</translation>
     </message>
-    <message>
-        <source>Split stitched webtoon into original pages on export</source>
-        <translation>Разбить склеенный вебтун на исходные страницы при экспорте</translation>
-    </message>
-    <message>
-        <source>When a webtoon was stitched into one image, export it back as the original separate pages so comic readers load it instantly.</source>
-        <translation>Если вебтун был склеен в одну картинку, экспортировать его обратно как исходные отдельные страницы, чтобы читалки комиксов загружали мгновенно.</translation>
-    </message>
 </context>
 <context>
     <name>LlmsPage</name>
@@ -2299,5 +2291,70 @@ It may have been moved, renamed, or deleted.
         <source>Translate</source>
         <translation>Перевести</translation>
     </message>
+</context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>Настроить швы</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>Настроить границы чанков</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ опускает рез вниз: верхний чанк растёт.
+− поднимает рез вверх: нижний чанк растёт.</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>Граница {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ опускает рез вниз (верхний чанк растёт); − поднимает рез вверх (нижний чанк растёт).</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>Сбросить всё</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Отмена</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>В этом склеенном вебтуне нет границ чанков для настройки.</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>Экспорт вебтуна</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>Как экспортировать склеенный вебтун?</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>Отдельные страницы (разрезать)</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>Один файл</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>Склеить в склейки (≤25 стр, ≤10 МБ)</translation>
+        </message>
 </context>
 </TS>

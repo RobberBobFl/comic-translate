@@ -2300,4 +2300,69 @@ It may have been moved, renamed, or deleted.
         <translation>번역</translation>
     </message>
 </context>
+  <context>
+    <name>Webtoon</name>
+    <message>
+        <source>Adjust seams</source>
+        <translation>심 조정</translation>
+    </message>
+    <message>
+        <source>Adjust chunk seams</source>
+        <translation>채크 경계 조정</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down: the upper chunk grows.
+− moves the cut up: the lower chunk grows.</source>
+        <translation>+ 하면 자르기 아래로: 위 채크가 커집니다.
+− 하면 자르기 위로: 아래 채크가 커집니다.</translation>
+    </message>
+    <message>
+        <source>Boundary {n}: {a} ↔ {b}</source>
+        <translation>경계 {n}: {a} ↔ {b}</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>+ moves the cut down (upper chunk grows); − moves it up (lower chunk grows).</source>
+        <translation>+ 하면 자르기 아래로(위 채크 커짐); − 하면 위로(아래 채크 커짐).</translation>
+    </message>
+    <message>
+        <source>Reset all</source>
+        <translation>모두 초기화</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>No chunk boundaries to adjust in this stitched webtoon.</source>
+        <translation>이 결합된 웤토은 조정할 채크 경계가 없습니다.</translation>
+    </message>
+          <message>
+            <source>Webtoon export</source>
+            <translation>웤토은 내보내기</translation>
+        </message>
+        <message>
+            <source>How should the stitched webtoon be exported?</source>
+            <translation>결합된 웤토을 어떻게 내보내할까요?</translation>
+        </message>
+        <message>
+            <source>Separate pages (split)</source>
+            <translation>개별 페이지 (분할)</translation>
+        </message>
+        <message>
+            <source>Single file</source>
+            <translation>단일 파일</translation>
+        </message>
+        <message>
+            <source>Stitch into batches (≤25 pages, ≤10 MB)</source>
+            <translation>배치로 결합 (≤25페이지, ≤10MB)</translation>
+        </message>
+</context>
 </TS>

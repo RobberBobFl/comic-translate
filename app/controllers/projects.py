@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 import numpy as np
+import cv2
 import imkit as imk
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -32,6 +33,11 @@ from app.projects.project_state import (
 )
 from modules.utils.archives import make
 from modules.utils.paths import get_user_data_dir, get_default_project_autosave_dir
+
+# "Stitch into batches" webtoon export: each combined image holds at most this
+# many original pages and weighs at most this many bytes (PNG-encoded).
+WEBTOON_BATCH_MAX_PAGES = 25
+WEBTOON_BATCH_MAX_BYTES = 10 * 1024 * 1024
 from modules.utils.language_utils import to_canonical_language_name
 
 logger = logging.getLogger(__name__)
@@ -569,21 +575,11 @@ class ProjectController:
         # confirm the choice so a giant stitched image is not exported by
         # accident (most users want the original separate pages).
         webtoon_strip = bool(getattr(self.main, "webtoon_strip", False))
-        split_stitched = webtoon_strip
+        mode = "pages"
         if webtoon_strip:
-            split_setting = True
-            try:
-                split_setting = bool(
-                    self.main.settings_page.get_export_settings().get(
-                        "webtoon_stitch_split_export", True
-                    )
-                )
-            except Exception:
-                split_setting = True
-            if split_setting:
-                split_stitched = True
-            else:
-                split_stitched = self._prompt_export_split_webtoon()
+            mode = self._prompt_webtoon_export_mode()
+        split_stitched = mode in ("pages", "batches")
+        batch_stitched = mode == "batches"
         self.main.loading.setVisible(True)
         if split_stitched:
             self.main.progress_bar.setVisible(True)
@@ -597,39 +593,44 @@ class ProjectController:
             export_plan,
             all_pages_current_state,
             split_stitched,
+            batch_stitched,
         )
 
-    def _prompt_export_split_webtoon(self) -> bool:
-        """Ask whether to split a stitched webtoon back into pages on export.
+    def _prompt_webtoon_export_mode(self) -> str:
+        """Ask how a stitched webtoon should be exported.
 
-        Only shown when a stitched webtoon is being exported and the
-        "split on export" option is disabled. Returns True to split (the
-        recommended, safe choice) or False to export the stitched image as one
-        file. Cancelling the dialog defaults to splitting.
+        Returns 'pages' (split back into separate pages), 'single' (one file)
+        or 'batches' (stitch consecutive pages into combined images of at most
+        25 pages and 10 MB each). Cancelling the dialog defaults to 'pages'.
         """
         msg = QtWidgets.QMessageBox(self.main)
         msg.setIcon(QtWidgets.QMessageBox.Icon.Question)
-        msg.setWindowTitle(self.main.tr("Webtoon export"))
+        msg.setWindowTitle(QtCore.QCoreApplication.translate("Webtoon", "Webtoon export"))
         msg.setText(
-            self.main.tr(
-                "This webtoon was stitched into one image. Export it back as "
-                "the original separate pages (recommended), or as a single file?"
+            QtCore.QCoreApplication.translate(
+                "Webtoon", "How should the stitched webtoon be exported?"
             )
         )
-        split_btn = msg.addButton(
-            self.main.tr("Separate pages (recommended)"),
+        pages_btn = msg.addButton(
+            QtCore.QCoreApplication.translate("Webtoon", "Separate pages (split)"),
             QtWidgets.QMessageBox.ButtonRole.ActionRole,
         )
         single_btn = msg.addButton(
-            self.main.tr("Single file"),
+            QtCore.QCoreApplication.translate("Webtoon", "Single file"),
             QtWidgets.QMessageBox.ButtonRole.ActionRole,
         )
-        msg.setDefaultButton(split_btn)
+        batches_btn = msg.addButton(
+            QtCore.QCoreApplication.translate("Webtoon", "Stitch into batches (\u226425 pages, \u226410 MB)"),
+            QtWidgets.QMessageBox.ButtonRole.ActionRole,
+        )
+        msg.setDefaultButton(batches_btn)
         msg.exec()
         clicked = msg.clickedButton()
         if clicked is single_btn:
-            return False
-        return True
+            return "single"
+        if clicked is batches_btn:
+            return "batches"
+        return "pages"
 
     def _prompt_for_partition(
         self,
@@ -946,6 +947,7 @@ class ProjectController:
         export_plan: list[dict],
         all_pages_current_state: dict[str, dict],
         split_stitched: bool = False,
+        batch_stitched: bool = False,
     ):
         try:
             if self.main.file_handler.should_pre_materialize(self.main.image_files):
@@ -965,17 +967,22 @@ class ProjectController:
             # When exporting a stitched webtoon, optionally render the long image
             # and slice it back into the original separate pages.
             all_split_pages: list[tuple[np.ndarray, str]] = []
+            source_pages: list[tuple[np.ndarray, str]] | None = None
             if split_stitched:
                 all_split_pages = self._build_split_stitched_pages(
                     export_plan, all_pages_current_state, temp_main_page_context
                 )
+                if batch_stitched and all_split_pages:
+                    source_pages = self._build_batched_pages(all_split_pages)
+                elif all_split_pages:
+                    source_pages = all_split_pages
 
             for group_index, group in enumerate(export_plan, start=1):
                 group_dir = os.path.join(temp_dir, f"group_{group_index:03d}")
                 os.makedirs(group_dir, exist_ok=True)
-                if split_stitched and all_split_pages:
+                if source_pages:
                     page_number = 0
-                    for page_img, grp in all_split_pages:
+                    for page_img, grp in source_pages:
                         if grp != group["group_name"]:
                             continue
                         page_number += 1
@@ -1099,6 +1106,51 @@ class ProjectController:
         except Exception:
             pass
         return pages
+
+    @staticmethod
+    def _build_batched_pages(
+        split_pages: list[tuple[np.ndarray, str]],
+        max_pages: int = WEBTOON_BATCH_MAX_PAGES,
+        max_bytes: int = WEBTOON_BATCH_MAX_BYTES,
+    ) -> list[tuple[np.ndarray, str]]:
+        """Group consecutive pages (within each chapter) into combined batch
+        images, each holding as many pages as possible while staying within
+        *max_pages* pages and *max_bytes* bytes when PNG-encoded.
+
+        Used by the "stitch into batches" webtoon export mode. All pages share
+        the stitched webtoon width, so vertical concatenation is valid.
+        """
+        from collections import OrderedDict
+
+        grouped: "OrderedDict[str, list[np.ndarray]]" = OrderedDict()
+        for img, grp in split_pages:
+            grouped.setdefault(grp, []).append(img)
+
+        result: list[tuple[np.ndarray, str]] = []
+        for grp, imgs in grouped.items():
+            page_sizes = [int(len(cv2.imencode(".png", im)[1])) for im in imgs]
+            batch: list[np.ndarray] = []
+            batch_bytes = 0
+            for im, page_size in zip(imgs, page_sizes):
+                if batch and (
+                    len(batch) + 1 > max_pages or batch_bytes + page_size > max_bytes
+                ):
+                    result.append((np.concatenate(batch, axis=0), grp))
+                    batch = []
+                    batch_bytes = 0
+                batch.append(im)
+                batch_bytes += page_size
+            if batch:
+                combined = np.concatenate(batch, axis=0)
+                # Concatenation may compress slightly worse than the per-page sum
+                # predicted; if so, drop the final page into its own batch.
+                if len(batch) > 1 and len(cv2.imencode(".png", combined)[1]) > max_bytes:
+                    last = batch.pop()
+                    result.append((np.concatenate(batch, axis=0), grp))
+                    result.append((last, grp))
+                else:
+                    result.append((combined, grp))
+        return result
 
     def _gather_psd_pages(self, all_pages_current_state: dict[str, dict]) -> list[PsdPageData]:
         """Collect PSD page data from the captured viewer state."""

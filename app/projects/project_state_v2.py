@@ -395,6 +395,12 @@ def save_state_to_proj_file_v2(comic_translate: "ComicTranslate", file_name: str
         "llm_system_prompt": comic_translate.settings_page.get_llm_settings().get("system_prompt", ""),
         "webtoon_mode": comic_translate.webtoon_mode,
         "webtoon_view_state": comic_translate.image_viewer.webtoon_view_state,
+        "webtoon_strip": getattr(comic_translate, "webtoon_strip", False),
+        "webtoon_stitch_choice": getattr(getattr(comic_translate, "webtoon_ctrl", None), "_stitch_choice", None),
+        "webtoon_stitched_orig_heights": getattr(getattr(comic_translate, "webtoon_ctrl", None), "_stitched_orig_heights", None),
+        "webtoon_stitched_chunk_bounds": getattr(getattr(comic_translate, "webtoon_ctrl", None), "_stitched_chunk_bounds", None),
+        "webtoon_default_chunk_bounds": getattr(getattr(comic_translate, "webtoon_ctrl", None), "_default_chunk_bounds", None),
+        "webtoon_chunk_boundary_offsets": getattr(getattr(comic_translate, "webtoon_ctrl", None), "_chunk_boundary_offsets", None),
         "unique_images": ensure_string_keys(unique_images),
     }
     manifest_blob = msgpack.packb(manifest, default=encoder.encode, use_bin_type=True)
@@ -559,6 +565,26 @@ def _materialize_from_manifest_and_pages(
     comic_translate.curr_img_idx = manifest.get("current_image_index", 0)
     comic_translate.webtoon_mode = manifest.get("webtoon_mode", False)
     comic_translate.image_viewer.webtoon_view_state = manifest.get("webtoon_view_state", {})
+
+    # Restore stitched-webtoon bookkeeping (seam offsets included) so a stitched
+    # project reloads in the same mode and the manual seam nudges survive.
+    ctrl = getattr(comic_translate, "webtoon_ctrl", None)
+    if ctrl is not None:
+        ctrl._stitch_choice = manifest.get("webtoon_stitch_choice")
+        ctrl._stitched_orig_heights = manifest.get("webtoon_stitched_orig_heights")
+        ctrl._stitched_chunk_bounds = manifest.get("webtoon_stitched_chunk_bounds")
+        ctrl._default_chunk_bounds = manifest.get("webtoon_default_chunk_bounds")
+        ctrl._chunk_boundary_offsets = manifest.get("webtoon_chunk_boundary_offsets")
+        if manifest.get("webtoon_strip"):
+            comic_translate.webtoon_strip = True
+            ctrl._connect_seam_page_change()
+            try:
+                ctrl.refresh_seam_guides()
+            except Exception:
+                pass
+            btn = getattr(comic_translate, "adjust_seams_button", None)
+            if btn is not None:
+                btn.setVisible(True)
 
     original_image_files = manifest.get("original_image_files", [])
     comic_translate.image_files = [original_to_temp.get(file, file) for file in original_image_files]
