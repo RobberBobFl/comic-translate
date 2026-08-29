@@ -817,8 +817,10 @@ class ManualWorkflowController:
                         # Recompute cleaning masks from the (possibly reviewed)
                         # blocks so bubbles added/removed during review are respected.
                         strokes = self._serialize_segmentation_strokes(blk_list, image)
+                        respect_manual_mask = False
                     else:
                         strokes = state.get("brush_strokes", [])
+                        respect_manual_mask = True
                     if not strokes:
                         continue
 
@@ -826,6 +828,7 @@ class ManualWorkflowController:
                         image,
                         strokes,
                         blk_list=blk_list,
+                        respect_manual_mask=respect_manual_mask,
                     )
 
                     if self.main.webtoon_mode and patches:

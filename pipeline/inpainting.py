@@ -57,7 +57,7 @@ class InpaintingHandler:
             logger.info("pre-inpaint: inpainter initialized in %.2fs", time.time() - t0)
         return self.inpainter_cache
 
-    def manual_inpaint(self):
+    def manual_inpaint(self, respect_manual_mask: bool = True):
         image_viewer = self.main_page.image_viewer
         settings_page = self.main_page.settings_page
         mask = image_viewer.get_mask_for_inpainting()
@@ -76,7 +76,13 @@ class InpaintingHandler:
 
         config = get_config(settings_page)
         inpaint_blocks = self._get_manual_fast_fill_blocks(mappings)
-        inpaint_input_img = self.inpaint_image(image, mask, config, blk_list=inpaint_blocks or None)
+        inpaint_input_img = self.inpaint_image(
+            image,
+            mask,
+            config,
+            blk_list=inpaint_blocks or None,
+            respect_manual_mask=respect_manual_mask,
+        )
         inpaint_input_img = imk.convert_scale_abs(inpaint_input_img) 
 
         return inpaint_input_img
@@ -410,6 +416,7 @@ class InpaintingHandler:
         image: np.ndarray,
         mask: np.ndarray,
         blk_list: list | None,
+        respect_manual_mask: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, int]:
         if image is None or mask is None or not np.any(mask) or not blk_list:
             return image.copy(), mask.copy(), 0
@@ -446,6 +453,18 @@ class InpaintingHandler:
                 continue
             success, reason = self._fast_fill_block(cleaned_image, residual_mask, block, bounds, crop_mask)
             if not success:
+                # When inpainting from manual brush/eraser strokes, never fall
+                # back to the automatic block-derived mask: that would discard
+                # the user's edits (added strokes or erased regions). Leave the
+                # residual for the NN/full inpainter, which honors the mask.
+                if respect_manual_mask:
+                    logger.info(
+                        "Inpaint fast-fill: block[%d] skipped (manual mask, no fallback) %s reason=%s",
+                        idx,
+                        self._format_block_debug_label(block),
+                        reason,
+                    )
+                    continue
                 fallback_mask, fallback_bounds = build_block_mask_data(
                     image,
                     block,
@@ -635,7 +654,15 @@ class InpaintingHandler:
         h = int(stats[label, imk.CC_STAT_HEIGHT])
         return num_labels - 1, int(stats[label, imk.CC_STAT_AREA]), (x, y, w, h)
 
-    def inpaint_image(self, image: np.ndarray, mask: np.ndarray, config, blk_list: list | None = None) -> np.ndarray:
+    def inpaint_image(
+        self,
+        image: np.ndarray,
+        mask: np.ndarray,
+        config,
+        blk_list: list | None = None,
+        *,
+        respect_manual_mask: bool = False,
+    ) -> np.ndarray:
         """
         Intelligently chooses between full-image and patch-based inpainting
         based on image size, number of text blocks, and total mask area.
@@ -645,7 +672,9 @@ class InpaintingHandler:
         if mask is None or not np.any(mask):
             return image.copy()
 
-        working_image, working_mask, cleaned_blocks = self._apply_fast_bubble_cleanup(image, mask, blk_list)
+        working_image, working_mask, cleaned_blocks = self._apply_fast_bubble_cleanup(
+            image, mask, blk_list, respect_manual_mask=respect_manual_mask
+        )
         if cleaned_blocks:
             logger.info("Inpaint hybrid: fast-cleaned %d bubble blocks", cleaned_blocks)
             working_mask, dropped_pixels = self._drop_tiny_residual_components(working_mask)
@@ -731,12 +760,24 @@ class InpaintingHandler:
             )
             return self._inpaint_full_image(working_image, working_mask, config)
 
-    def inpaint_page_from_saved_strokes(self, image: np.ndarray, strokes: list[dict], blk_list: list | None = None):
+    def inpaint_page_from_saved_strokes(
+        self,
+        image: np.ndarray,
+        strokes: list[dict],
+        blk_list: list | None = None,
+        respect_manual_mask: bool = False,
+    ):
         mask = self._generate_mask_from_saved_strokes(strokes, image)
         if mask is None:
             return []
         config = get_config(self.main_page.settings_page)
-        inpainted = self.inpaint_image(image, mask, config, blk_list=blk_list or None)
+        inpainted = self.inpaint_image(
+            image,
+            mask,
+            config,
+            blk_list=blk_list or None,
+            respect_manual_mask=respect_manual_mask,
+        )
         inpainted = imk.convert_scale_abs(inpainted)
         return self._get_regular_patches(mask, inpainted)
 
