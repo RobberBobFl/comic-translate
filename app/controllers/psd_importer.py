@@ -512,6 +512,7 @@ def _import_text_layer(layer: Any) -> dict[str, Any] | None:
 
     return {
         "text": html,
+        "plain_text": plain_text,
         "font_family": primary["font_family"],
         "font_size": primary["font_size"],
         "text_color": QtGui.QColor(primary["fill_color"]),

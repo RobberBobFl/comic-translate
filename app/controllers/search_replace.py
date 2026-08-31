@@ -963,24 +963,27 @@ class SearchReplaceController(QtCore.QObject):
                         blk.text = new_text
                     break
 
-            # Keep persisted rendered text items in sync so switching pages doesn't resurrect old text.
-            if opts.in_target:
-                ti = self._find_matching_text_item_state(state, key)
-                if ti is not None:
-                    if html_override is not None:
-                        ti["text"] = html_override
-                    else:
-                        existing = ti.get("text") or ""
-                        if _looks_like_html(existing):
-                            try:
-                                doc = QtGui.QTextDocument()
-                                doc.setHtml(existing)
-                                if _apply_text_delta_to_document(doc, new_text):
-                                    ti["text"] = doc.toHtml()
-                            except Exception:
-                                pass
+                # Keep persisted rendered text items in sync so switching pages doesn't resurrect old text.
+                if opts.in_target:
+                    ti = self._find_matching_text_item_state(state, key)
+                    if ti is not None:
+                        if html_override is not None:
+                            ti["text"] = html_override
                         else:
-                            ti["text"] = new_text
+                            existing = ti.get("text") or ""
+                            if _looks_like_html(existing):
+                                try:
+                                    doc = QtGui.QTextDocument()
+                                    doc.setHtml(existing)
+                                    if _apply_text_delta_to_document(doc, new_text):
+                                        ti["text"] = doc.toHtml()
+                                except Exception:
+                                    pass
+                            else:
+                                ti["text"] = new_text
+                        # `new_text` is the plain translation; keep it as the
+                        # translation-memory source regardless of the rich `text`.
+                        ti["plain_text"] = new_text
 
         # If currently displayed, update canvas + edits as well.
         blk = self._find_block_in_current_image(key)

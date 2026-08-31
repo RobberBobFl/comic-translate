@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Tuple
 import numpy as np
 import copy
@@ -6,6 +7,22 @@ from collections import defaultdict, deque
 from ..detection.utils.text_lines import group_items_into_lines
 from modules.detection.utils.geometry import does_rectangle_fit, is_mostly_contained
 from modules.utils.language_utils import is_no_space_lang
+
+
+def ensure_block_id(blk: "TextBlock") -> str:
+    """Return the stable persistent id of a block, creating one if missing.
+
+    The id is stored on the block (and thus serialized into the project file
+    via ``__dict__``), so it survives save/load and stays stable across
+    re-detection and re-translation. Legacy blocks that were created before
+    this field existed get a freshly generated UUID exactly once.
+    """
+    existing = getattr(blk, "block_id", None)
+    if not existing:
+        existing = uuid.uuid4().hex
+        blk.block_id = existing
+    return existing
+
 
 class TextBlock(object):
     """
@@ -52,6 +69,10 @@ class TextBlock(object):
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.script = script
+
+        # Stable persistent identifier for translation memory. Generated once
+        # via ``ensure_block_id`` if absent; serialized with the block.
+        self.block_id = kwargs.get("block_id")
 
         self.min_font_size = min_font_size
         self.max_font_size = max_font_size
@@ -110,6 +131,7 @@ class TextBlock(object):
         new_block.source_lang = self.source_lang
         new_block.target_lang = self.target_lang
         new_block.script = self.script
+        new_block.block_id = self.block_id
         new_block.min_font_size = self.min_font_size
         new_block.max_font_size = self.max_font_size
         new_block.font_color = self.font_color

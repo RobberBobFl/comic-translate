@@ -111,6 +111,7 @@ class RectItemController:
         bw, bh = (blk.xyxy[2] - blk.xyxy[0], blk.xyxy[3] - blk.xyxy[1])
         properties = TextItemProperties(
             text="",
+            plain_text="",
             font_family=rs.font_family,
             font_size=rs.min_font_size or 12,
             text_color=text_color,

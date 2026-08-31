@@ -130,6 +130,12 @@ class NavRailMixin:
         )
         export_psd_action.triggered.connect(self._on_export_psd_requested)
 
+        self.export_menu.addSeparator()
+        export_tm_action = self.export_menu.addAction(
+            self.tr("Translation Memory (JSONL)")
+        )
+        export_tm_action.triggered.connect(self.export_translation_memory)
+
         nav_tool_group = MToolButtonGroup(orientation=QtCore.Qt.Vertical, exclusive=True)
         nav_tools = [
             {

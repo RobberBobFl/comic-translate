@@ -16,7 +16,7 @@ from collections import OrderedDict
 
 from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QUndoStack
+from PySide6.QtGui import QUndoStack, QTextDocument
 
 from app.thread_worker import GenericWorker
 from app.ui.dayu_widgets.message import MMessage
@@ -41,6 +41,13 @@ WEBTOON_BATCH_MAX_BYTES = 10 * 1024 * 1024
 from modules.utils.language_utils import to_canonical_language_name
 
 logger = logging.getLogger(__name__)
+
+
+def _looks_like_html(text: str) -> bool:
+    """True if ``text`` contains HTML/markup tags."""
+    if not text:
+        return False
+    return bool(re.search(r"<[^>]+>", text))
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -575,9 +582,22 @@ class ProjectController:
         # confirm the choice so a giant stitched image is not exported by
         # accident (most users want the original separate pages).
         webtoon_strip = bool(getattr(self.main, "webtoon_strip", False))
-        mode = "pages"
         if webtoon_strip:
-            mode = self._prompt_webtoon_export_mode()
+            mode, confirm_tm = self._prompt_webtoon_export_confirm()
+            if mode is None:  # dialog cancelled -> abort entirely
+                self.main.loading.setVisible(False)
+                self.main.progress_bar.setVisible(False)
+                return
+        else:
+            proceed, confirm_tm = self._prompt_normal_export_confirm()
+            if not proceed:  # dialog cancelled -> abort entirely
+                self.main.loading.setVisible(False)
+                self.main.progress_bar.setVisible(False)
+                return
+            mode = "pages"
+        if confirm_tm:
+            # Snapshot the user-confirmed final translation into translation memory.
+            self._capture_final_translations(all_pages_current_state)
         split_stitched = mode in ("pages", "batches")
         batch_stitched = mode == "batches"
         self.main.loading.setVisible(True)
@@ -596,41 +616,170 @@ class ProjectController:
             batch_stitched,
         )
 
-    def _prompt_webtoon_export_mode(self) -> str:
-        """Ask how a stitched webtoon should be exported.
+    def _prompt_webtoon_export_confirm(self) -> "tuple[str | None, bool]":
+        """Combined webtoon export dialog: export mode + TM confirmation.
 
-        Returns 'pages' (split back into separate pages), 'single' (one file)
-        or 'batches' (stitch consecutive pages into combined images of at most
-        25 pages and 10 MB each). Cancelling the dialog defaults to 'pages'.
+        Returns ``(mode, confirm_tm)`` where ``mode`` is one of
+        'pages' / 'single' / 'batches'. If the user cancels, returns
+        ``(None, False)`` so the caller aborts the whole export.
         """
+        from PySide6 import QtWidgets
+
+        dlg = QtWidgets.QDialog(self.main)
+        dlg.setWindowTitle(self.main.tr("Webtoon export"))
+        layout = QtWidgets.QVBoxLayout(dlg)
+
+        layout.addWidget(QtWidgets.QLabel(self.main.tr("How should the stitched webtoon be exported?")))
+        rb_pages = QtWidgets.QRadioButton(self.main.tr("Separate pages (split)"))
+        rb_single = QtWidgets.QRadioButton(self.main.tr("Single file"))
+        rb_batches = QtWidgets.QRadioButton(self.main.tr("Stitch into batches (\u226425 pages, \u226410 MB)"))
+        rb_batches.setChecked(True)
+        for rb in (rb_pages, rb_single, rb_batches):
+            layout.addWidget(rb)
+
+        cb = QtWidgets.QCheckBox(self.main.tr("Confirm translations as final (recommended)"))
+        cb.setChecked(True)
+        layout.addWidget(cb)
+
+        btn_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setText(self.main.tr("Export"))
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None, False
+        mode = "single" if rb_single.isChecked() else ("batches" if rb_batches.isChecked() else "pages")
+        return mode, cb.isChecked()
+
+    def _prompt_normal_export_confirm(self) -> "tuple[bool, bool]":
+        """Ask whether to confirm current translations as final on export.
+
+        Returns ``(proceed, confirm_tm)``. ``proceed`` is False when the user
+        cancels (abort export, nothing written). ``confirm_tm`` reflects the
+        checkbox (False means export without updating translation memory).
+        """
+        from PySide6 import QtWidgets
+
         msg = QtWidgets.QMessageBox(self.main)
         msg.setIcon(QtWidgets.QMessageBox.Icon.Question)
-        msg.setWindowTitle(QtCore.QCoreApplication.translate("Webtoon", "Webtoon export"))
-        msg.setText(
-            QtCore.QCoreApplication.translate(
-                "Webtoon", "How should the stitched webtoon be exported?"
-            )
+        msg.setWindowTitle(self.main.tr("Confirm final translations"))
+        msg.setText(self.main.tr("Export and confirm the current translations as final?"))
+        msg.setInformativeText(self.main.tr(
+            "Confirmed translations are saved to the local translation memory for "
+            "future training. Cancelling aborts the export."
+        ))
+        cb = QtWidgets.QCheckBox(self.main.tr("Confirm translations as final (recommended)"))
+        cb.setChecked(True)
+        msg.setCheckBox(cb)
+        confirm_btn = msg.addButton(
+            self.main.tr("Confirm && Export"), QtWidgets.QMessageBox.ButtonRole.AcceptRole
         )
-        pages_btn = msg.addButton(
-            QtCore.QCoreApplication.translate("Webtoon", "Separate pages (split)"),
-            QtWidgets.QMessageBox.ButtonRole.ActionRole,
-        )
-        single_btn = msg.addButton(
-            QtCore.QCoreApplication.translate("Webtoon", "Single file"),
-            QtWidgets.QMessageBox.ButtonRole.ActionRole,
-        )
-        batches_btn = msg.addButton(
-            QtCore.QCoreApplication.translate("Webtoon", "Stitch into batches (\u226425 pages, \u226410 MB)"),
-            QtWidgets.QMessageBox.ButtonRole.ActionRole,
-        )
-        msg.setDefaultButton(batches_btn)
+        msg.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(confirm_btn)
         msg.exec()
-        clicked = msg.clickedButton()
-        if clicked is single_btn:
-            return "single"
-        if clicked is batches_btn:
-            return "batches"
-        return "pages"
+        if msg.clickedButton() is confirm_btn:
+            return True, cb.isChecked()
+        return False, False
+
+    def _capture_final_translations(self, pages_state: dict) -> None:
+        """Snapshot the current (edited) translation of every block that already
+        has a translation-memory record into ``final_output``.
+
+        ``final_output`` is read from ``viewer_state`` (exactly what the export
+        renders), matched to its block by geometry. The original ``model_output``
+        is never overwritten. Blocks without an existing TM record are skipped
+        (we never create records lacking a model answer).
+        """
+        from app.translation_memory import get_translation_memory
+        from modules.utils.textblock import ensure_block_id
+
+        tm = get_translation_memory()
+        for page_path, state in pages_state.items():
+            blocks = self.main.image_states.get(page_path, {}).get("blk_list", []) or []
+            text_items = (state.get("viewer_state") or {}).get("text_items_state", []) or []
+            for ti in text_items:
+                pos = ti.get("position")
+                if not pos:
+                    continue
+                w = ti.get("width") or 0
+                h = ti.get("height") or 0
+                cx = pos[0] + w / 2.0
+                cy = pos[1] + h / 2.0
+                match = None
+                for b in blocks:
+                    xyxy = b.xyxy
+                    if xyxy[0] <= cx <= xyxy[2] and xyxy[1] <= cy <= xyxy[3]:
+                        match = b
+                        break
+                if match is None:
+                    continue
+                block_id = ensure_block_id(match)
+                final_text = self._plain_text_for_item(ti)
+                if final_text is None:
+                    # Translation-memory source is missing or undecodable; skip
+                    # rather than persist markup/garbage into final_output.
+                    logger.warning(
+                        "Skipping translation-memory capture for block %s: "
+                        "no plain translation available (text item holds render HTML).",
+                        block_id,
+                    )
+                    continue
+                final_text = final_text.strip()
+                if not final_text:
+                    # Nothing to capture; never create a record or overwrite a
+                    # good final_output with empty text.
+                    continue
+                source = (getattr(match, "text", "") or "").strip()
+                if not source:
+                    continue
+                # One record per block. For an existing (LLM) record we only
+                # refresh the confirmed final_output; model_output is preserved.
+                # For a block with no record (e.g. created/edited manually and
+                # never LLM-translated) we create a valid corpus example whose
+                # model_output stays empty ("") -- a manual translation is never
+                # written into model_output.
+                tm.save_correction(
+                    page_id=page_path,
+                    block_id=block_id,
+                    final_output=final_text,
+                    source=source,
+                )
+
+    @staticmethod
+    def _plain_text_for_item(ti: dict) -> "str | None":
+        """Return the plain translation for a text item, or ``None`` if it
+        cannot be obtained.
+
+        ``plain_text`` is the authoritative translation (set from
+        ``TextBlockItem.toPlainText()`` when the item is serialized, and kept in
+        sync by search/replace). The rich ``text`` field is HTML used only for
+        rendering and must never reach translation memory.
+        """
+        plain = (ti.get("plain_text") or "").strip()
+        if plain:
+            return plain
+        html = ti.get("text") or ""
+        if not html:
+            return None
+        if _looks_like_html(html):
+            # Back-compat with projects saved before plain_text existed: decode
+            # the stored render HTML back to plain text (inverse of toHtml()).
+            try:
+                doc = QTextDocument()
+                doc.setHtml(html)
+                plain = doc.toPlainText()
+            except Exception:
+                return None
+            plain = plain.replace("\u2029", "\n").replace("\u2028", "\n").strip()
+            if _looks_like_html(plain):
+                return None
+            return plain or None
+        # Legacy plain-text `text` with no plain_text field.
+        return html.strip() or None
 
     def _prompt_for_partition(
         self,
@@ -769,6 +918,11 @@ class ProjectController:
     def export_to_psd(self, output_folder: str, single_file_path: str | None = None):
         self.main.image_ctrl.save_current_image_state()
         all_pages_current_state = self._build_all_pages_current_state()
+        proceed, confirm_tm = self._prompt_normal_export_confirm()
+        if not proceed:
+            return
+        if confirm_tm:
+            self._capture_final_translations(all_pages_current_state)
         bundle_name = self._get_export_bundle_name()
         self.main.loading.setVisible(True)
         self.main.run_threaded(
@@ -779,6 +933,11 @@ class ProjectController:
     def export_psd_plan(self, export_plan: list[dict]) -> None:
         self.main.image_ctrl.save_current_image_state()
         all_pages_current_state = self._build_all_pages_current_state()
+        proceed, confirm_tm = self._prompt_normal_export_confirm()
+        if not proceed:
+            return
+        if confirm_tm:
+            self._capture_final_translations(all_pages_current_state)
         bundle_name = self._get_export_bundle_name()
         self.main.loading.setVisible(True)
         self.main.run_threaded(

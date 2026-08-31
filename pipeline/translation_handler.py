@@ -8,6 +8,7 @@ from modules.utils.translator_utils import set_upper_case
 from modules.utils.language_utils import to_canonical_language_name
 from pipeline.webtoon_utils import filter_and_convert_visible_blocks, restore_original_block_coordinates
 from .cache_manager import CacheManager
+from app.translation_memory import get_translation_memory
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -119,6 +120,7 @@ class TranslationHandler:
                         blk.translation = cached_translation
                         logger.info(f"Using cached translation result for block: '{cached_translation}'")
                         set_upper_case([blk], upper_case)
+                        get_translation_memory().capture_translated_blocks(current_path, [blk])
                         return
                     else:
                         logger.info("Block not found in cache or source text changed, processing single block...")
@@ -139,6 +141,7 @@ class TranslationHandler:
                     
                     logger.info(f"Processed single block and updated cache: '{blk.translation}'")
                     set_upper_case([blk], upper_case)
+                    get_translation_memory().capture_translated_blocks(current_path, [blk])
                 else:
                     # Run translation on all blocks and cache the results
                     logger.info("No cached translation results found, running translation on entire page...")
@@ -165,6 +168,7 @@ class TranslationHandler:
                         logger.info(f"Cached translation results and extracted translation for block: {cached_translation}")
                     
                     set_upper_case([blk], upper_case)
+                    get_translation_memory().capture_translated_blocks(current_path, [blk])
             else:
                 # For full page translation, check if we can use cached results
                 if self.cache_manager._can_serve_all_blocks_from_translation_cache(translation_cache_key, self.main_page.blk_list):
@@ -185,6 +189,7 @@ class TranslationHandler:
                     logger.info("Translation completed and cached for %d blocks", len(self.main_page.blk_list))
                 
                 set_upper_case(self.main_page.blk_list, upper_case)
+                get_translation_memory().capture_translated_blocks(current_path, self.main_page.blk_list)
 
     def translate_webtoon_visible_area(self, single_block=False):
         """Perform translation on the visible area in webtoon mode."""
@@ -245,6 +250,7 @@ class TranslationHandler:
         
         # Apply upper case if needed
         set_upper_case(visible_blocks, upper_case)
+        get_translation_memory().capture_translated_blocks(current_path, visible_blocks)
 
         # Persist the translation back into the page state. In webtoon mode
         # main.blk_list is only a copy of the saved block list, so without this

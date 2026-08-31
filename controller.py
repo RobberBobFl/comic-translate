@@ -912,6 +912,27 @@ class ComicTranslate(ComicTranslateUI):
         else:
             QMessageBox.information(self, self.tr("Batch Report"), report_text)
 
+    def export_translation_memory(self):
+        """Export accumulated translation-memory records to a JSONL file."""
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+        from app.translation_memory import get_translation_memory
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            self.tr("Export Translation Memory"),
+            "translation_memory.jsonl",
+            "JSONL (*.jsonl)",
+        )
+        if not path:
+            return
+        written = get_translation_memory().export_jsonl(path)
+        QMessageBox.information(
+            self,
+            self.tr("Translation Memory"),
+            self.tr("Exported {n} records to {path}").format(n=written, path=path),
+        )
+
     def on_download_event(self, status: str, name: str):
         """Show a loading-type MMessage while models/files are being downloaded."""
         # Keep a counter of active downloads to handle multiple files

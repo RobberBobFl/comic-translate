@@ -32,6 +32,7 @@ from .cache_manager import CacheManager
 from .block_detection import BlockDetectionHandler
 from .inpainting import InpaintingHandler, call_inpaint_image
 from .ocr_handler import OCRHandler
+from app.translation_memory import get_translation_memory
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -294,6 +295,9 @@ class BatchProcessor:
                 if context_window:
                     sliding_buffer.extend(get_context_entries(blk_list))
                     del sliding_buffer[:-context_window]
+                # Collect translation memory: capture each block's source + model
+                # output once (skips blanks; never touches user final_output).
+                get_translation_memory().capture_translated_blocks(image_path, blk_list)
             except InsufficientCreditsException:
                 raise
             except Exception as e:
@@ -529,6 +533,7 @@ class BatchProcessor:
 
                 text_props = TextItemProperties(
                     text=translation,
+                    plain_text=translation,
                     font_family=font,
                     font_size=font_size,
                     text_color=font_color,

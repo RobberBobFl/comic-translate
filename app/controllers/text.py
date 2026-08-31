@@ -968,6 +968,7 @@ class TextController:
 
                         text_props = TextItemProperties(
                             text=wrapped,
+                            plain_text=wrapped,
                             font_family=font_family,
                             font_size=font_size,
                             text_color=font_color,

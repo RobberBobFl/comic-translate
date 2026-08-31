@@ -24,3 +24,10 @@ demo_*.py
 benchmarks/
 
 scripts
+
+# Translation memory (local user training data; lives under the app user-data dir)
+translation_memory*.db
+*.tm.db
+*.db-wal
+*.db-shm
+

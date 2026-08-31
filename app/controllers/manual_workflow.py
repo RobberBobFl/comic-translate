@@ -651,11 +651,17 @@ class ManualWorkflowController:
 
             def on_translation_ready(results: dict[str, list[TextBlock]]) -> None:
                 current_file = context["current_file"]
+                from app.translation_memory import get_translation_memory
+
+                tm = get_translation_memory()
                 for file_path, blk_list in (results or {}).items():
                     state = self.main.image_states.get(file_path)
                     if state is None:
                         continue
                     state["blk_list"] = blk_list
+                    # Collect translation memory: capture each block's source +
+                    # model output once (skips blanks; never touches final_output).
+                    tm.capture_translated_blocks(file_path, blk_list)
                     if file_path == current_file:
                         self._set_current_blocks_from_page_state(
                             blk_list,
