@@ -64,7 +64,7 @@ def set_upper_case(blk_list: list[TextBlock], upper_case: bool):
         if translation is None:
             continue
         if upper_case and not translation.isupper():
-            blk.translation = translation.upper() 
+            blk.translation = translation.replace("i", "İ").replace("ı", "I").upper() 
         elif not upper_case and translation.isupper():
             blk.translation = translation.lower().capitalize()
         else:
@@ -76,7 +76,7 @@ def format_translations(blk_list: list[TextBlock], trg_lng_cd: str, upper_case: 
         if translation is None:
             continue
         if upper_case and not translation.isupper():
-            blk.translation = translation.upper()
+            blk.translation = translation.replace("i", "İ").replace("ı", "I").upper()
         elif not upper_case and translation.isupper():
             blk.translation = translation.lower().capitalize()
         else:
