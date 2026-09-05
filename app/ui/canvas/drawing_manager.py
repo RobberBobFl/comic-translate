@@ -11,6 +11,8 @@ from app.ui.commands.brush import BrushStrokeCommand, ClearBrushStrokesCommand, 
 from app.ui.commands.base import PathCommandBase as pcb
 import imkit as imk
 from modules.utils.image_utils import build_block_mask_data, clip_mask_to_bubble, clip_mask_components_to_bubble
+from modules.utils.textblock import adjust_text_line_coordinates
+from modules.detection.utils.content import detect_content_mask_in_bbox
 
 
 class DrawingManager:
@@ -243,6 +245,11 @@ class DrawingManager:
             command = ClearBrushStrokesCommand(self.viewer)
             self.viewer.command_emitted.emit(command)
             
+    def clear_brush_strokes_in_scene_rects(self, scene_rects):
+        """Clear only strokes covered by completed webtoon inpainting patches."""
+        if not scene_rects:
+            return
+        self.viewer.command_emitted.emit(ClearBrushStrokesCommand(self.viewer, scene_rects))
     def has_drawn_elements(self):
         for item in self._scene.items():
             if isinstance(item, QGraphicsPathItem) and item != self.viewer.photo:

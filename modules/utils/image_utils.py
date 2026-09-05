@@ -159,7 +159,25 @@ def build_bubble_clip_mask(
                         rx2 = max(1.0, (bx2_rel - bx1_rel) / 2.0)
                         ry2 = max(1.0, (by2_rel - by1_rel) / 2.0)
                         ellipse_clip = (((cx_grid2 - ellipse_cx2) / rx2) ** 2 + ((cy_grid2 - ellipse_cy2) / ry2) ** 2) <= 1.0
-                        return np.logical_or(final_clip, ellipse_clip)
+
+                        # A translucent bubble can contain several disconnected
+                        # tonal regions, so flood-filling from the text seed may
+                        # cover only part of its interior. Recover the inset
+                        # ellipse only around the detected text. Keeping this
+                        # fallback inside the text envelope preserves the strict
+                        # bubble-outline containment introduced in 92c9825.
+                        if seed_bbox is not None:
+                            seed_padding = 2
+                            seed_x1 = max(0, sx1 - seed_padding - x1)
+                            seed_y1 = max(0, sy1 - seed_padding - y1)
+                            seed_x2 = min(width, sx2 + seed_padding - x1)
+                            seed_y2 = min(height, sy2 + seed_padding - y1)
+                            seed_envelope = np.zeros(mask_shape, dtype=bool)
+                            if seed_x2 > seed_x1 and seed_y2 > seed_y1:
+                                seed_envelope[seed_y1:seed_y2, seed_x1:seed_x2] = True
+                                return final_clip | (ellipse_clip & seed_envelope)
+
+                        return final_clip
         except Exception as e:
             # Fall back to ellipse on any error
             pass
@@ -307,6 +325,116 @@ def _resolve_block_crop_bounds(
     return cx1, cy1, cx2, cy2
 
 
+def _select_text_like_components(
+    crop_mask: np.ndarray,
+    text_bounds: tuple[int, int, int, int],
+    *,
+    search_padding: int,
+    core_padding: int = 2,
+) -> np.ndarray:
+    """Keep text-connected components while rejecting sparse bubble outlines."""
+    binary = crop_mask > 0
+    num_labels, labels, stats, _centroids = imk.connected_components_with_stats(
+        binary,
+        connectivity=4,
+    )
+    if num_labels <= 1:
+        return np.zeros(crop_mask.shape[:2], dtype=np.uint8)
+
+    height, width = crop_mask.shape[:2]
+    tx1, ty1, tx2, ty2 = [int(v) for v in text_bounds]
+    search_region = np.zeros((height, width), dtype=bool)
+    sx1 = max(0, tx1 - search_padding)
+    sy1 = max(0, ty1 - search_padding)
+    sx2 = min(width, tx2 + search_padding)
+    sy2 = min(height, ty2 + search_padding)
+    if sx2 <= sx1 or sy2 <= sy1:
+        return np.zeros(crop_mask.shape[:2], dtype=np.uint8)
+    search_region[sy1:sy2, sx1:sx2] = True
+
+    candidate_labels = np.unique(labels[search_region])
+    candidate_labels = candidate_labels[candidate_labels > 0]
+    if candidate_labels.size == 0:
+        return np.zeros(crop_mask.shape[:2], dtype=np.uint8)
+
+    core_region = np.zeros((height, width), dtype=bool)
+    cx1 = max(0, tx1 - core_padding)
+    cy1 = max(0, ty1 - core_padding)
+    cx2 = min(width, tx2 + core_padding)
+    cy2 = min(height, ty2 + core_padding)
+    core_region[cy1:cy2, cx1:cx2] = True
+    core_counts = np.bincount(labels[core_region].ravel(), minlength=num_labels)
+
+    text_width = max(1, tx2 - tx1)
+    text_height = max(1, ty2 - ty1)
+    outline_length_threshold = max(24, int(round(0.30 * max(text_width, text_height))))
+
+    def is_probable_outline(label: int) -> bool:
+        component_width = int(stats[label, imk.CC_STAT_WIDTH])
+        component_height = int(stats[label, imk.CC_STAT_HEIGHT])
+        component_area = int(stats[label, imk.CC_STAT_AREA])
+        bbox_area = max(1, component_width * component_height)
+        density = component_area / float(bbox_area)
+        return density < 0.08 and max(component_width, component_height) > outline_length_threshold
+
+    anchor_labels = []
+    for label_value in candidate_labels:
+        label = int(label_value)
+        area = max(1, int(stats[label, imk.CC_STAT_AREA]))
+        core_coverage = int(core_counts[label]) / float(area)
+        if core_coverage >= 0.20 and not is_probable_outline(label):
+            anchor_labels.append(label)
+
+    if not anchor_labels:
+        return np.zeros(crop_mask.shape[:2], dtype=np.uint8)
+
+    keep_labels = set(anchor_labels)
+    for label_value in candidate_labels:
+        label = int(label_value)
+        if label in keep_labels or is_probable_outline(label):
+            continue
+
+        x = int(stats[label, imk.CC_STAT_LEFT])
+        y = int(stats[label, imk.CC_STAT_TOP])
+        component_width = int(stats[label, imk.CC_STAT_WIDTH])
+        component_height = int(stats[label, imk.CC_STAT_HEIGHT])
+        area = max(1, int(stats[label, imk.CC_STAT_AREA]))
+        x2 = x + component_width
+        y2 = y + component_height
+
+        for anchor in anchor_labels:
+            anchor_x = int(stats[anchor, imk.CC_STAT_LEFT])
+            anchor_y = int(stats[anchor, imk.CC_STAT_TOP])
+            anchor_width = int(stats[anchor, imk.CC_STAT_WIDTH])
+            anchor_height = int(stats[anchor, imk.CC_STAT_HEIGHT])
+            anchor_area = max(1, int(stats[anchor, imk.CC_STAT_AREA]))
+            anchor_x2 = anchor_x + anchor_width
+            anchor_y2 = anchor_y + anchor_height
+
+            area_similarity = min(area, anchor_area) / float(max(area, anchor_area))
+            height_similarity = min(component_height, anchor_height) / float(max(component_height, anchor_height))
+            width_similarity = min(component_width, anchor_width) / float(max(component_width, anchor_width))
+            row_overlap = max(0, min(y2, anchor_y2) - max(y, anchor_y))
+            column_overlap = max(0, min(x2, anchor_x2) - max(x, anchor_x))
+            horizontal_gap = max(0, max(x, anchor_x) - min(x2, anchor_x2))
+            vertical_gap = max(0, max(y, anchor_y) - min(y2, anchor_y2))
+
+            same_row = (
+                row_overlap >= 0.50 * min(component_height, anchor_height)
+                and height_similarity >= 0.45
+                and horizontal_gap <= max(18, int(round(0.80 * max(component_height, anchor_height))))
+            )
+            same_column = (
+                column_overlap >= 0.50 * min(component_width, anchor_width)
+                and width_similarity >= 0.45
+                and vertical_gap <= max(18, int(round(0.80 * max(component_width, anchor_width))))
+            )
+            if area_similarity >= 0.18 and (same_row or same_column):
+                keep_labels.add(label)
+                break
+
+    return np.where(np.isin(labels, list(keep_labels)), 255, 0).astype(np.uint8)
+
 def build_block_mask_data(
     img: np.ndarray,
     blk: TextBlock,
@@ -329,6 +457,18 @@ def build_block_mask_data(
     close_kernel = imk.get_structuring_element(imk.MORPH_RECT, (3, 3))
     crop_mask = imk.morphology_ex(crop_mask, imk.MORPH_CLOSE, close_kernel)
 
+    if clip_to_bubble and getattr(blk, "text_class", None) == "text_bubble" and getattr(blk, "bubble_xyxy", None) is not None:
+        # Start from components anchored in the detector box. Nearby components
+        # are admitted only when their size and row/column alignment match an
+        # anchored glyph; sparse, long components are bubble outlines.
+        tx1, ty1, tx2, ty2 = [int(round(float(v))) for v in blk.xyxy[:4]]
+        text_bounds = (tx1 - cx1, ty1 - cy1, tx2 - cx1, ty2 - cy1)
+        search_padding = max(16, min(default_padding + 23, 32))
+        crop_mask = _select_text_like_components(
+            crop_mask,
+            text_bounds,
+            search_padding=search_padding,
+        )
     kernel_size = default_padding
     dilate_iterations = 3
 
@@ -348,6 +488,27 @@ def build_block_mask_data(
         dil_kernel = np.ones((kernel_size, kernel_size), np.uint8)
         dilated_crop_mask = imk.dilate(crop_mask, dil_kernel, iterations=dilate_iterations)
 
+    if clip_to_bubble and getattr(blk, "text_class", None) == "text_bubble" and getattr(blk, "bubble_xyxy", None) is not None:
+        # The generated stroke is dilated again when rasterized. Retain the
+        # detector envelope plus a narrow halo around any glyph-like neighbour
+        # admitted above; rejected outline components cannot widen this region.
+        final_padding = 2
+        tx1, ty1, tx2, ty2 = [int(round(float(v))) for v in blk.xyxy[:4]]
+        ex1 = max(0, tx1 - cx1 - final_padding)
+        ey1 = max(0, ty1 - cy1 - final_padding)
+        ex2 = min(dilated_crop_mask.shape[1], tx2 - cx1 + final_padding)
+        ey2 = min(dilated_crop_mask.shape[0], ty2 - cy1 + final_padding)
+        text_envelope = np.zeros(dilated_crop_mask.shape, dtype=bool)
+        if ex2 > ex1 and ey2 > ey1:
+            text_envelope[ey1:ey2, ex1:ex2] = True
+
+        component_halo = imk.dilate(
+            (crop_mask > 0).astype(np.uint8),
+            np.ones((5, 5), np.uint8),
+            iterations=1,
+        ) > 0
+        text_envelope |= component_halo
+        dilated_crop_mask = np.where(text_envelope, dilated_crop_mask, 0).astype(np.uint8)
     return dilated_crop_mask, (cx1, cy1, cx2, cy2)
 
 
