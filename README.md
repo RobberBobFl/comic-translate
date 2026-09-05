@@ -95,7 +95,7 @@ https://docs.astral.sh/uv/getting-started/installation/
 
 Then, in the command line
 ```bash
-git clone https://github.com/ogkalu2/comic-translate
+git clone https://github.com/georgebuffim/comic-translate
 cd comic-translate
 uv init --python 3.12
 ```
