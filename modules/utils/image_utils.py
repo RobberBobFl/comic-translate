@@ -1,11 +1,15 @@
 import numpy as np
 import base64
+import logging
 import imkit as imk
+import cv2
 from PySide6.QtGui import QColor
 from typing import Any
 
 from modules.utils.textblock import TextBlock
 from modules.detection.utils.content import get_inpaint_mask
+
+logger = logging.getLogger(__name__)
 
 
 def build_bubble_clip_mask(
@@ -314,6 +318,19 @@ def build_block_mask_data(
     require_text_or_translation: bool = True,
     clip_to_bubble: bool = False,
 ) -> tuple[np.ndarray | None, tuple[int, int, int, int] | None]:
+    """
+    Build mask data for a text block.
+    
+    Args:
+        img: Full image (BGR)
+        blk: TextBlock
+        default_padding: Padding for crop bounds
+        require_text_or_translation: Skip blocks without text/translation
+        clip_to_bubble: Clip mask to bubble boundary
+    
+    Returns:
+        (mask, bounds) or (None, None) if skipped
+    """
     from modules.detection.utils.content import detect_content_mask_in_bbox
 
     if require_text_or_translation and not blk.text and not blk.translation:
@@ -322,10 +339,10 @@ def build_block_mask_data(
     cx1, cy1, cx2, cy2 = _resolve_block_crop_bounds(img, blk, default_padding)
     crop = img[cy1:cy2, cx1:cx2]
 
+    # Always use Otsu mask
     crop_mask = detect_content_mask_in_bbox(crop)
     if crop_mask is None or not np.any(crop_mask):
         return None, None
-
     close_kernel = imk.get_structuring_element(imk.MORPH_RECT, (3, 3))
     crop_mask = imk.morphology_ex(crop_mask, imk.MORPH_CLOSE, close_kernel)
 
@@ -341,8 +358,8 @@ def build_block_mask_data(
             inset=inset,
             image=img,
             seed_bbox=blk.xyxy,
-            dilate_kernel_size=kernel_size,
-            dilate_iterations=dilate_iterations,
+            dilate_kernel_size=3,
+            dilate_iterations=1,
         )
     else:
         dil_kernel = np.ones((kernel_size, kernel_size), np.uint8)
@@ -374,15 +391,29 @@ def collect_block_mask_data(
     return entries
 
 
-def generate_mask(img: np.ndarray, blk_list: list[TextBlock], default_padding: int = 5) -> np.ndarray:
+def generate_mask(
+    img: np.ndarray,
+    blk_list: list[TextBlock],
+    default_padding: int = 5,
+) -> np.ndarray:
     """
     Generate a text-removal mask from filtered connected components and
     only lightly expand it to catch antialiasing around glyph edges.
+    
+    Args:
+        img: Full image (BGR)
+        blk_list: List of TextBlocks
+        default_padding: Padding for crop bounds
+    
+    Returns:
+        Binary mask (H, W) with values 0 or 255
     """
     h, w, _ = img.shape
     mask = np.zeros((h, w), dtype=np.uint8)
 
-    for entry in collect_block_mask_data(img, blk_list, default_padding=default_padding):
+    for entry in collect_block_mask_data(
+        img, blk_list, default_padding=default_padding,
+    ):
         cx1, cy1, cx2, cy2 = entry["bounds"]
         crop_mask = entry["mask"]
         mask[cy1:cy2, cx1:cx2] = np.bitwise_or(mask[cy1:cy2, cx1:cx2], crop_mask)

@@ -96,6 +96,10 @@ class TranslationMemoryStore:
             return
         if not (source or "").strip() or not (model_output or "").strip():
             return
+        logger.debug(
+            "TM record_initial: page=%s block=%s source=%r model_output=%r",
+            page_id, block_id, source, model_output,
+        )
         ts = _now()
         with self._lock:
             self._conn.execute(
@@ -134,6 +138,10 @@ class TranslationMemoryStore:
                 block_id,
             )
             return
+        logger.debug(
+            "TM save_correction: page=%s block=%s final_output=%r",
+            page_id, block_id, final_output,
+        )
         ts = _now()
         with self._lock:
             self._conn.execute(

@@ -79,7 +79,11 @@ class RectItemController:
         x1, y1, w, h = int(x1), int(y1), int(w), int(h)
         new_rect_coords = (x1, y1, x1 + w, y1 + h)
 
-        new_blk = TextBlock(text_bbox=np.array(new_rect_coords))
+        new_blk = TextBlock(
+            text_bbox=np.array(new_rect_coords),
+            bubble_bbox=np.array(new_rect_coords),
+            text_class="text_bubble",
+        )
         new_blk.manual = True
         self.main.blk_list.append(new_blk)
 

@@ -136,8 +136,9 @@ class LoadingWorker(QObject):
 def main():
     
     # Configure logging
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, log_level, logging.INFO),
     )
     
     if sys.platform == "win32":

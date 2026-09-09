@@ -8,7 +8,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QBrush
 
 from modules.utils.device import resolve_device
-from modules.utils.image_utils import build_block_mask_data, build_bubble_clip_mask, clip_mask_to_bubble, clip_mask_components_to_bubble
+from modules.utils.image_utils import (
+    build_block_mask_data, build_bubble_clip_mask, clip_mask_to_bubble,
+    clip_mask_components_to_bubble, _resolve_block_crop_bounds,
+)
 from modules.utils.pipeline_config import inpaint_map, get_config, get_inpainter_backend
 from modules.utils.textblock import adjust_text_line_coordinates
 from pipeline.inpainting_boxes import merge_overlapping_padded_boxes
@@ -19,7 +22,13 @@ logger = logging.getLogger(__name__)
 FAST_FILL_BUBBLE_INSET = 7
 
 
-def call_inpaint_image(inpainting_handler, image: np.ndarray, mask: np.ndarray, config, blk_list: list | None = None):
+def call_inpaint_image(
+    inpainting_handler,
+    image: np.ndarray,
+    mask: np.ndarray,
+    config,
+    blk_list: list | None = None,
+):
     inpaint_image = inpainting_handler.inpaint_image
     try:
         parameters = inspect.signature(inpaint_image).parameters
@@ -296,10 +305,14 @@ class InpaintingHandler:
     def _format_block_debug_label(self, block) -> str:
         text_bounds = getattr(block, "xyxy", None)
         bubble_bounds = getattr(block, "bubble_xyxy", None)
+        ocr_text = getattr(block, "text", "") or ""
+        if len(ocr_text) > 60:
+            ocr_text = ocr_text[:60] + "..."
         return (
             f"class={getattr(block, 'text_class', None)} "
             f"text={tuple(int(round(float(v))) for v in text_bounds) if text_bounds is not None else None} "
-            f"bubble={tuple(int(round(float(v))) for v in bubble_bounds) if bubble_bounds is not None else None}"
+            f"bubble={tuple(int(round(float(v))) for v in bubble_bounds) if bubble_bounds is not None else None} "
+            f"ocr=\"{ocr_text}\""
         )
 
     def _summarize_mask_overlap_with_blocks(
@@ -429,7 +442,12 @@ class InpaintingHandler:
             if getattr(block, "xyxy", None) is None or len(block.xyxy) < 4:
                 continue
             if getattr(block, "text_class", None) != "text_bubble" or getattr(block, "bubble_xyxy", None) is None:
-                continue
+                if getattr(block, "manual", False) and getattr(block, "text_class", None) != "text_bubble":
+                    block.text_class = "text_bubble"
+                    if getattr(block, "bubble_xyxy", None) is None:
+                        block.bubble_xyxy = np.array(block.xyxy)
+                else:
+                    continue
             bounds = self._get_fast_fill_bounds(block, image)
             if bounds is None:
                 continue
@@ -453,11 +471,112 @@ class InpaintingHandler:
                 continue
             success, reason = self._fast_fill_block(cleaned_image, residual_mask, block, bounds, crop_mask)
             if not success:
-                # When inpainting from manual brush/eraser strokes, never fall
-                # back to the automatic block-derived mask: that would discard
-                # the user's edits (added strokes or erased regions). Leave the
-                # residual for the NN/full inpainter, which honors the mask.
-                if respect_manual_mask:
+                # Try dense_bubble_fill for high-density bubbles before
+                # falling back to the heavier NN inpainting path.
+                dense_ok, dense_reason = self._dense_bubble_fill(
+                    image,           # original — clean top/bottom strips
+                    cleaned_image,   # write result here
+                    residual_mask,
+                    block,
+                    bounds,
+                    crop_mask,
+                )
+                if dense_ok:
+                    success = True
+                    reason = f"dense:{dense_reason}"
+
+                    # Dense-fill cleanup: fill remaining residual pixels
+                    # inside bubble_clip (or bubble bbox fallback) with
+                    # the same background color.
+                    dense_residual = residual_mask[y1:y2, x1:x2]
+                    dense_remaining = int(np.count_nonzero(dense_residual))
+                    if dense_remaining > 0:
+                        dense_crop = image[y1:y2, x1:x2]
+                        dense_crop_h, dense_crop_w = dense_crop.shape[:2]
+                        residual_in = dense_residual > 0
+
+                        # 1) Try bubble_clip (segmented mask)
+                        dense_clip = build_bubble_clip_mask(
+                            (dense_crop_h, dense_crop_w), bounds,
+                            block.bubble_xyxy, inset=FAST_FILL_BUBBLE_INSET,
+                            image=image, seed_bbox=block.xyxy,
+                        )
+                        in_clip = (dense_clip & residual_in) if dense_clip is not None else np.zeros_like(residual_in)
+                        n_in_clip = int(np.count_nonzero(in_clip))
+
+                        # 2) Fallback: any residual strictly inside bubble bbox
+                        n_in_bbox = 0
+                        if n_in_clip == 0 and getattr(block, "bubble_xyxy", None) is not None:
+                            bx1, by1, bx2, by2 = [int(v) for v in block.bubble_xyxy[:4]]
+                            bbox_pad = 2
+                            bx1 -= bbox_pad
+                            by1 -= bbox_pad
+                            bx2 += bbox_pad
+                            by2 += bbox_pad
+                            bbox_mask = np.zeros_like(residual_in)
+                            r_y1 = max(0, by1 - y1)
+                            r_y2 = min(dense_crop_h, by2 - y1)
+                            r_x1 = max(0, bx1 - x1)
+                            r_x2 = min(dense_crop_w, bx2 - x1)
+                            if r_y2 > r_y1 and r_x2 > r_x1:
+                                bbox_mask[r_y1:r_y2, r_x1:r_x2] = True
+                            in_bbox = bbox_mask & residual_in
+                            n_in_bbox = int(np.count_nonzero(in_bbox))
+
+                        n_use = n_in_clip if n_in_clip > 0 else n_in_bbox
+                        use_mask = in_clip if n_in_clip > 0 else in_bbox if n_in_bbox > 0 else None
+
+                        if use_mask is not None and n_use > 0:
+                            # Sample bg from dense_fill region (already clean)
+                            bg_px = dense_crop[dense_residual == 0]
+                            if bg_px.shape[0] > 0:
+                                dense_fill_color = np.median(bg_px, axis=0).astype(np.uint8)
+                            else:
+                                dense_fill_color = np.array([254, 254, 254], dtype=np.uint8)
+                            fill_rgb_full = np.broadcast_to(
+                                dense_fill_color, dense_crop.shape
+                            ).astype(np.float32)
+                            soft = np.zeros_like(dense_residual, dtype=np.float32)
+                            soft[use_mask] = 1.0
+                            soft = imk.gaussian_blur(
+                                (soft * 255).astype(np.uint8), 1.0
+                            ).astype(np.float32) / 255.0
+                            soft = np.clip(soft, 0.0, 1.0)[..., np.newaxis]
+                            cf = dense_crop.astype(np.float32)
+                            blended = cf * (1.0 - soft) + fill_rgb_full * soft
+                            image[y1:y2, x1:x2] = np.clip(
+                                np.round(blended), 0, 255
+                            ).astype(np.uint8)
+                            dense_residual[use_mask] = 0
+                            n_filled = n_use
+                        else:
+                            n_filled = 0
+
+                        dense_after = int(np.count_nonzero(dense_residual))
+                        logger.debug(
+                            "Dense fill cleanup: block overlap=%d, "
+                            "remaining_before=%d, in_clip=%d, in_bbox_fallback=%d, "
+                            "filled_by_bg=%d, sent_to_nn=%d",
+                            initial_overlap, dense_remaining,
+                            n_in_clip, n_in_bbox, n_filled, dense_after,
+                        )
+                        if dense_after > 0:
+                            ry, rx = np.where(dense_residual > 0)
+                            if ry.size > 0:
+                                logger.debug(
+                                    "  residual coords: count=%d, "
+                                    "min=(%d,%d) max=(%d,%d), "
+                                    "bounds=(%d,%d,%d,%d), "
+                                    "bubble_xyxy=%s, "
+                                    "clip_shape=%s",
+                                    ry.size,
+                                    int(rx.min()) + x1, int(ry.min()) + y1,
+                                    int(rx.max()) + x1, int(ry.max()) + y1,
+                                    x1, y1, x2, y2,
+                                    getattr(block, "bubble_xyxy", None),
+                                    dense_clip.shape if dense_clip is not None else None,
+                                )
+                elif respect_manual_mask:
                     logger.info(
                         "Inpaint fast-fill: block[%d] skipped (manual mask, no fallback) %s reason=%s",
                         idx,
@@ -465,59 +584,60 @@ class InpaintingHandler:
                         reason,
                     )
                     continue
-                fallback_mask, fallback_bounds = build_block_mask_data(
-                    image,
-                    block,
-                    require_text_or_translation=False,
-                    clip_to_bubble=True,
-                )
-                if fallback_mask is None or fallback_bounds is None:
-                    logger.info(
-                        "Inpaint fast-fill: block[%d] failed without fallback mask (%s) overlap=%d reason=%s",
-                        idx,
-                        self._format_block_debug_label(block),
-                        initial_overlap,
-                        reason,
+                else:
+                    fallback_mask, fallback_bounds = build_block_mask_data(
+                        image,
+                        block,
+                        require_text_or_translation=False,
+                        clip_to_bubble=True,
                     )
-                    continue
-                success, fallback_reason = self._fast_fill_block(
-                    cleaned_image,
-                    residual_mask,
-                    block,
-                    fallback_bounds,
-                    fallback_mask,
-                )
-                if not success:
-                    logger.info(
-                        "Inpaint fast-fill: block[%d] failed (%s) overlap=%d primary=%s fallback=%s fallback_bounds=%s",
-                        idx,
-                        self._format_block_debug_label(block),
-                        initial_overlap,
-                        reason,
-                        fallback_reason,
-                        fallback_bounds,
-                    )
-                    continue
-                reason = f"fallback:{fallback_reason}"
-
-                # If fallback only covered the text region, retry the wider bubble
-                # bounds against the remaining residual. That catches user brush
-                # strokes on bubble background after the text itself has been cleared.
-                if not self._same_bounds(bounds, fallback_bounds):
-                    retry_crop = residual_mask[y1:y2, x1:x2]
-                    if np.any(retry_crop):
-                        retry_mask = np.where(retry_crop > 0, 255, 0).astype(np.uint8)
-                        retry_success, retry_reason = self._fast_fill_block(
-                            cleaned_image,
-                            residual_mask,
-                            block,
-                            bounds,
-                            retry_mask,
+                    if fallback_mask is None or fallback_bounds is None:
+                        logger.info(
+                            "Inpaint fast-fill: block[%d] failed without fallback mask (%s) overlap=%d reason=%s",
+                            idx,
+                            self._format_block_debug_label(block),
+                            initial_overlap,
+                            reason,
                         )
-                        if retry_success:
-                            reason = f"{reason}+retry:{retry_reason}"
-                        else:
-                            reason = f"{reason}+retry_failed:{retry_reason}"
+                        continue
+                    success, fallback_reason = self._fast_fill_block(
+                        cleaned_image,
+                        residual_mask,
+                        block,
+                        fallback_bounds,
+                        fallback_mask,
+                    )
+                    if not success:
+                        logger.info(
+                            "Inpaint fast-fill: block[%d] failed (%s) overlap=%d primary=%s fallback=%s fallback_bounds=%s",
+                            idx,
+                            self._format_block_debug_label(block),
+                            initial_overlap,
+                            reason,
+                            fallback_reason,
+                            fallback_bounds,
+                        )
+                        continue
+                    reason = f"fallback:{fallback_reason}"
+
+                    # If fallback only covered the text region, retry the wider bubble
+                    # bounds against the remaining residual. That catches user brush
+                    # strokes on bubble background after the text itself has been cleared.
+                    if not self._same_bounds(bounds, fallback_bounds):
+                        retry_crop = residual_mask[y1:y2, x1:x2]
+                        if np.any(retry_crop):
+                            retry_mask = np.where(retry_crop > 0, 255, 0).astype(np.uint8)
+                            retry_success, retry_reason = self._fast_fill_block(
+                                cleaned_image,
+                                residual_mask,
+                                block,
+                                bounds,
+                                retry_mask,
+                            )
+                            if retry_success:
+                                reason = f"{reason}+retry:{retry_reason}"
+                            else:
+                                reason = f"{reason}+retry_failed:{retry_reason}"
 
             cleaned_blocks += 1
             remaining_overlap = int(np.count_nonzero(residual_mask[y1:y2, x1:x2]))
@@ -585,6 +705,194 @@ class InpaintingHandler:
         cleaned_image[y1:y2, x1:x2] = np.clip(np.round(blended), 0, 255).astype(np.uint8)
         residual_crop[fill_region] = 0
         return True, color_reason
+
+    @staticmethod
+    def _estimate_dense_fill_color(
+        crop: np.ndarray,
+        crop_mask: np.ndarray,
+        bounds: tuple[int, int, int, int],
+        seed_bbox,
+        bubble_xyxy=None,
+        min_px: int = 200,
+    ):
+        """
+        Estimate fill color from seed-bg: pixels inside the text bbox
+        that are NOT text (background between letters). Clips seed to
+        bubble_xyxy so panel background outside the bubble is excluded.
+        Returns (fill_color, max_iqr, n_px) or None if not enough pixels.
+        """
+        if seed_bbox is None or len(seed_bbox) < 4:
+            return None
+        bx1, by1, bx2, by2 = [int(v) for v in seed_bbox[:4]]
+        ox, oy = int(bounds[0]), int(bounds[1])
+        ch, cw = crop_mask.shape[:2]
+
+        # Clip seed to bubble bbox so panel background is excluded
+        if bubble_xyxy is not None and len(bubble_xyxy) >= 4:
+            bbx1, bby1, bbx2, bby2 = [int(v) for v in bubble_xyxy[:4]]
+            bx1 = max(bx1, bbx1)
+            by1 = max(by1, bby1)
+            bx2 = min(bx2, bbx2)
+            by2 = min(by2, bby2)
+
+        # Convert to crop coordinates
+        sx1 = max(0, min(cw, bx1 - ox))
+        sy1 = max(0, min(ch, by1 - oy))
+        sx2 = max(sx1, min(cw, bx2 - ox))
+        sy2 = max(sy1, min(ch, by2 - oy))
+        if sx2 <= sx1 or sy2 <= sy1:
+            return None
+
+        seed = crop[sy1:sy2, sx1:sx2]
+        seed_text = crop_mask[sy1:sy2, sx1:sx2]
+        if seed.shape[0] == 0 or seed_text.shape[0] == 0:
+            return None
+        if seed.shape[0] != seed_text.shape[0]:
+            return None
+        seed_bg = seed[seed_text == 0]
+
+        if seed_bg.shape[0] < min_px:
+            return None
+
+        # Filter out dark pixels (brightness < 50) which are likely
+        # figures/shadows inside the bubble, not the bubble background.
+        seed_brightness = seed_bg.mean(axis=1)
+        bright_mask = seed_brightness >= 50.0
+        seed_bg = seed_bg[bright_mask]
+
+        if seed_bg.shape[0] < min_px:
+            return None
+
+        fill_color = np.median(seed_bg, axis=0).astype(np.uint8)
+        seed_f = seed_bg.astype(np.float32)
+        p25 = np.percentile(seed_f, 25, axis=0)
+        p75 = np.percentile(seed_f, 75, axis=0)
+        max_iqr = float(np.max(p75 - p25))
+        return fill_color, max_iqr, seed_bg.shape[0]
+
+    def _dense_bubble_fill(
+        self,
+        original_image: np.ndarray,
+        cleaned_image: np.ndarray,
+        residual_mask: np.ndarray,
+        block,
+        bounds: tuple[int, int, int, int],
+        crop_mask: np.ndarray,
+        *,
+        density_threshold: float = 0.70,
+        spread_threshold: float = 55.0,
+    ) -> tuple[bool, str]:
+        """
+        Fast fill for extremely dense text bubbles where NN inpainting
+        would fail due to insufficient background context.
+
+        Computes median background color from seed-bg (pixels between
+        letters inside the text bbox) which avoids panel background leaks.
+        Falls back to clip-bg if seed-bg has too few pixels.
+        Only applies if background is homogeneous (low IQR spread).
+        """
+        x1, y1, x2, y2 = bounds
+        crop_h, crop_w = crop_mask.shape[:2]
+
+        bubble_clip = build_bubble_clip_mask(
+            (crop_h, crop_w),
+            bounds,
+            block.bubble_xyxy,
+            inset=FAST_FILL_BUBBLE_INSET,
+            image=original_image,
+            seed_bbox=block.xyxy,
+        )
+        if bubble_clip is None:
+            logger.debug("Dense fill: block skipped — no bubble clip")
+            return False, "no-bubble-clip"
+
+        mask_area = int(np.count_nonzero(crop_mask))
+        bubble_area = int(np.count_nonzero(bubble_clip))
+        if bubble_area == 0:
+            logger.debug("Dense fill: block skipped — empty bubble clip")
+            return False, "empty-bubble"
+
+        density = mask_area / float(bubble_area)
+        if density < density_threshold:
+            logger.debug(
+                "Dense fill: block skipped — density %.2f < %.2f",
+                density, density_threshold,
+            )
+            return False, f"not-dense:{density:.2f}"
+
+        crop = original_image[y1:y2, x1:x2]
+
+        # --- Estimate fill color: try seed-bg first, fall back to clip-bg ---
+        seed_bbox = getattr(block, "xyxy", None)
+        bubble_xyxy = getattr(block, "bubble_xyxy", None)
+        seed_est = self._estimate_dense_fill_color(crop, crop_mask, bounds, seed_bbox, bubble_xyxy)
+
+        if seed_est is not None:
+            fill_color, max_iqr, n_px = seed_est
+            fill_source = "seed_bg"
+            bg_n = n_px
+        else:
+            # Fallback: use all background pixels inside bubble clip
+            bg_mask = bubble_clip & (crop_mask == 0)
+            bg_pixels = crop[bg_mask]
+            if bg_pixels.shape[0] == 0:
+                logger.debug("Dense fill: block skipped — no bg pixels in bubble")
+                return False, "no-bg-pixels"
+            bg_f = bg_pixels.astype(np.float32)
+            bg_n = bg_pixels.shape[0]
+            p25 = np.percentile(bg_f, 25, axis=0)
+            p75 = np.percentile(bg_f, 75, axis=0)
+            max_iqr = float(np.max(p75 - p25))
+            fill_color = np.median(bg_f, axis=0).astype(np.uint8)
+            fill_source = "clip_bg"
+
+        logger.debug(
+            "Dense fill candidate: src=%s n=%d median=R%d G%d B%d "
+            "max_iqr=%.1f bg_px=%d",
+            fill_source, bg_n,
+            fill_color[0], fill_color[1], fill_color[2],
+            max_iqr, bg_n,
+        )
+
+        # Homogeneity check: IQR must be below threshold.
+        # High IQR = textured/gradient/multi-colored background → skip.
+        if max_iqr > spread_threshold:
+            logger.debug(
+                "Dense fill: block skipped — heterogeneous bg "
+                "(max_iqr=%.1f > %.1f)",
+                max_iqr, spread_threshold,
+            )
+            return False, f"heterogeneous:max_iqr={max_iqr:.1f}"
+
+        logger.debug(
+            "Dense fill: filling block density=%.2f, bg_px=%d, "
+            "max_iqr=%.1f, src=%s, color=%s",
+            density, bg_n, max_iqr, fill_source, fill_color,
+        )
+
+        fill_region = (crop_mask > 0).astype(bool)
+        soft_mask = imk.gaussian_blur(
+            fill_region.astype(np.uint8) * 255, 1.0
+        ).astype(np.float32) / 255.0
+        soft_mask = np.clip(soft_mask, 0.0, 1.0)[..., np.newaxis]
+
+        bubble_mask_float = bubble_clip.astype(np.float32)[..., np.newaxis]
+        soft_mask = soft_mask * bubble_mask_float
+
+        crop_f = crop.astype(np.float32)
+        fill_rgb = np.broadcast_to(fill_color, crop.shape).astype(np.float32)
+        blended = crop_f * (1.0 - soft_mask) + fill_rgb * soft_mask
+        cleaned_image[y1:y2, x1:x2] = np.clip(
+            np.round(blended), 0, 255
+        ).astype(np.uint8)
+        # Expand the zeroed region to catch Gaussian feather residual
+        # that falls just outside the binary mask boundary.
+        feather_kernel = imk.get_structuring_element(imk.MORPH_RECT, (7, 7))
+        expanded_fill = imk.dilate(
+            fill_region.astype(np.uint8), feather_kernel, iterations=1
+        ) > 0
+        residual_mask[y1:y2, x1:x2][expanded_fill] = 0
+        return True, f"density={density:.2f},bg_px={bg_n},max_iqr={max_iqr:.1f},src={fill_source},color={fill_color}"
 
     def _get_associated_residual_components(self, residual_crop: np.ndarray, masked_region: np.ndarray) -> np.ndarray:
         residual_binary = (residual_crop > 0).astype(np.uint8)
@@ -666,6 +974,13 @@ class InpaintingHandler:
         """
         Intelligently chooses between full-image and patch-based inpainting
         based on image size, number of text blocks, and total mask area.
+        
+        Args:
+            image: Input image (BGR)
+            mask: Text removal mask
+            config: Inpainting configuration
+            blk_list: List of TextBlocks
+            respect_manual_mask: If True, don't fallback on manual mask failures
         """
         if image is None:
             return None
@@ -673,7 +988,7 @@ class InpaintingHandler:
             return image.copy()
 
         working_image, working_mask, cleaned_blocks = self._apply_fast_bubble_cleanup(
-            image, mask, blk_list, respect_manual_mask=respect_manual_mask
+            image, mask, blk_list, respect_manual_mask=respect_manual_mask,
         )
         if cleaned_blocks:
             logger.info("Inpaint hybrid: fast-cleaned %d bubble blocks", cleaned_blocks)
