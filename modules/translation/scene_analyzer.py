@@ -17,35 +17,46 @@ class SceneAnalyzer:
 
     DEFAULT_API_URL = "http://localhost:11434/v1"
     MAX_COMPLETION_TOKENS = 1500
-    MAX_CONTEXT_WORDS = 150
+    MAX_CONTEXT_WORDS = 500
     MAX_PAGE_SIDE = 650
     WEBTOON_MAX_WIDTH = 300
     CONNECT_TIMEOUT_SECONDS = 10
     READ_TIMEOUT_SECONDS = 300
-    SYSTEM_PROMPT = """You help translate a comic page. Provide visual context for the translator.
+    SYSTEM_PROMPT = """\
+You are a comic-page analyst. For EACH text block listed below the image,
+return exactly one entry in the EXACT format shown.
 
-Describe only what is visibly supported:
-- actions and gestures
-- facial expressions and reactions
-- important setting details
+Fields:
+- Speaker: one of male, female, child, robot, creature, narrator, unknown
+- Emotion: one word for the speaker's emotional state
+- Delivery: one of normal, shouting, whispering, thinking, narration
+- Text: the text you see in the speech bubble / caption (exact words)
+- Context: very short visual context (max 10 words)
 
-Refer to people only by appearance (e.g. "man in red coat").
-Never invent names, identities, relationships, or roles.
+Rules:
+1. Process every BLOCK in the order given. Do NOT skip or merge blocks.
+2. Refer to people only by appearance (e.g. "man in red coat").
+   Never invent names, identities, relationships, or roles.
+3. If uncertain about speaker or emotion, use "unknown".
+4. Text must match what you see in the image exactly — do not translate
+   or paraphrase it.
+5. Keep Context short and factual. No speculation.
 
-Do not describe written text: speech bubbles, captions, signs, sound effects.
-The OCR text comes with the page for orientation only. Never quote, translate,
-or mention its contents, and do not retell the story.
+Output format (one entry per block, separated by a blank line):
 
-Do not guess thoughts, motives, or unseen events.
-If uncertain, describe only what is clearly visible.
+BLOCK N: Speaker: <speaker> | Emotion: <emotion> | Delivery: <delivery>
+  Text: "<exact text>"
+  Context: <brief visual context>
 
-One observation per line, in approximate reading order.
-English only. Be concise: under 15 words per line.
+Example (two blocks):
 
-Example:
-Angry man in red coat points at a door
-Woman flinches away
-Rain streaks the window behind her"""
+BLOCK 0: Speaker: male | Emotion: angry | Delivery: shouting
+  Text: "I won't let you get away with this!"
+  Context: man in red coat pointing at door
+
+BLOCK 1: Speaker: female | Emotion: scared | Delivery: whispering
+  Text: "Please, don't hurt me..."
+  Context: woman backing away against wall"""
 
     def __init__(self, api_key: str = "", api_url: str = DEFAULT_API_URL, model: str = ""):
         self.api_key = api_key or ""
@@ -93,26 +104,226 @@ Rain streaks the window behind her"""
         return base64.b64encode(payload).decode("utf-8")
 
     @staticmethod
-    def format_source_blocks(blocks: list) -> str:
-        """Format recognized text blocks in their approximate reading order."""
+    def format_source_blocks(blocks: list, include_coords: bool = False) -> str:
+        """Format recognized text blocks in their approximate reading order.
+
+        When *include_coords* is True each block header carries its bounding-box
+        centre so the VLM can use spatial information when identifying speakers
+        and speech-bubble associations.
+        """
         sections = []
         for block in blocks or []:
             text = re.sub(r"\s+", " ", str(getattr(block, "text", "") or "")).strip()
-            if text:
-                sections.append(f"BLOCK {len(sections)}:\n{text}")
+            if not text:
+                continue
+            idx = len(sections)
+            if include_coords:
+                xyxy = getattr(block, "xyxy", None)
+                if xyxy is not None:
+                    try:
+                        x1, y1, x2, y2 = [int(v) for v in xyxy[:4]]
+                        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                        sections.append(
+                            f"BLOCK {idx} (x={cx}, y={cy}):\n{text}"
+                        )
+                    except (TypeError, ValueError):
+                        sections.append(f"BLOCK {idx}:\n{text}")
+                else:
+                    sections.append(f"BLOCK {idx}:\n{text}")
+            else:
+                sections.append(f"BLOCK {idx}:\n{text}")
         return "\n\n".join(sections)
 
     @classmethod
     def _trim_description(cls, text: str) -> str:
+        """Clean up whitespace and enforce the word limit.
+
+        For structured block output the method tries to keep complete block
+        entries (BLOCK N: … Context: …) instead of cutting in the middle of
+        one.
+        """
         lines = [re.sub(r"\s+", " ", line).strip() for line in (text or "").splitlines()]
         text = "\n".join(line for line in lines if line)
         if not text:
             return ""
 
         words = text.split()
-        if len(words) > cls.MAX_CONTEXT_WORDS:
-            text = " ".join(words[:cls.MAX_CONTEXT_WORDS]).rstrip(".,;:") + "."
+        if len(words) <= cls.MAX_CONTEXT_WORDS:
+            return text
+
+        # Structured block output — trim by keeping complete blocks.
+        block_starts = [
+            m.start()
+            for m in re.finditer(r"^BLOCK\s*\d+\s*:", text, re.MULTILINE)
+        ]
+        if block_starts:
+            # Keep whole blocks that fit within the word budget.
+            last_good = 0
+            for pos in block_starts:
+                prefix = text[:pos]
+                if len(prefix.split()) <= cls.MAX_CONTEXT_WORDS:
+                    last_good = pos
+                else:
+                    break
+            if last_good:
+                return text[:last_good].rstrip()
+
+        # Free-form fallback — truncate at word boundary.
+        text = " ".join(words[: cls.MAX_CONTEXT_WORDS]).rstrip(".,;:") + "."
         return text
+
+    # ------------------------------------------------------------------
+    # Block-level metadata parsing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_vlm_blocks(text: str) -> list[dict]:
+        """Parse VLM response into a list of per-block metadata dicts.
+
+        Each dict has keys: speaker, emotion, delivery, text, context.
+        Blocks that cannot be parsed are skipped.
+        """
+        entries: list[dict] = []
+        if not text:
+            return entries
+
+        # Split on "BLOCK N:" pattern (N may be omitted by the model).
+        block_pattern = re.compile(
+            r"BLOCK\s*\d*\s*:\s*", re.IGNORECASE
+        )
+        raw_parts = block_pattern.split(text)
+        # The first split piece is preamble (before the first BLOCK) — skip it.
+        for part in raw_parts[1:]:
+            part = part.strip()
+            if not part:
+                continue
+
+            entry: dict = {}
+
+            # --- Header line: Speaker: ... | Emotion: ... | Delivery: ... ---
+            header_match = re.search(
+                r"Speaker:\s*(\w+)"
+                r".*?Emotion:\s*(\w+)"
+                r".*?Delivery:\s*(\w+)",
+                part,
+                re.IGNORECASE,
+            )
+            if header_match:
+                entry["speaker"] = header_match.group(1).lower()
+                entry["emotion"] = header_match.group(2).lower()
+                entry["delivery"] = header_match.group(3).lower()
+            else:
+                entry["speaker"] = "unknown"
+                entry["emotion"] = ""
+                entry["delivery"] = "normal"
+
+            # --- Text field ---
+            text_match = re.search(
+                r'Text:\s*["\u201c](.*?)["\u201d]', part, re.DOTALL
+            )
+            if text_match:
+                entry["text"] = text_match.group(1).strip()
+            else:
+                # Fallback: Text: ... (without quotes)
+                text_match2 = re.search(
+                    r"Text:\s*(.+?)(?:\n|Context:)", part, re.IGNORECASE
+                )
+                entry["text"] = text_match2.group(1).strip() if text_match2 else ""
+
+            # --- Context field ---
+            ctx_match = re.search(
+                r"Context:\s*(.+?)$", part, re.IGNORECASE | re.MULTILINE
+            )
+            entry["context"] = ctx_match.group(1).strip() if ctx_match else ""
+
+            entries.append(entry)
+
+        return entries
+
+    @staticmethod
+    def _fuzzy_ratio(a: str, b: str) -> float:
+        """Simple token-overlap ratio between two strings (0-100).
+
+        Good enough for short comic lines; avoids external dependencies.
+        """
+        if not a or not b:
+            return 0.0
+        tok_a = set(a.lower().split())
+        tok_b = set(b.lower().split())
+        if not tok_a or not tok_b:
+            return 0.0
+        intersection = tok_a & tok_b
+        return 100.0 * len(intersection) / max(len(tok_a), len(tok_b))
+
+    @classmethod
+    def match_scene_metadata(
+        cls,
+        vlm_output: str,
+        ocr_blocks: list,
+    ) -> tuple[dict[int, dict], list[str]]:
+        """Parse VLM output and match entries to OCR blocks.
+
+        Returns ``(metadata, log_lines)`` where *metadata* is
+        ``{block_index: {speaker, emotion, delivery, text, context}}``
+        and *log_lines* is a list of human-readable match descriptions
+        suitable for debug logging.
+
+        Matching strategy:
+        1. If VLM returned exactly len(ocr_blocks) entries → index-based.
+        2. Otherwise → fuzzy text matching against OCR text.
+        """
+        entries = cls._parse_vlm_blocks(vlm_output)
+        log: list[str] = []
+        if not entries or not ocr_blocks:
+            return {}, log
+
+        ocr_texts = [
+            re.sub(r"\s+", " ", str(getattr(b, "text", "") or "")).strip()
+            for b in ocr_blocks
+        ]
+
+        # Fast path: same count → index mapping
+        if len(entries) == len(ocr_texts):
+            result = {i: e for i, e in enumerate(entries)}
+            for i, e in enumerate(entries):
+                log.append(
+                    f"BLOCK {i} (index match): speaker={e.get('speaker', '?')}, "
+                    f"emotion={e.get('emotion', '?')}, delivery={e.get('delivery', '?')}, "
+                    f"context=\"{e.get('context', '')}\""
+                )
+            return result, log
+
+        # Fallback: fuzzy match each VLM entry to the best OCR block
+        result: dict[int, dict] = {}
+        used: set[int] = set()
+        log.append(f"Fuzzy fallback: VLM returned {len(entries)} blocks, OCR has {len(ocr_texts)}")
+        for entry in entries:
+            vlm_text = entry.get("text", "")
+            best_idx = -1
+            best_score = 0.0
+            for idx, ocr_text in enumerate(ocr_texts):
+                if idx in used:
+                    continue
+                score = cls._fuzzy_ratio(vlm_text, ocr_text)
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+            if best_idx >= 0 and best_score >= 50.0:
+                result[best_idx] = entry
+                used.add(best_idx)
+                log.append(
+                    f"BLOCK {best_idx} (fuzzy match, score={best_score:.0f}%): "
+                    f"speaker={entry.get('speaker', '?')}, "
+                    f"emotion={entry.get('emotion', '?')}, delivery={entry.get('delivery', '?')}, "
+                    f"context=\"{entry.get('context', '')}\""
+                )
+            else:
+                log.append(
+                    f"VLM entry unmatched (best_score={best_score:.0f}%): "
+                    f"text={vlm_text!r}"
+                )
+
+        return result, log
 
     def _headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -251,16 +462,17 @@ Rain streaks the window behind her"""
 
             if previous_description and previous_description.strip():
                 task = (
-                    "Analyze the page again and replace the previous visual-context "
-                    "draft. Independently verify every detail against the image. "
-                    "Keep accurate details and correct mistakes.\n\n"
+                    "The previous draft below was inaccurate. Analyze the page "
+                    "independently and produce fresh block-by-block metadata.\n\n"
                     f"PREVIOUS DRAFT:\n{previous_description.strip()}"
                 )
             else:
                 task = "Analyze the comic page image."
             user_prompt = (
-                f"{task}\n\nSOURCE TEXT FROM OCR (orientation only -- do not "
-                "describe it; blocks are in approximate reading order):\n\n"
+                f"{task}\n\n"
+                "TEXT BLOCKS (from OCR, in approximate reading order). "
+                "For each block, return Speaker, Emotion, Delivery, Text, "
+                "and Context in the exact format specified.\n\n"
                 f"{source_text.strip()}"
             )
 
@@ -271,6 +483,7 @@ Rain streaks the window behind her"""
             request_started = time.perf_counter()
             result = self._query(self.SYSTEM_PROMPT, user_prompt, encoded_image)
             content = result["content"]
+            logger.debug("SceneAnalyzer VLM raw output:\n%s", content)
             description = self._trim_description(content)
             return description or None
         except requests.exceptions.ReadTimeout as exc:

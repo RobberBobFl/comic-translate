@@ -80,6 +80,7 @@ class BaseLLMTranslation(LLMTranslation):
         context_blocks: list = None,
         batch_size: int = None,
         scene_description: str = None,
+        scene_block_metadata: dict | None = None,
     ) -> tuple[list[TextBlock], bool]:
         """
         Translate text blocks using LLM.
@@ -124,6 +125,7 @@ class BaseLLMTranslation(LLMTranslation):
                     system_prompt,
                     window,
                     scene_description,
+                    scene_block_metadata,
                 )
             except InsufficientCreditsException:
                 raise
@@ -208,11 +210,39 @@ class BaseLLMTranslation(LLMTranslation):
         extra_context: str,
         context_blocks: list,
         scene_description: str = None,
+        scene_block_metadata: dict | None = None,
     ) -> str:
         target_hint = f"Target language: {self.target_lang}." if self.target_lang else ""
         parts = [extra_context, "Make the translation sound as natural as possible.", target_hint]
 
-        if scene_description:
+        if scene_block_metadata:
+            # Per-block metadata from VLM analysis — the translator uses this
+            # to match each text block with its speaker, emotion, and delivery.
+            meta_lines = ["SCENE CONTEXT (per block):"]
+            for idx, blk in enumerate(chunk):
+                key = f"block_{idx}"
+                entry = scene_block_metadata.get(key)
+                if entry:
+                    speaker = entry.get("speaker", "unknown")
+                    emotion = entry.get("emotion", "")
+                    delivery = entry.get("delivery", "normal")
+                    text = entry.get("text", "")
+                    ctx = entry.get("context", "")
+                    meta_lines.append(
+                        f"BLOCK {idx}: Speaker: {speaker} | Emotion: {emotion} | Delivery: {delivery}"
+                    )
+                    if text:
+                        meta_lines.append(f'  Text: "{text}"')
+                    if ctx:
+                        meta_lines.append(f"  Context: {ctx}")
+                else:
+                    meta_lines.append(f"BLOCK {idx}: (no metadata)")
+            meta_lines.append(
+                "Use the above context only when relevant to the translation."
+            )
+            parts.append("\n".join(meta_lines))
+        elif scene_description:
+            # Fallback: plain scene description string (legacy format)
             parts.append(
                 "SCENE CONTEXT:\n"
                 f"{scene_description.strip()}\n"
@@ -229,7 +259,9 @@ class BaseLLMTranslation(LLMTranslation):
             )
 
         parts.append(f"TEXT TO TRANSLATE:\n{get_raw_text(chunk)}")
-        return "\n".join(part for part in parts if part)
+        prompt = "\n".join(part for part in parts if part)
+        logger.debug("Translation user prompt:\n%s", prompt)
+        return prompt
 
     def _translate_chunk(
         self,
@@ -239,6 +271,7 @@ class BaseLLMTranslation(LLMTranslation):
         system_prompt: str,
         context_blocks: list,
         scene_description: str = None,
+        scene_block_metadata: dict | None = None,
     ) -> list[str] | None:
         """Translate one chunk. Returns translations, or None if the chunk failed.
 
@@ -246,13 +279,15 @@ class BaseLLMTranslation(LLMTranslation):
         since repeating the same prompt yields the same malformed JSON.
         """
         user_prompt = self._build_user_prompt(
-            chunk, extra_context, context_blocks, scene_description
+            chunk, extra_context, context_blocks, scene_description,
+            scene_block_metadata,
         )
         expects_text = any((blk.text or '').strip() for blk in chunk)
 
         for attempt in range(1, CHUNK_ATTEMPTS + 1):
             try:
                 response = self._perform_translation(user_prompt, system_prompt, image)
+                logger.debug("LLM raw response (attempt %d):\n%s", attempt, response)
             except InsufficientCreditsException:
                 raise
             except Exception:
@@ -298,7 +333,7 @@ class BaseLLMTranslation(LLMTranslation):
 
         return None
     
-    def rephrase(self, text: str, target_lang: str, scene_description: str = None) -> str:
+    def rephrase(self, text: str, target_lang: str, scene_description: str = None, scene_block_metadata: dict | None = None) -> str:
         """Produce a fresh, natural translation from the original source text.
 
         Uses the same LLM engine as translation but sends the *original*
@@ -308,6 +343,10 @@ class BaseLLMTranslation(LLMTranslation):
         ``scene_description`` (optional) is the visual context for the page,
         matching what ``_build_user_prompt`` injects during batch translation,
         so the rephrase benefits from the same disambiguation cues.
+
+        ``scene_block_metadata`` (optional) is the per-block metadata dict
+        keyed by ``block_N``. When provided it is preferred over the plain
+        ``scene_description`` string.
         """
         system_prompt = (
             f"You are an expert translator. Translate to {target_lang}, "
@@ -317,7 +356,34 @@ class BaseLLMTranslation(LLMTranslation):
         parts = [
             f"Translate this to {target_lang}, phrasing it as naturally as possible:\n{text}"
         ]
-        if scene_description:
+        if scene_block_metadata:
+            # Try to find the matching block by text similarity
+            matched_entry = None
+            for _key, entry in scene_block_metadata.items():
+                vlm_text = (entry.get("text") or "").strip()
+                if vlm_text and self._fuzzy_ratio_simple(vlm_text, text.strip()) > 50:
+                    matched_entry = entry
+                    break
+            if matched_entry:
+                speaker = matched_entry.get("speaker", "unknown")
+                emotion = matched_entry.get("emotion", "")
+                delivery = matched_entry.get("delivery", "normal")
+                ctx = matched_entry.get("context", "")
+                meta = f"Speaker: {speaker} | Emotion: {emotion} | Delivery: {delivery}"
+                if ctx:
+                    meta += f"\nContext: {ctx}"
+                parts.append(
+                    "SCENE CONTEXT:\n"
+                    f"{meta}\n"
+                    "Treat this as a potentially imperfect visual hint and use it only when relevant."
+                )
+            elif scene_description:
+                parts.append(
+                    "SCENE CONTEXT:\n"
+                    f"{scene_description.strip()}\n"
+                    "Treat this as a potentially imperfect visual hint and use it only when relevant."
+                )
+        elif scene_description:
             parts.append(
                 "SCENE CONTEXT:\n"
                 f"{scene_description.strip()}\n"
@@ -327,6 +393,17 @@ class BaseLLMTranslation(LLMTranslation):
         # Pass a tiny dummy image so the engine does not crash on None.
         dummy = np.zeros((1, 1, 3), dtype=np.uint8)
         return self._perform_translation(user_prompt, system_prompt, dummy)
+
+    @staticmethod
+    def _fuzzy_ratio_simple(a: str, b: str) -> float:
+        """Token-overlap ratio (0-100) between two short strings."""
+        if not a or not b:
+            return 0.0
+        tok_a = set(a.lower().split())
+        tok_b = set(b.lower().split())
+        if not tok_a or not tok_b:
+            return 0.0
+        return 100.0 * len(tok_a & tok_b) / max(len(tok_a), len(tok_b))
 
     @abstractmethod
     def _perform_translation(self, user_prompt: str, system_prompt: str, image: np.ndarray) -> str:

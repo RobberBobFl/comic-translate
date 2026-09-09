@@ -93,6 +93,7 @@ class Translator:
         context_blocks: list = None,
         batch_size: int = None,
         scene_description: str = None,
+        scene_block_metadata: dict | None = None,
     ) -> tuple[list[TextBlock], bool]:
         """
         Translate text in text blocks using the configured translation engine.
@@ -104,6 +105,8 @@ class Translator:
             context_blocks: Previously translated source/translation pairs used
                 as a sliding context window (LLM translators only)
             batch_size: Blocks per request; falsy means one request per page
+            scene_description: Optional plain-text scene context string
+            scene_block_metadata: Optional per-block metadata dict from VLM
             
         Returns:
             Tuple of (List of updated TextBlock objects with translations, success flag)
@@ -114,6 +117,7 @@ class Translator:
                 blk_list, image, extra_context,
                 context_blocks=context_blocks, batch_size=batch_size,
                 scene_description=scene_description,
+                scene_block_metadata=scene_block_metadata,
             )
         else:
             # Text-based translators only need the text blocks

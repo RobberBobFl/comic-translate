@@ -149,6 +149,7 @@ def retry_translate(
     context_blocks: list | None = None,
     batch_size: int | None = None,
     scene_description: str | None = None,
+    scene_block_metadata: dict | None = None,
     label: str = "Translation",
 ) -> None:
     """Translate ``blk_list`` with up to ``max_attempts`` recovery passes.
@@ -173,6 +174,7 @@ def retry_translate(
                 context_blocks=use_context,
                 batch_size=batch_size,
                 scene_description=scene_description,
+                scene_block_metadata=scene_block_metadata,
             )
         except InsufficientCreditsException:
             raise

@@ -452,41 +452,54 @@ class ManualWorkflowController:
         self.main.disable_hbutton_group()
         analyzer = SceneAnalyzer.from_settings(self.main.settings_page)
 
-        def get_source_text(file_path: str) -> str:
+        def get_source_text(file_path: str) -> tuple[str, list]:
+            """Return (formatted text with coords, raw block list) for the page."""
             if file_path == self._current_file_path():
                 blocks = self.main.blk_list
             else:
                 blocks = self.main.image_states.get(file_path, {}).get(
                     "blk_list", []
                 )
-            return SceneAnalyzer.format_source_blocks(blocks)
+            return SceneAnalyzer.format_source_blocks(blocks, include_coords=True), blocks
 
-        def analyze_pages() -> dict[str, str]:
-            results = {}
+        def analyze_pages() -> dict[str, tuple[str, dict]]:
+            results: dict[str, tuple[str, dict]] = {}
             for file_path in selected_paths:
                 try:
                     image = self._load_page_image(file_path)
                     previous_description = previous_descriptions.get(file_path)
+                    source_text, blocks = get_source_text(file_path)
                     description = analyzer.analyze(
                         image,
-                        source_text=get_source_text(file_path),
+                        source_text=source_text,
                         previous_description=previous_description,
                         is_webtoon=self.main.webtoon_mode,
                     )
+                    metadata = {}
+                    match_log: list[str] = []
+                    if description and blocks:
+                        metadata, match_log = SceneAnalyzer.match_scene_metadata(
+                            description, blocks
+                        )
+                    for line in match_log:
+                        logger.debug("Scene metadata: %s", line)
                 except Exception:
                     logger.exception(
                         "Scene analysis failed while loading page %s", file_path
                     )
                     continue
                 if description:
-                    results[file_path] = description
+                    results[file_path] = (description, metadata)
             return results
 
-        def on_ready(results: dict[str, str]) -> None:
-            for file_path, description in (results or {}).items():
-                self.main.image_states.setdefault(file_path, {})[
-                    "scene_description"
-                ] = description
+        def on_ready(results: dict[str, tuple[str, dict]]) -> None:
+            for file_path, (description, metadata) in (results or {}).items():
+                state = self.main.image_states.setdefault(file_path, {})
+                state["scene_description"] = description
+                if metadata:
+                    state["scene_block_metadata"] = {
+                        f"block_{k}": v for k, v in sorted(metadata.items())
+                    }
             succeeded = len(results or {})
             failed = total - succeeded
             if succeeded:
@@ -579,11 +592,13 @@ class ManualWorkflowController:
 
                     translator = Translator(self.main, source_lang, target_lang)
                     scene_description = ""
+                    scene_block_metadata = {}
                     if (
                         llm_settings.get("use_scene_description", False)
                         and translator.is_llm_engine
                     ):
                         scene_description = state.get("scene_description", "") or ""
+                        scene_block_metadata = state.get("scene_block_metadata", {}) or {}
                     cache_key = cache_manager._get_translation_cache_key(
                         image,
                         source_lang,
@@ -610,6 +625,7 @@ class ManualWorkflowController:
                                 context_blocks=context_blocks,
                                 batch_size=batch_size,
                                 scene_description=scene_description,
+                                scene_block_metadata=scene_block_metadata,
                                 label=f"Translation:{os.path.basename(file_path)}",
                             )
                         except Exception:

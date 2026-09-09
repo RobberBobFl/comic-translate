@@ -159,20 +159,38 @@ class ChunkMixin:
         context_window = llm_settings.get("context_window", 8)
         translator = Translator(self.main_page, source_lang, target_lang)
         scene_description = ""
+        scene_block_metadata = {}
         state = self.main_page.image_states.get(image_path, {})
         if llm_settings.get("use_scene_description", False) and translator.is_llm_engine:
             scene_description = state.get("scene_description", "") or ""
+            scene_block_metadata = state.get("scene_block_metadata", {}) or {}
             if not scene_description:
+                analyzer = SceneAnalyzer.from_settings(self.main_page.settings_page)
+                source_text = SceneAnalyzer.format_source_blocks(
+                    blocks, include_coords=True
+                )
                 scene_description = (
-                    SceneAnalyzer.from_settings(self.main_page.settings_page).analyze(
+                    analyzer.analyze(
                         image,
-                        source_text=SceneAnalyzer.format_source_blocks(blocks),
+                        source_text=source_text,
                         is_webtoon=True,
                     )
                     or ""
                 )
                 if scene_description:
                     state["scene_description"] = scene_description
+                    if blocks:
+                        metadata, match_log = SceneAnalyzer.match_scene_metadata(
+                            scene_description, blocks
+                        )
+                        for line in match_log:
+                            logger.debug("Scene metadata: %s", line)
+                        if metadata:
+                            scene_block_metadata = {
+                                f"block_{k}": v
+                                for k, v in sorted(metadata.items())
+                            }
+                            state["scene_block_metadata"] = scene_block_metadata
         # Sliding context window carried across virtual pages of this run (see
         # BatchProcessor.batch_process for the same mechanism). Reset at the
         # start of webtoon_batch_process.
@@ -187,6 +205,7 @@ class ChunkMixin:
                 image,
                 extra_context,
                 scene_description=scene_description,
+                scene_block_metadata=scene_block_metadata,
                 batch_size=batch_size,
                 context_blocks=context_blocks,
                 label=f"Translation:{os.path.basename(image_path)}",
@@ -252,7 +271,10 @@ class ChunkMixin:
         mask = generate_mask(image, mask_blocks)
         if mask is None or not np.any(mask):
             return None, None
-        inpainted = call_inpaint_image(self.inpainting, image, mask, config, blk_list=mask_blocks)
+        inpainted = call_inpaint_image(
+            self.inpainting, image, mask, config,
+            blk_list=mask_blocks,
+        )
         inpainted = imk.convert_scale_abs(inpainted)
         return mask, inpainted
 

@@ -86,6 +86,7 @@ class ImageStateController:
             "blk_list": blk_list,
             "skip": skip_status,
             "scene_description": str(state.get("scene_description", "") or ""),
+            "scene_block_metadata": state.get("scene_block_metadata", {}) or {},
             "paint_overlay": paint_overlay,
             "export_group_name": str(
                 state.get("export_group_name") or self._default_export_group_name(file_path)

@@ -242,18 +242,37 @@ class BatchProcessor:
             translator = Translator(self.main_page, source_lang, target_lang)
             use_scene_description = bool(llm_settings.get("use_scene_description", False))
             scene_description = ""
+            scene_block_metadata = {}
             if use_scene_description and translator.is_llm_engine:
                 scene_description = state.get("scene_description", "") or ""
+                scene_block_metadata = state.get("scene_block_metadata", {}) or {}
                 if not scene_description:
+                    analyzer = SceneAnalyzer.from_settings(settings_page)
+                    source_text = SceneAnalyzer.format_source_blocks(
+                        blk_list, include_coords=True
+                    )
                     scene_description = (
-                        SceneAnalyzer.from_settings(settings_page).analyze(
+                        analyzer.analyze(
                             image,
-                            source_text=SceneAnalyzer.format_source_blocks(blk_list),
+                            source_text=source_text,
+                            is_webtoon=getattr(self.main_page, "webtoon_mode", False),
                         )
                         or ""
                     )
                     if scene_description:
                         state["scene_description"] = scene_description
+                        if blk_list:
+                            metadata, match_log = SceneAnalyzer.match_scene_metadata(
+                                scene_description, blk_list
+                            )
+                            for line in match_log:
+                                logger.debug("Scene metadata: %s", line)
+                            if metadata:
+                                scene_block_metadata = {
+                                    f"block_{k}": v
+                                    for k, v in sorted(metadata.items())
+                                }
+                                state["scene_block_metadata"] = scene_block_metadata
             
             batch_size = llm_settings.get('batch_size', 5)
             context_window = llm_settings.get('context_window', 8)
@@ -287,7 +306,9 @@ class BatchProcessor:
                     retry_translate(
                         translator, blk_list, image, extra_context,
                         context_blocks=context_blocks, batch_size=batch_size,
-                        scene_description=scene_description, label=f"Translation:{base_name}",
+                        scene_description=scene_description,
+                        scene_block_metadata=scene_block_metadata,
+                        label=f"Translation:{base_name}",
                     )
                     # Cache the translation results for potential future use
                     self.cache_manager._cache_translation_results(translation_cache_key, blk_list)
@@ -429,7 +450,8 @@ class BatchProcessor:
                 and is_renderable_translation(blk.translation)
             ]
             
-            logger.info("pre-inpaint: generating mask (inpaint_blk_list=%d blocks out of %d)", len(inpaint_blk_list), len(blk_list))
+            logger.info("pre-inpaint: generating mask (inpaint_blk_list=%d blocks out of %d)",
+                        len(inpaint_blk_list), len(blk_list))
             t0 = time.time()
             mask = generate_mask(image, inpaint_blk_list)
             t1 = time.time()
@@ -439,7 +461,10 @@ class BatchProcessor:
             if self._is_cancelled():
                 return
 
-            inpaint_input_img = call_inpaint_image(self.inpainting, image, mask, config, blk_list=inpaint_blk_list)
+            inpaint_input_img = call_inpaint_image(
+                self.inpainting, image, mask, config,
+                blk_list=inpaint_blk_list,
+            )
             inpaint_input_img = imk.convert_scale_abs(inpaint_input_img)
 
             # Saving cleaned image

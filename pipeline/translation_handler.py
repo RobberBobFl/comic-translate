@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _translate_with_retries(translator, blk_list, image, extra_context, scene_description=None,
-                             batch_size=None, context_blocks=None):
+                             scene_block_metadata=None, batch_size=None, context_blocks=None):
     """Translate ``blk_list`` retrying transient/server errors and empty results
     up to MAX_ATTEMPTS times (see :func:`modules.utils.retry_utils.retry_translate`).
 
@@ -36,6 +36,7 @@ def _translate_with_retries(translator, blk_list, image, extra_context, scene_de
     retry_translate(
         translator, blk_list, image, extra_context,
         scene_description=scene_description,
+        scene_block_metadata=scene_block_metadata,
         batch_size=batch_size,
         context_blocks=context_blocks,
     )
@@ -85,11 +86,13 @@ class TranslationHandler:
                 current_path = self.main_page.image_files[self.main_page.curr_img_idx]
             state = self.main_page.image_states.get(current_path, {})
             scene_description = ""
+            scene_block_metadata = {}
             if (
                 llm_settings.get("use_scene_description", False)
                 and translator.is_llm_engine
             ):
                 scene_description = state.get("scene_description", "") or ""
+                scene_block_metadata = state.get("scene_block_metadata", {}) or {}
             
             # Get translation cache key
             translation_cache_key = self.cache_manager._get_translation_cache_key(
@@ -133,6 +136,7 @@ class TranslationHandler:
                         image,
                         extra_context,
                         scene_description=scene_description,
+                        scene_block_metadata=scene_block_metadata,
                         batch_size=batch_size,
                     )
                     
@@ -159,6 +163,7 @@ class TranslationHandler:
                             image,
                             extra_context,
                             scene_description=scene_description,
+                            scene_block_metadata=scene_block_metadata,
                             batch_size=batch_size,
                         )
                         # Cache using the original blocks to maintain consistent IDs
@@ -183,6 +188,7 @@ class TranslationHandler:
                         image,
                         extra_context,
                         scene_description=scene_description,
+                        scene_block_metadata=scene_block_metadata,
                         batch_size=batch_size,
                     )
                     self.cache_manager._cache_translation_results(translation_cache_key, self.main_page.blk_list)
@@ -234,14 +240,17 @@ class TranslationHandler:
         
         translator = Translator(self.main_page, source_lang, target_lang)
         scene_description = ""
+        scene_block_metadata = {}
         if llm_settings.get("use_scene_description", False) and translator.is_llm_engine:
             scene_description = state.get("scene_description", "") or ""
+            scene_block_metadata = state.get("scene_block_metadata", {}) or {}
         _translate_with_retries(
             translator,
             visible_blocks,
             visible_image,
             extra_context,
             scene_description=scene_description,
+            scene_block_metadata=scene_block_metadata,
             batch_size=batch_size,
         )
 
