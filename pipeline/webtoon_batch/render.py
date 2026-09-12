@@ -102,7 +102,7 @@ class RenderMixin:
             # Anchor the translation to the (shrunk) speech bubble when one was
             # detected, so text centers inside the bubble rather than the tight
             # text-line box (which for horizontal bubbles sits at the top).
-            x1, y1, width, height = render_box_for_block(block)
+            x1, y1, width, height = render_box_for_block(block, blocks)
 
             translation = block.translation
             if not is_renderable_translation(translation):

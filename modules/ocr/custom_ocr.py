@@ -64,15 +64,16 @@ class CustomOCR(OCREngine):
         """Process an image with the custom OCR by processing individual text regions."""
         h, w = img.shape[:2]
         for blk in blk_list:
-            if blk.bubble_xyxy is not None:
-                x1, y1, x2, y2 = blk.bubble_xyxy
-            else:
-                x1, y1, x2, y2 = adjust_text_line_coordinates(
-                    blk.xyxy,
-                    self.expansion_percentage,
-                    self.expansion_percentage,
-                    img,
-                )
+            # Use the text bbox for cropping, not the bubble bbox.
+            # bubble_xyxy is for rendering (where to place translated text).
+            # When two text regions share one bubble, using bubble_xyxy would
+            # give both blocks the same crop and the same OCR text.
+            x1, y1, x2, y2 = adjust_text_line_coordinates(
+                blk.xyxy,
+                self.expansion_percentage,
+                self.expansion_percentage,
+                img,
+            )
 
             # Bounding boxes may be numpy floats (e.g. from detection / webtoon
             # coordinate maths). Slicing requires integers, so round + clamp to
@@ -88,6 +89,10 @@ class CustomOCR(OCREngine):
                 cropped_img = img[y1:y2, x1:x2]
                 img_to_ocr = self.encode_image(cropped_img)
                 blk.text = self._get_ocr(img_to_ocr)
+                logger.debug("[CustomOCR] crop=(%d,%d,%d,%d) size=%dx%d text=%r",
+                             x1, y1, x2, y2, x2-x1, y2-y1, (blk.text or '')[:80])
+            else:
+                logger.debug("[CustomOCR] invalid crop xyxy=%s -> empty", [x1,y1,x2,y2])
 
         return blk_list
 

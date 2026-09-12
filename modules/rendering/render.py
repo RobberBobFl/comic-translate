@@ -213,7 +213,7 @@ def draw_text(image: np.ndarray, blk_list: List[TextBlock], font_pth: str, colou
     font = ImageFont.truetype(font_pth, size=init_font_size)
 
     for blk in blk_list:
-        x1, y1, width, height = render_box_for_block(blk)
+        x1, y1, width, height = render_box_for_block(blk, blk_list)
         tbbox_top_left = (x1, y1)
 
         translation = blk.translation
@@ -261,19 +261,37 @@ def get_best_render_area(blk_list: List[TextBlock], img, inpainted_img=None):
     return blk_list
 
 
-def render_box_for_block(blk) -> tuple:
+def _is_bubble_shared(blk, blk_list) -> bool:
+    """Return True if another block shares the same bubble_xyxy as blk."""
+    if getattr(blk, "bubble_xyxy", None) is None:
+        return False
+    bx = tuple(int(round(v)) for v in blk.bubble_xyxy[:4])
+    for other in blk_list:
+        if other is blk:
+            continue
+        if getattr(other, "bubble_xyxy", None) is None:
+            continue
+        ox = tuple(int(round(v)) for v in other.bubble_xyxy[:4])
+        if bx == ox:
+            return True
+    return False
+
+
+def render_box_for_block(blk, blk_list=None) -> tuple:
     """Render box (x, y, w, h) for a block.
 
     Anchors translated text to the speech bubble when one was detected, so the
     text is centered inside the bubble instead of the tight text-line box (which
     for horizontal bubbles sits at the bubble's top). Falls back to the block's
-    own xyxy when no bubble is available. Does NOT mutate the block's xyxy, so
-    the editor's editable box stays unchanged.
+    own xyxy when no bubble is available or when the bubble is shared by another
+    block (two text regions inside one bubble must render at their own text
+    positions, not at the shared bubble center). Does NOT mutate blk.xyxy.
     """
     if getattr(blk, "text_class", None) == "text_bubble" and getattr(blk, "bubble_xyxy", None) is not None:
-        bx1, by1, bx2, by2 = [float(v) for v in blk.bubble_xyxy[:4]]
-        bx1, by1, bx2, by2 = shrink_bbox([bx1, by1, bx2, by2], shrink_percent=BUBBLE_SHRINK)
-        return bx1, by1, bx2 - bx1, by2 - by1
+        if blk_list is None or not _is_bubble_shared(blk, blk_list):
+            bx1, by1, bx2, by2 = [float(v) for v in blk.bubble_xyxy[:4]]
+            bx1, by1, bx2, by2 = shrink_bbox([bx1, by1, bx2, by2], shrink_percent=BUBBLE_SHRINK)
+            return bx1, by1, bx2 - bx1, by2 - by1
     x1, y1, x2, y2 = [float(v) for v in blk.xyxy]
     return x1, y1, x2 - x1, y2 - y1
 
@@ -469,7 +487,7 @@ def manual_wrap(
     trg_lng_cd = get_language_code(target_lang)
 
     for blk in blk_list:
-        x1, y1, width, height = render_box_for_block(blk)
+        x1, y1, width, height = render_box_for_block(blk, blk_list)
 
         translation = blk.translation
         if not translation or len(translation) == 1:

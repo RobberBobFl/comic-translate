@@ -162,17 +162,12 @@ class UserOCR(OCREngine):
         h, w = img.shape[:2]
 
         for i, blk in enumerate(blk_list):
-            # Determine coordinates to be used
-            if blk.bubble_xyxy is not None:
-                x1, y1, x2, y2 = blk.bubble_xyxy
-            elif blk.xyxy is not None:
-                expansion_percentage = 5 
-                x1, y1, x2, y2 = adjust_text_line_coordinates(
-                    blk.xyxy, expansion_percentage, expansion_percentage, img
-                )
-            else:
-                logger.warning(f"Block {i} has no coordinates, skipping.")
-                continue
+            # Use text bbox, not bubble, to avoid two blocks sharing one
+            # bubble getting the same OCR crop.
+            expansion_percentage = 5 
+            x1, y1, x2, y2 = adjust_text_line_coordinates(
+                blk.xyxy, expansion_percentage, expansion_percentage, img
+            )
 
             # Validate coordinates against image bounds
             x1, y1 = max(0, int(x1)), max(0, int(y1))

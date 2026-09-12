@@ -288,15 +288,14 @@ class PororoOCREngineONNX(OCREngine):
             return blk_list
 
         for blk in blk_list:
-            if getattr(blk, 'bubble_xyxy', None) is not None:
-                x1, y1, x2, y2 = blk.bubble_xyxy
-            else:
-                x1, y1, x2, y2 = adjust_text_line_coordinates(
-                    blk.xyxy,
-                    getattr(self, 'expansion_percentage', 5),
-                    getattr(self, 'expansion_percentage', 5),
-                    img,
-                )
+            # Use text bbox, not bubble, to avoid two blocks sharing one
+            # bubble getting the same OCR crop.
+            x1, y1, x2, y2 = adjust_text_line_coordinates(
+                blk.xyxy,
+                getattr(self, 'expansion_percentage', 5),
+                getattr(self, 'expansion_percentage', 5),
+                img,
+            )
             if x1 < x2 and y1 < y2 and x1 >= 0 and y1 >= 0 and x2 <= img.shape[1] and y2 <= img.shape[0]:
                 cropped = img[y1:y2, x1:x2]
                 # run full pipeline on cropped region

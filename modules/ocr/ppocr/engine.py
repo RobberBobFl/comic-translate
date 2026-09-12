@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, List, Tuple, Optional
 import numpy as np
 import onnxruntime as ort
@@ -12,6 +13,8 @@ from modules.utils.download import ModelDownloader, ModelID
 from modules.utils.onnx import make_session
 from .preprocessing import det_preprocess, crop_quad, rec_resize_norm
 from .postprocessing import DBPostProcessor, CTCLabelDecoder
+
+logger = logging.getLogger(__name__)
 
 
 LANG_TO_REC_MODEL: dict[str, ModelID] = {
@@ -162,6 +165,8 @@ class PPOCRv5Engine(OCREngine):
 	def process_image(self, img: np.ndarray, blk_list: List[TextBlock]) -> List[TextBlock]:
 		if self.rec_sess is None or self.decoder is None:
 			return blk_list
+		logger.debug("[PPOCRv5] process_image: %d blocks, use_text_lines=%s",
+					  len(blk_list), self.use_text_lines)
 		if self.use_text_lines and any(getattr(blk, 'lines', None) for blk in blk_list):
 			# Batch all blocks' line crops together so width-bucketing happens
 			# across the whole page, not once per block (fewer ORT calls).
@@ -182,6 +187,8 @@ class PPOCRv5Engine(OCREngine):
 				block_crops.append(crops)
 				block_lines.append(valid_lines)
 				all_crops.extend(crops)
+				logger.debug("  block xyxy=%s: %d lines -> %d valid crops",
+							  [int(v) for v in blk.xyxy], len(lines), len(crops))
 
 			all_texts, _ = self._rec_infer(all_crops)
 
@@ -192,8 +199,10 @@ class PPOCRv5Engine(OCREngine):
 				texts = [text.strip() if text else "" for text in texts]
 				blk.texts, blk.skipped_small_texts = _split_japanese_small_line_texts(blk, lines, texts)
 				blk.text = ''.join(blk.texts) if is_no_space_lang(getattr(blk, 'source_lang', '')) else ' '.join(blk.texts)
+				logger.debug("  block xyxy=%s -> texts=%r", [int(v) for v in blk.xyxy], blk.text[:80])
 			return blk_list
 		boxes, _ = self._det_infer(img)
+		logger.debug("[PPOCRv5] det_infer returned %d boxes", len(boxes) if boxes is not None else 0)
 		if boxes is None or len(boxes) == 0:
 			return blk_list
 		crops = [crop_quad(img, quad.astype(np.float32)) for quad in boxes]
@@ -205,6 +214,8 @@ class PPOCRv5Engine(OCREngine):
 			ys = quad[:, 1]
 			x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
 			bboxes.append((x1, y1, x2, y2))
+		for i, (bbox, text) in enumerate(zip(bboxes, texts)):
+			logger.debug("  ocr_det[%d] bbox=%s text=%r", i, bbox, text[:60])
 		return lists_to_blk_list(blk_list, bboxes, texts)
 
 

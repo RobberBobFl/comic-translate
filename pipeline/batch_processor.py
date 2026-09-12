@@ -508,7 +508,7 @@ class BatchProcessor:
                 # Anchor the translation to the (shrunk) speech bubble when one
                 # was detected, so text centers inside the bubble rather than the
                 # tight text-line box (horizontal bubbles sit at the bubble top).
-                x1, y1, block_width, block_height = render_box_for_block(blk)
+                x1, y1, block_width, block_height = render_box_for_block(blk, blk_list)
 
                 translation = blk.translation
                 if not is_renderable_translation(translation):

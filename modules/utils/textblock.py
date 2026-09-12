@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import List, Tuple
 import numpy as np
@@ -7,6 +8,8 @@ from collections import defaultdict, deque
 from ..detection.utils.text_lines import group_items_into_lines
 from modules.detection.utils.geometry import does_rectangle_fit, is_mostly_contained
 from modules.utils.language_utils import is_no_space_lang
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_block_id(blk: "TextBlock") -> str:
@@ -314,15 +317,52 @@ def adjust_blks_size(blk_list: List[TextBlock], img: np.ndarray, w_expan: int = 
 
 def lists_to_blk_list(blk_list: list[TextBlock], texts_bboxes: list, texts_string: list):  
     group = list(zip(texts_bboxes, texts_string))  
+    assigned = set()  # Track which OCR entries have been claimed by a block
+
+    logger.debug("[lists_to_blk_list] %d blocks, %d ocr_entries", len(blk_list), len(group))
+    for i, (bbox, text) in enumerate(group):
+        logger.debug("  ocr[%d] bbox=%s text=%r", i, [int(v) for v in bbox], text[:60])
+    for i, blk in enumerate(blk_list):
+        logger.debug("  block[%d] xyxy=%s bubble=%s class=%s",
+                      i, [int(v) for v in blk.xyxy],
+                      [int(v) for v in blk.bubble_xyxy] if blk.bubble_xyxy is not None else None,
+                      blk.text_class)
 
     for blk in blk_list:
+        # Prefer bubble bbox for text_bubble blocks (fix 4)
+        blk_box = (list(blk.bubble_xyxy) if blk.text_class == 'text_bubble'
+                   and blk.bubble_xyxy is not None else list(blk.xyxy))
+
+        # Collect candidates: (index, line, text, is_fully_contained, overlap_ratio)
+        candidates = []
+        for idx, (line, text) in enumerate(group):
+            if idx in assigned:
+                continue
+            if does_rectangle_fit(blk_box, line):
+                candidates.append((idx, line, text, True, 1.0))
+            elif is_mostly_contained(blk_box, line, 0.8):  # fix 3: raised from 0.5
+                # Compute actual containment ratio for ranking
+                ix1, iy1, ix2, iy2 = line
+                bx1, by1, bx2, by2 = blk_box
+                inner_area = (ix2 - ix1) * (iy2 - iy1)
+                inter_area = (max(0, min(ix2, bx2) - max(ix1, bx1))
+                              * max(0, min(iy2, by2) - max(iy1, by1)))
+                ratio = inter_area / inner_area if inner_area > 0 else 0
+                candidates.append((idx, line, text, False, ratio))
+
+        logger.debug("  block %s: %d candidates (assigned so far: %s)",
+                      [int(v) for v in blk.xyxy], len(candidates), sorted(assigned))
+
+        # Sort: full containment first, then by overlap ratio descending
+        candidates.sort(key=lambda c: (c[3], c[4]), reverse=True)
+
+        # Take all candidates and mark them as assigned
         blk_entries = []
-        
-        for line, text in group:
-            if does_rectangle_fit(blk.xyxy, line):
-                blk_entries.append((line, text)) 
-            elif is_mostly_contained(blk.xyxy, line, 0.5):
-                blk_entries.append((line, text)) 
+        for idx, line, text, is_full, ratio in candidates:
+            assigned.add(idx)
+            blk_entries.append((line, text))
+            logger.debug("    -> assigned ocr[%d] bbox=%s text=%r (full=%s ratio=%.2f)",
+                          idx, [int(v) for v in line], text[:40], is_full, ratio)
 
         # Sort and join text entries
         sorted_entries = sort_textblock_rectangles(blk_entries, blk.source_lang_direction)
@@ -331,6 +371,9 @@ def lists_to_blk_list(blk_list: list[TextBlock], texts_bboxes: list, texts_strin
             blk.text = ''.join(text for bbox, text in sorted_entries)
         else:
             blk.text = ' '.join(text for bbox, text in sorted_entries)
+
+        logger.debug("[lists_to_blk_list] block xyxy=%s final_text=%r",
+                      [int(v) for v in blk.xyxy], blk.text[:80])
 
     return blk_list
 

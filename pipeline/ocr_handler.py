@@ -79,6 +79,11 @@ class OCRHandler:
                         self.cache_manager._cache_ocr_results(cache_key, self.main_page.blk_list, all_blocks_copy)
                         cached_text = self.cache_manager._get_cached_text_for_block(cache_key, blk)
                         blk.text = cached_text
+                        for _i, _b in enumerate(all_blocks_copy):
+                            logger.debug("  ocr_result[%d] text=%r xyxy=%s bubble=%s",
+                                         _i, getattr(_b, 'text', '')[:80],
+                                         [int(v) for v in _b.xyxy],
+                                         [int(v) for v in _b.bubble_xyxy] if _b.bubble_xyxy is not None else None)
                         logger.info(f"Cached OCR results and extracted text for block: {cached_text}")
             else:
                 # For full page OCR, check if we can use cached results
@@ -91,6 +96,11 @@ class OCRHandler:
                     self.ocr.initialize(self.main_page, source_lang)
                     if self.main_page.blk_list:  
                         self.ocr.process(image, self.main_page.blk_list)
+                        for _i, _b in enumerate(self.main_page.blk_list):
+                            logger.debug("  ocr_result[%d] text=%r xyxy=%s bubble=%s",
+                                         _i, getattr(_b, 'text', '')[:80],
+                                         [int(v) for v in _b.xyxy],
+                                         [int(v) for v in _b.bubble_xyxy] if _b.bubble_xyxy is not None else None)
                         self.cache_manager._cache_ocr_results(cache_key, self.main_page.blk_list)
                         logger.info("OCR completed and cached for %d blocks", len(self.main_page.blk_list))
 
@@ -123,6 +133,12 @@ class OCRHandler:
         # Perform OCR on the visible image with filtered blocks
         self.ocr.initialize(self.main_page, source_lang)
         self.ocr.process(visible_image, visible_blocks)
+        
+        for _i, _b in enumerate(visible_blocks):
+            logger.debug("  ocr_result[%d] text=%r xyxy=%s bubble=%s",
+                         _i, getattr(_b, 'text', '')[:80],
+                         [int(v) for v in _b.xyxy],
+                         [int(v) for v in _b.bubble_xyxy] if _b.bubble_xyxy is not None else None)
         
         # The OCR text is already set on the blocks, just restore coordinates
         restore_original_block_coordinates(visible_blocks)

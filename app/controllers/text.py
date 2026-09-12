@@ -208,7 +208,7 @@ class TextController:
         # the tight text-line box: bubbles keep their xyxy at the bubble's top,
         # so using it would pin the text to the top. render_box_for_block returns
         # the (shrunk) bubble box for bubble text and falls back to xyxy otherwise.
-        bx, by, bw, bh = render_box_for_block(blk)
+        bx, by, bw, bh = render_box_for_block(blk, getattr(self.main, 'blk_list', None))
         properties.position = (bx, by)
 
         # Widen the text document to the block width so the user's alignment
@@ -925,7 +925,7 @@ class TextController:
 
                         # Anchor to the (shrunk) bubble when detected, so text
                         # centers inside the bubble, not the tight text-line box.
-                        x1, y1, block_width, block_height = render_box_for_block(blk)
+                        x1, y1, block_width, block_height = render_box_for_block(blk, blk_list)
                         translation = blk.translation
                         if not is_renderable_translation(translation):
                             continue
@@ -1122,7 +1122,7 @@ class TextController:
             return
         if text_item.vertical:
             return
-        bx, by, bw, bh = render_box_for_block(blk)
+        bx, by, bw, bh = render_box_for_block(blk, getattr(self.main, 'blk_list', None))
         if not bw or not bh:
             return
         text_item.setTextWidth(bw)

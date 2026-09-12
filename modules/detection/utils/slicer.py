@@ -1,7 +1,10 @@
+import logging
 import math
 import numpy as np
 from typing import Callable, Any
 from .geometry import calculate_iou
+
+logger = logging.getLogger(__name__)
 
 
 class ImageSlicer:
@@ -173,6 +176,10 @@ class ImageSlicer:
         """
         if boxes.size == 0:
             return boxes, np.array([]) if class_ids is not None else boxes
+
+        logger.debug("[slicer.merge] %d input boxes, image_height=%d", len(boxes), image_height)
+        for i, b in enumerate(boxes):
+            logger.debug("  box[%d] = %s", i, [int(v) for v in b])
             
         # Convert to list for easier manipulation
         box_list = boxes.tolist()
@@ -291,6 +298,7 @@ class ImageSlicer:
         merged_boxes = np.array(box_list)
         merged_class_ids = np.array(class_list) if class_ids is not None else None
         
+        logger.debug("[slicer.merge] result: %d -> %d boxes", len(boxes), len(merged_boxes))
         return merged_boxes, merged_class_ids
     
     def process_slices_for_detection(self, 
