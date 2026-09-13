@@ -1902,3 +1902,305 @@ class ProjectController:
             mapped_value = self.main.settings_page.ui.value_mappings.get(group_value, group_value)
             settings_obj.setValue(group_key, mapped_value)
 
+    # ------------------------------------------------------------------
+    # Text JSON export / import
+    # ------------------------------------------------------------------
+
+    def export_text_json(self):
+        """Export OCR text and translations to an editable JSON file."""
+        import json
+        from modules.utils.textblock import ensure_block_id
+
+        current_page_only = self.main.settings_page.ui.current_page_only_checkbox.isChecked()
+
+        # Sync live blk_list into image_states so OCR/translation results are included
+        if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
+            self.main.image_ctrl.save_current_image_state()
+
+        # Determine which pages to export
+        if current_page_only:
+            if self.main.curr_img_idx < 0 or self.main.curr_img_idx >= len(self.main.image_files):
+                MMessage.warning(
+                    self.main.tr("No current page"), parent=self.main
+                )
+                return
+            current_file = self.main.image_files[self.main.curr_img_idx]
+            pages_to_export = {current_file: self.main.image_states.get(current_file, {})}
+        else:
+            pages_to_export = dict(self.main.image_states)
+
+        if not pages_to_export:
+            MMessage.warning(
+                self.main.tr("No pages to export"), parent=self.main
+            )
+            return
+
+        # Gather source/target languages from current UI
+        source_lang = self.main.s_combo.currentText()
+        target_lang = self.main.t_combo.currentText()
+
+        pages_data = []
+        for file_path in self.main.image_files:
+            if file_path not in pages_to_export:
+                continue
+            state = pages_to_export[file_path]
+            blk_list = state.get('blk_list', [])
+            page_index = self.main.image_files.index(file_path) \
+                if file_path in self.main.image_files else -1
+
+            blocks = []
+            for i, blk in enumerate(blk_list):
+                bid = ensure_block_id(blk)
+                blocks.append({
+                    "block_id": bid,
+                    "block_index": i,
+                    "text_class": blk.text_class or "",
+                    "text": blk.text or "",
+                    "translation": blk.translation or "",
+                    "bbox": [int(x) for x in (blk.xyxy if blk.xyxy is not None else [])],
+                })
+
+            pages_data.append({
+                "page_index": page_index,
+                "file_name": os.path.basename(file_path),
+                "blocks": blocks,
+            })
+
+        data = {
+            "format_version": 1,
+            "source_lang": source_lang,
+            "target_lang": target_lang,
+            "pages": pages_data,
+        }
+
+        # Build a sensible default filename
+        default_name = "translations.json"
+        if len(pages_data) == 1:
+            base = os.path.splitext(pages_data[0]["file_name"])[0]
+            default_name = f"{base}_translations.json"
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self.main,
+            self.main.tr("Export Text (JSON)"),
+            default_name,
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        total_blocks = sum(len(p["blocks"]) for p in pages_data)
+        MMessage.info(
+            self.main.tr("Exported {n} blocks from {p} page(s)").format(
+                n=total_blocks, p=len(pages_data)
+            ),
+            parent=self.main,
+        )
+        logger.info("Exported text JSON to %s (%d pages, %d blocks)", path, len(pages_data), total_blocks)
+
+    def import_text_json(self):
+        """Import translations from a JSON file, updating only blk.translation."""
+        import json
+        from modules.utils.textblock import ensure_block_id
+
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.main,
+            self.main.tr("Import Text (JSON)"),
+            "",
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+
+        # Read and parse JSON
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            QtWidgets.QMessageBox.critical(
+                self.main,
+                self.main.tr("Import Error"),
+                self.main.tr("Failed to read JSON file:\n{error}").format(error=str(e)),
+            )
+            return
+
+        # Validate format version
+        fmt_version = data.get("format_version")
+        if fmt_version != 1:
+            QtWidgets.QMessageBox.critical(
+                self.main,
+                self.main.tr("Import Error"),
+                self.main.tr("Unknown format version: {v}. Expected version 1.").format(v=fmt_version),
+            )
+            return
+
+        # Warn about language mismatch (non-blocking)
+        json_src = data.get("source_lang", "")
+        json_trg = data.get("target_lang", "")
+        cur_src = self.main.s_combo.currentText()
+        cur_trg = self.main.t_combo.currentText()
+        if json_src or json_trg:
+            # Try canonical comparison
+            try:
+                from modules.utils.language_utils import to_canonical_language_name
+                lang_mapping = getattr(self.main, 'lang_mapping', {})
+                json_src_c = to_canonical_language_name(json_src, lang_mapping) if json_src else json_src
+                json_trg_c = to_canonical_language_name(json_trg, lang_mapping) if json_trg else json_trg
+                cur_src_c = to_canonical_language_name(cur_src, lang_mapping) if cur_src else cur_src
+                cur_trg_c = to_canonical_language_name(cur_trg, lang_mapping) if cur_trg else cur_trg
+            except Exception:
+                json_src_c, json_trg_c, cur_src_c, cur_trg_c = json_src, json_trg, cur_src, cur_trg
+
+            if (json_src_c and json_src_c != cur_src_c) or (json_trg_c and json_trg_c != cur_trg_c):
+                QtWidgets.QMessageBox.warning(
+                    self.main,
+                    self.main.tr("Language Mismatch"),
+                    self.main.tr(
+                        "JSON uses source language '{js}' and target language '{jt}', "
+                        "while current project uses '{cs}' and '{ct}'."
+                    ).format(js=json_src, jt=json_trg, cs=cur_src, ct=cur_trg),
+                )
+
+        # Build a lookup of project blocks by block_id
+        # {block_id: (file_path, blk, block_index)}
+        project_blocks_by_id: dict[str, tuple] = {}
+        # Also build legacy fallback: {(file_path, block_index): blk}
+        project_blocks_by_index: dict[tuple, object] = {}
+
+        for file_path in self.main.image_files:
+            state = self.main.image_states.get(file_path, {})
+            blk_list = state.get('blk_list', [])
+            for i, blk in enumerate(blk_list):
+                bid = getattr(blk, 'block_id', None)
+                if bid:
+                    project_blocks_by_id[bid] = (file_path, blk, i)
+                else:
+                    project_blocks_by_index[(file_path, i)] = blk
+
+        # Phase 1: Validate all JSON blocks exist before applying any changes
+        pages = data.get("pages", [])
+        matched_by_id = 0
+        matched_by_index = 0
+        not_found = 0
+        text_mismatches = 0
+        not_found_ids: list[str] = []
+
+        # Build a map of JSON blocks to apply: list of (project_blk, translation, json_text)
+        apply_queue: list[tuple] = []
+
+        for page in pages:
+            json_file_name = page.get("file_name", "")
+            json_page_index = page.get("page_index", -1)
+
+            # Find the matching project file
+            matched_file = None
+            # Try exact path match first (file_name == basename of project path)
+            for fp in self.main.image_files:
+                if os.path.basename(fp) == json_file_name:
+                    matched_file = fp
+                    break
+            # Fallback: try by page_index if valid
+            if matched_file is None and 0 <= json_page_index < len(self.main.image_files):
+                matched_file = self.main.image_files[json_page_index]
+
+            if matched_file is None:
+                logger.warning("Import: no matching project page for JSON file '%s' (index %d)", json_file_name, json_page_index)
+                for block in page.get("blocks", []):
+                    not_found += 1
+                    bid = block.get("block_id", "")
+                    if bid:
+                        not_found_ids.append(bid)
+                continue
+
+            for block in page.get("blocks", []):
+                bid = block.get("block_id", "")
+                bidx = block.get("block_index", -1)
+                json_text = block.get("text", "")
+                translation = block.get("translation", "")
+
+                project_blk = None
+
+                # Primary: match by block_id
+                if bid and bid in project_blocks_by_id:
+                    _, project_blk, _ = project_blocks_by_id[bid]
+                    matched_by_id += 1
+                elif bid is None or bid == "":
+                    # Legacy fallback: match by (file_path, block_index)
+                    project_blk = project_blocks_by_index.get((matched_file, bidx))
+                    if project_blk is not None:
+                        matched_by_index += 1
+                    else:
+                        not_found += 1
+                        not_found_ids.append(f"index={bidx}@{json_file_name}")
+                        continue
+                else:
+                    not_found += 1
+                    not_found_ids.append(bid)
+                    continue
+
+                # Text mismatch warning
+                current_text = project_blk.text or ""
+                if json_text and json_text.strip() != current_text.strip():
+                    text_mismatches += 1
+                    logger.warning(
+                        "Block %s text mismatch: JSON='%s' vs project='%s'",
+                        bid or f"index={bidx}", json_text[:80], current_text[:80],
+                    )
+
+                apply_queue.append((project_blk, translation, matched_file))
+
+        # Phase 2: Apply changes only if we have matches
+        if not apply_queue and not_found:
+            QtWidgets.QMessageBox.warning(
+                self.main,
+                self.main.tr("Import Result"),
+                self.main.tr("No matching blocks found in the project.").format(),
+            )
+            return
+
+        for project_blk, translation, _file_path in apply_queue:
+            project_blk.translation = translation
+
+        # Determine affected files and current file for UI sync
+        affected_files: set[str] = set()
+        for _, _, fp in apply_queue:
+            affected_files.add(fp)
+
+        current_file = None
+        if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
+            current_file = self.main.image_files[self.main.curr_img_idx]
+
+        # If the current page was affected, sync the live blk_list and update UI
+        if current_file and current_file in affected_files:
+            self.main.blk_list = self.main.image_states[current_file]['blk_list']
+            # Refresh text edits to reflect new translations
+            try:
+                self.main.text_ctrl.set_src_trg_all()
+            except Exception:
+                pass
+
+        # Report results
+        parts = [self.main.tr("Imported: {n}").format(n=matched_by_id + matched_by_index)]
+        if matched_by_id:
+            parts.append(self.main.tr("By UUID: {n}").format(n=matched_by_id))
+        if matched_by_index:
+            parts.append(self.main.tr("By legacy index: {n}").format(n=matched_by_index))
+        if not_found:
+            parts.append(self.main.tr("Not found: {n}").format(n=not_found))
+        if text_mismatches:
+            parts.append(self.main.tr("Text mismatches: {n}").format(n=text_mismatches))
+
+        report = "\n".join(parts)
+        QtWidgets.QMessageBox.information(
+            self.main,
+            self.main.tr("Import Result"),
+            report,
+        )
+        logger.info(
+            "Import text JSON: imported=%d (uuid=%d, legacy=%d), not_found=%d, text_mismatches=%d, missing_ids=%s",
+            matched_by_id + matched_by_index, matched_by_id, matched_by_index,
+            not_found, text_mismatches, not_found_ids[:20],
+        )
+

@@ -125,6 +125,7 @@ class ComicTranslate(ComicTranslateUI):
         self.task_runner_ctrl = TaskRunnerController(self)
         self.batch_report_ctrl = BatchReportController(self)
         self.manual_workflow_ctrl = ManualWorkflowController(self)
+        self.image_viewer.main_page = self
         try:
             if self._memlogger is not None:
                 self._memlogger.emit("after_controllers_init")
@@ -270,6 +271,13 @@ class ComicTranslate(ComicTranslateUI):
 
         # New project and safety confirmations
         self.new_project_button.clicked.connect(self._on_new_project_clicked)
+
+        # Text JSON export/import
+        self.settings_page.ui.export_text_button.clicked.connect(self.project_ctrl.export_text_json)
+        self.settings_page.ui.import_text_button.clicked.connect(self.project_ctrl.import_text_json)
+
+        # Reading Order mode
+        self.reading_order_button.clicked.connect(self.toggle_reading_order)
 
         # Home screen signals
         self.startup_home.sig_open_files.connect(self._guarded_thread_load_images)

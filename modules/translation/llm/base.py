@@ -117,6 +117,7 @@ class BaseLLMTranslation(LLMTranslation):
             # Only the first request of a page carries the image: later chunks
             # would pay the full image cost again for the same page.
             chunk_image = image if index == 0 else None
+            global_offset = sum(len(c) for c in chunks[:index])
             try:
                 translations = self._translate_chunk(
                     chunk,
@@ -126,6 +127,7 @@ class BaseLLMTranslation(LLMTranslation):
                     window,
                     scene_description,
                     scene_block_metadata,
+                    global_offset=global_offset,
                 )
             except InsufficientCreditsException:
                 raise
@@ -211,6 +213,7 @@ class BaseLLMTranslation(LLMTranslation):
         context_blocks: list,
         scene_description: str = None,
         scene_block_metadata: dict | None = None,
+        global_offset: int = 0,
     ) -> str:
         target_hint = f"Target language: {self.target_lang}." if self.target_lang else ""
         parts = [extra_context, "Make the translation sound as natural as possible.", target_hint]
@@ -220,7 +223,7 @@ class BaseLLMTranslation(LLMTranslation):
             # to match each text block with its speaker, emotion, and delivery.
             meta_lines = ["SCENE CONTEXT (per block):"]
             for idx, blk in enumerate(chunk):
-                key = f"block_{idx}"
+                key = f"block_{global_offset + idx}"
                 entry = scene_block_metadata.get(key)
                 if entry:
                     speaker = entry.get("speaker", "unknown")
@@ -272,6 +275,7 @@ class BaseLLMTranslation(LLMTranslation):
         context_blocks: list,
         scene_description: str = None,
         scene_block_metadata: dict | None = None,
+        global_offset: int = 0,
     ) -> list[str] | None:
         """Translate one chunk. Returns translations, or None if the chunk failed.
 
@@ -280,7 +284,7 @@ class BaseLLMTranslation(LLMTranslation):
         """
         user_prompt = self._build_user_prompt(
             chunk, extra_context, context_blocks, scene_description,
-            scene_block_metadata,
+            scene_block_metadata, global_offset=global_offset,
         )
         expects_text = any((blk.text or '').strip() for blk in chunk)
 

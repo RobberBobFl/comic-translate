@@ -1147,6 +1147,9 @@ class ImageStateController:
             viewer.resetTransform()
             viewer.fitInView()
 
+        if viewer.reading_order_mode:
+            viewer.update_reading_order_numbers()
+
     def display_image(self, index: int, switch_page: bool = True):
         if 0 <= index < len(self.main.image_files):
             if switch_page:

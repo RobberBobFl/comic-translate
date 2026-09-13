@@ -26,6 +26,33 @@ class EventHandler:
         if self.viewer.webtoon_mode:
             self.viewer.webtoon_manager.update_page_on_click(scene_pos)
 
+        # Reading Order mode: intercept clicks for block swapping
+        if self.viewer.reading_order_mode and event.button() == Qt.LeftButton:
+            if isinstance(clicked_item, MoveableRectItem):
+                if self.viewer.reading_order_selected_rect is None:
+                    # First click: highlight the selected block
+                    self.viewer.reading_order_selected_rect = clicked_item
+                    clicked_item._reading_order_highlight = clicked_item.brush()
+                    clicked_item.setBrush(QtGui.QBrush(QtGui.QColor(0, 200, 0, 100)))
+                else:
+                    # Second click: swap blocks in blk_list
+                    first = self.viewer.reading_order_selected_rect
+                    second = clicked_item
+                    # Restore first block's brush
+                    if hasattr(first, '_reading_order_highlight'):
+                        first.setBrush(first._reading_order_highlight)
+                    if first is not second:
+                        main = self.viewer.main_page
+                        if main:
+                            idx1 = self._find_blk_index_for_rect(first)
+                            idx2 = self._find_blk_index_for_rect(second)
+                            if idx1 is not None and idx2 is not None:
+                                from ..commands.box import SwapBlocksCommand
+                                cmd = SwapBlocksCommand(main, idx1, idx2)
+                                main.undo_group.activeStack().push(cmd)
+                    self.viewer.reading_order_selected_rect = None
+            return
+
         # Retouch tools: intercept the left-click entirely (paint/erase) or sample color.
         if self.viewer.current_tool in ('eyedropper', 'paint', 'paint_eraser') and event.button() == Qt.LeftButton:
             if self.viewer.hasPhoto() and self._is_on_image(scene_pos):
@@ -274,6 +301,36 @@ class EventHandler:
         if self.viewer.webtoon_mode:
             return any(item.contains(item.mapFromScene(scene_pos)) for item in self.viewer.webtoon_manager.image_items.values())
         return self.viewer.photo.contains(scene_pos)
+
+    def _find_blk_index_for_rect(self, rect_item):
+        """Find the index of the TextBlock in blk_list that corresponds to a MoveableRectItem."""
+        main = self.viewer.main_page
+        if not main:
+            return None
+        rect_scene_rect = rect_item.mapRectToScene(rect_item.rect())
+        rx, ry = rect_scene_rect.x(), rect_scene_rect.y()
+        rw, rh = rect_scene_rect.width(), rect_scene_rect.height()
+        # Center of the rectangle
+        rcx, rcy = rx + rw / 2, ry + rh / 2
+        for i, blk in enumerate(main.blk_list):
+            if blk.xyxy is None:
+                continue
+            bx1, by1, bx2, by2 = [float(v) for v in blk.xyxy]
+            # Check if rect center is inside block bbox (with tolerance)
+            if bx1 - 5 <= rcx <= bx2 + 5 and by1 - 5 <= rcy <= by2 + 5:
+                return i
+            # IoU fallback
+            inter_x1 = max(rx, bx1)
+            inter_y1 = max(ry, by1)
+            inter_x2 = min(rx + rw, bx2)
+            inter_y2 = min(ry + rh, by2)
+            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+            rect_area = rw * rh
+            blk_area = (bx2 - bx1) * (by2 - by1)
+            union = rect_area + blk_area - inter_area
+            if union > 0 and inter_area / union > 0.5:
+                return i
+        return None
     
     def _press_handle_drag(self, event: QtGui.QMouseEvent, scene_pos: QPointF) -> bool:
         """Checks if a drag should be initiated on a custom item."""

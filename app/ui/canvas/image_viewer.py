@@ -77,6 +77,7 @@ class ImageViewer(QGraphicsView):
         self.total_scale_factor = 0.2 
         self.rotate_cursors = RotateHandleCursors()
         self.webtoon_view_state = {}
+        self.main_page = None  # Set by controller for blk_list access
 
         # Page detection state (used by webtoon and event handlers)
         self._programmatic_scroll = False
@@ -89,6 +90,11 @@ class ImageViewer(QGraphicsView):
         # Box drawing state
         self.start_point: QPointF = None
         self.current_rect: MoveableRectItem = None
+
+        # Reading order mode
+        self.reading_order_mode = False
+        self.reading_order_overlay = None
+        self.reading_order_selected_rect: MoveableRectItem = None
 
     # Properties to maintain public API
     @property
@@ -182,6 +188,28 @@ class ImageViewer(QGraphicsView):
             self.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.setDragMode(QGraphicsView.NoDrag)
+
+    # Reading order mode
+
+    def set_reading_order_mode(self, enabled: bool):
+        self.reading_order_mode = enabled
+        if enabled:
+            from .reading_order_overlay import ReadingOrderOverlay
+            self.reading_order_overlay = ReadingOrderOverlay(self._scene)
+            blk_list = self.main_page.blk_list if self.main_page else []
+            self.reading_order_overlay.update(blk_list)
+        else:
+            if self.reading_order_overlay:
+                self.reading_order_overlay.clear()
+                self.reading_order_overlay = None
+            self.reading_order_selected_rect = None
+
+    def update_reading_order_numbers(self):
+        if self.reading_order_overlay:
+            blk_list = self.main_page.blk_list if self.main_page else []
+            self.reading_order_overlay.update(blk_list)
+        elif self.reading_order_mode:
+            self.set_reading_order_mode(True)
 
     @property
     def brush_size(self):
@@ -373,6 +401,10 @@ class ImageViewer(QGraphicsView):
         self.rectangles.clear()
         self.text_items.clear()
         self.selected_rect = None
+        # Drop stale overlay refs — scene.clear() deleted the C++ items.
+        # reading_order_mode flag is preserved so load_image_state recreates it.
+        self.reading_order_overlay = None
+        self.reading_order_selected_rect = None
         self.photo = QGraphicsPixmapItem()
         self.photo.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
         self._scene.addItem(self.photo)

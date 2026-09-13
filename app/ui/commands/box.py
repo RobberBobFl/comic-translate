@@ -364,5 +364,27 @@ class ReplaceDetectedBlocksCommand(QUndoCommand):
     def undo(self):
         self._apply(self._old_blocks)
 
- 
+
+class SwapBlocksCommand(QUndoCommand):
+    """Swap two blocks in blk_list for Reading Order mode."""
+
+    def __init__(self, main_page, idx1: int, idx2: int):
+        super().__init__()
+        self.main = main_page
+        self.idx1 = idx1
+        self.idx2 = idx2
+
+    def _do_swap(self):
+        blk_list = self.main.blk_list
+        blk_list[self.idx1], blk_list[self.idx2] = (
+            blk_list[self.idx2],
+            blk_list[self.idx1],
+        )
+        self.main.image_viewer.update_reading_order_numbers()
+
+    def redo(self):
+        self._do_swap()
+
+    def undo(self):
+        self._do_swap()
 

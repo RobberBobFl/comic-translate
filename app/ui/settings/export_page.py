@@ -25,4 +25,23 @@ class ExportPage(QtWidgets.QWidget):
         layout.addWidget(self.translated_text_checkbox)
         layout.addWidget(self.inpainted_image_checkbox)
 
+        # Text JSON export/import section
+        text_json_label = MLabel(self.tr("Text JSON")).h4()
+        text_json_note = MLabel(
+            self.tr(
+                "Export and import translations as an editable JSON file. "
+                "Import updates only translations without changing block positions or other data."
+            )
+        ).secondary()
+        text_json_note.setWordWrap(True)
+        self.export_text_button = QtWidgets.QPushButton(self.tr("Export Text (JSON)"))
+        self.import_text_button = QtWidgets.QPushButton(self.tr("Import Text (JSON)"))
+        self.current_page_only_checkbox = MCheckBox(self.tr("Current page only"))
+
+        layout.addWidget(text_json_label)
+        layout.addWidget(text_json_note)
+        layout.addWidget(self.export_text_button)
+        layout.addWidget(self.import_text_button)
+        layout.addWidget(self.current_page_only_checkbox)
+
         layout.addStretch(1)

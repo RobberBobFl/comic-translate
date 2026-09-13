@@ -442,6 +442,15 @@ class WorkspaceMixin:
         tools_layout.addWidget(inp_div)
         tools_layout.addLayout(inp_tools_lay)
         tools_layout.addWidget(self.brush_eraser_slider)
+
+        reading_order_div = MDivider(self.tr("Reading Order"))
+        tools_layout.addWidget(reading_order_div)
+        self.reading_order_button = self.create_tool_button(
+            text=self.tr("Reading Order"), checkable=True
+        )
+        self.reading_order_button.setToolTip(self.tr("Swap block reading order"))
+        tools_layout.addWidget(self.reading_order_button)
+
         tools_layout.addStretch()
         tools_widget.setLayout(tools_layout)
 

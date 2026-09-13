@@ -67,6 +67,10 @@ class ToolStateMixin:
         else:
             self.set_tool(None)
 
+    def toggle_reading_order(self):
+        enabled = self.reading_order_button.isChecked()
+        self.image_viewer.set_reading_order_mode(enabled)
+
     def set_paint_slider_size(self, size: int):
         self.paint_slider.blockSignals(True)
         self.paint_slider.setValue(size)
