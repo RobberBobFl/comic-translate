@@ -593,6 +593,7 @@ class ImageViewer(QGraphicsView):
             italic=properties.italic, 
             underline=properties.underline,
             direction=properties.direction,
+            block_id=properties.block_id,
         )
         
         # Apply width if specified
@@ -634,6 +635,23 @@ class ImageViewer(QGraphicsView):
         # Add to scene and track
         self._scene.addItem(item)
         self.text_items.append(item)
+
+        # ── DEBUG ──
+        import sys
+        _dbg = lambda *a: print("[DBG-ADD]", *a, file=sys.stderr, flush=True)
+        _dbg(f"add_text_item: id={id(item)}"
+             f" block_id={getattr(item,'block_id','MISSING')!r}"
+             f" pos=({item.pos().x():.1f},{item.pos().y():.1f})")
+        _dbg(f"  text_items count now: {len(self.text_items)}")
+        _dbg(f"  scene TextBlockItem count: {sum(1 for i in self._scene.items() if type(i).__name__=='TextBlockItem')}")
+        # Check for prior items with same block_id
+        bid = getattr(item, 'block_id', '') or ''
+        if bid:
+            prior = [i for i in self.text_items
+                     if getattr(i, 'block_id', '') == bid and i is not item]
+            if prior:
+                _dbg(f"  ⚠ {len(prior)} PRIOR items with block_id={bid!r}")
+        # ── end DEBUG ──
         
         # Emit the connect signal for the text item
         self.connect_text_item.emit(item)

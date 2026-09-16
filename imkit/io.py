@@ -23,7 +23,7 @@ def read_image(path: str) -> np.ndarray:
     return arr
 
 
-def write_image(path: str, array: np.ndarray) -> None:
+def write_image(path: str, array: np.ndarray, quality: int | None = None) -> None:
     """Write a numpy array as an image file."""
     im = Image.fromarray(ensure_uint8(array))
     save_kwargs: dict[str, object] = {}
@@ -35,6 +35,8 @@ def write_image(path: str, array: np.ndarray) -> None:
             return
         except (ValueError, OSError):
             pass
+    if ext == ".webp" and quality is not None:
+        save_kwargs["quality"] = quality
 
     im.save(path, **save_kwargs)
 

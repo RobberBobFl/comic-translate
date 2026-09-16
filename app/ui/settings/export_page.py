@@ -44,4 +44,18 @@ class ExportPage(QtWidgets.QWidget):
         layout.addWidget(self.import_text_button)
         layout.addWidget(self.current_page_only_checkbox)
 
+        # Text TXT export section
+        text_txt_label = MLabel(self.tr("Text TXT")).h4()
+        text_txt_note = MLabel(
+            self.tr(
+                "Export translations as a plain text file with original and translation per block."
+            )
+        ).secondary()
+        text_txt_note.setWordWrap(True)
+        self.export_text_button_txt = QtWidgets.QPushButton(self.tr("Export Text (TXT)"))
+
+        layout.addWidget(text_txt_label)
+        layout.addWidget(text_txt_note)
+        layout.addWidget(self.export_text_button_txt)
+
         layout.addStretch(1)

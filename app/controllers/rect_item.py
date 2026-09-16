@@ -15,7 +15,7 @@ from app.ui.commands.box import (
 )
 
 from modules.detection.utils.geometry import do_rectangles_overlap
-from modules.utils.textblock import TextBlock
+from modules.utils.textblock import TextBlock, ensure_block_id
 from modules.utils.language_utils import get_language_code
 from modules.rendering.render import is_vertical_block
 
@@ -131,6 +131,7 @@ class RectItemController:
             rotation=blk.angle,
             width=bw if blk.angle == 0 and not vertical else None,
             vertical=vertical,
+            block_id=ensure_block_id(blk),
         )
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text("")

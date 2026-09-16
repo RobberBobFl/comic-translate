@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import imkit as imk
 import numpy as np
@@ -17,6 +18,8 @@ from app.thread_worker import GenericWorker
 from app.path_materialization import ensure_path_materialized
 from app.controllers.psd_importer import ImportedPsdPage, import_psd_files, prepare_psd_font_catalog
 from modules.utils.language_utils import to_canonical_language_name, to_ui_language_label
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from controller import ComicTranslate
@@ -1077,6 +1080,8 @@ class ImageStateController:
 
                     self.main.blk_list = state['blk_list'].copy()  # Load a copy of the list, not a reference
                     viewer.load_state(state['viewer_state'])
+                    # Assign block_id to legacy TextBlockItems that lack one.
+                    self._migrate_legacy_block_ids()
                     # Block signals to prevent triggering save when loading state
                     self.main.s_combo.blockSignals(True)
                     self.main.t_combo.blockSignals(True)
@@ -1247,6 +1252,9 @@ class ImageStateController:
             for data in viewer_state.get('text_items_state', []):
                 viewer.add_text_item(data)
 
+            # Assign block_id to legacy TextBlockItems that lack one.
+            self._migrate_legacy_block_ids()
+
             if viewer_state.get('push_to_stack', False):
                 stack = self.main.undo_stacks.get(file_path)
                 if stack:
@@ -1344,3 +1352,50 @@ class ImageStateController:
         self._hide_active_page_skip_error()
         if hasattr(self, 'page_list_loader'):
             self.page_list_loader.shutdown()
+
+    def _migrate_legacy_block_ids(self) -> None:
+        """Assign block_id to TextBlockItems loaded from legacy text_items_state.
+
+        Legacy projects store text_items_state without block_id.  When a
+        TextBlockItem has block_id == '' we try to find exactly one TextBlock
+        whose render_box_for_block() position + rotation matches the item's
+        position + rotation.  If the match is unique, the block's block_id is
+        written onto the item so that all subsequent matching (import, render,
+        save) uses the stable id instead of fragile coordinates.
+        """
+        from modules.rendering.render import render_box_for_block
+        from modules.utils.common_utils import is_close
+
+        viewer = self.main.image_viewer
+        blk_list = self.main.blk_list
+        if not viewer.text_items or not blk_list:
+            return
+
+        # Pre-compute render_box position for every block.
+        blk_render_pos = {}
+        for blk in blk_list:
+            bid = getattr(blk, 'block_id', None)
+            if not bid:
+                continue
+            bx, by, _bw, _bh = render_box_for_block(blk, blk_list)
+            blk_render_pos[bid] = (bx, by, float(blk.angle))
+
+        migrated = 0
+        for item in viewer.text_items:
+            if getattr(item, 'block_id', '') or '':
+                continue  # already has an id
+
+            ix, iy = item.pos().x(), item.pos().y()
+            irot = item.rotation()
+
+            matches = []
+            for bid, (bx, by, brot) in blk_render_pos.items():
+                if is_close(bx, ix, 2) and is_close(by, iy, 2) and is_close(brot, irot, 1):
+                    matches.append(bid)
+
+            if len(matches) == 1:
+                item.block_id = matches[0]
+                migrated += 1
+
+        if migrated:
+            logger.info("Migrated %d legacy TextBlockItems with block_id", migrated)

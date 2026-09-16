@@ -17,7 +17,7 @@ from app.ui.canvas.text.text_item_properties import (
     set_center_v_margin,
 )
 
-from modules.utils.textblock import TextBlock
+from modules.utils.textblock import TextBlock, ensure_block_id
 from modules.rendering.render import TextRenderingSettings, manual_wrap, is_vertical_block, pyside_word_wrap, render_box_for_block
 from modules.utils.pipeline_config import font_selected
 from modules.utils.language_utils import get_language_code, get_layout_direction, is_no_space_lang
@@ -202,6 +202,7 @@ class TextController:
             position=(blk.xyxy[0], blk.xyxy[1]),
             rotation=blk.angle,
             vertical=vertical,
+            block_id=ensure_block_id(blk),
         )
 
         # Anchor the translation to the speech bubble (when detected) instead of
@@ -221,6 +222,32 @@ class TextController:
 
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text(text)
+
+        # ── DEBUG: trace new item creation ──
+        import sys
+        _dbg = lambda *a: print("[DBG-BLK]", *a, file=sys.stderr, flush=True)
+        _dbg("on_blk_rendered: NEW item created")
+        _dbg(f"  new_item id={id(text_item)}"
+             f" block_id={getattr(text_item,'block_id','MISSING')!r}"
+             f" pos=({text_item.pos().x():.1f},{text_item.pos().y():.1f})"
+             f" rot={text_item.rotation():.1f}"
+             f" text={text_item.toPlainText()[:30]!r}")
+        xyxy_val2 = [round(float(x),1) for x in blk.xyxy] if blk.xyxy is not None and hasattr(blk.xyxy, '__len__') and len(blk.xyxy) else []
+        _dbg(f"  blk block_id={getattr(blk,'block_id','MISSING')!r}"
+             f" xyxy={xyxy_val2}")
+        # Check for duplicates
+        dupes = [i for i in self.main.image_viewer.text_items
+                 if getattr(i, 'block_id', '') and
+                 i.block_id == getattr(text_item, 'block_id', '') and
+                 i is not text_item]
+        if dupes:
+            _dbg(f"  ⚠ DUPLICATE! {len(dupes)} existing items with same block_id:")
+            for d in dupes:
+                _dbg(f"    dupe id={id(d)} pos=({d.pos().x():.1f},{d.pos().y():.1f})"
+                     f" text={d.toPlainText()[:30]!r}")
+        _dbg(f"  text_items now has {len(self.main.image_viewer.text_items)} items")
+        _dbg(f"  scene has {sum(1 for i in self.main.image_viewer._scene.items() if type(i).__name__=='TextBlockItem')} TextBlockItems")
+        # ── end DEBUG ──
 
         # Vertically center the text inside the bubble and shrink the font if it
         # would overflow, so the translation sits in the middle of the bubble
@@ -908,20 +935,32 @@ class TextController:
 
                     viewer_state = state.setdefault("viewer_state", {})
                     existing_text_items = list(viewer_state.get("text_items_state", []))
-                    existing_keys = {
+                    # Primary: build set of block_ids already rendered
+                    existing_block_ids = {
+                        item.get("block_id", "") or ""
+                        for item in existing_text_items
+                        if item.get("block_id", "")
+                    }
+                    # Fallback: coordinate keys for legacy entries without block_id
+                    existing_coord_keys = {
                         (
                             int(item.get("position", (0, 0))[0]),
                             int(item.get("position", (0, 0))[1]),
                             float(item.get("rotation", 0)),
                         )
                         for item in existing_text_items
+                        if not item.get("block_id", "")
                     }
 
                     new_text_items_state = []
                     for blk in blk_list:
-                        blk_key = (int(blk.xyxy[0]), int(blk.xyxy[1]), float(blk.angle))
-                        if blk_key in existing_keys:
+                        bid = getattr(blk, 'block_id', '') or ''
+                        if bid and bid in existing_block_ids:
                             continue
+                        if not bid:
+                            blk_key = (int(blk.xyxy[0]), int(blk.xyxy[1]), float(blk.angle))
+                            if blk_key in existing_coord_keys:
+                                continue
 
                         # Anchor to the (shrunk) bubble when detected, so text
                         # centers inside the bubble, not the tight text-line box.
@@ -988,6 +1027,7 @@ class TextController:
                             height=rendered_height,
                             vertical=vertical,
                             v_margin=render_v_margin,
+                            block_id=ensure_block_id(blk),
                         )
                         new_text_items_state.append(text_props.to_dict())
 
@@ -1037,14 +1077,69 @@ class TextController:
                 if item not in self.main.image_viewer._scene.items():
                     self.main.image_viewer._scene.addItem(item)
 
-            # Create a dictionary to map text items to their positions and rotations
-            existing_text_items = {item: (int(item.pos().x()), int(item.pos().y()), item.rotation()) for item in self.main.image_viewer.text_items}
+            # ── DEBUG: trace block_id matching ──
+            import sys
+            _dbg = lambda *a: print("[DBG-RENDER]", *a, file=sys.stderr, flush=True)
+            _dbg("=== render_text block_id DEBUG ===")
+            _dbg("text_items count:", len(self.main.image_viewer.text_items))
+            _dbg("scene TextBlockItem count:", sum(
+                1 for i in self.main.image_viewer._scene.items()
+                if type(i).__name__ == 'TextBlockItem'
+            ))
+            for idx, item in enumerate(self.main.image_viewer.text_items):
+                _dbg(f"  item[{idx}] id={id(item)}"
+                     f" block_id={getattr(item,'block_id','MISSING')!r}"
+                     f" pos=({item.pos().x():.1f},{item.pos().y():.1f})"
+                     f" rot={item.rotation():.1f}"
+                     f" text={item.toPlainText()[:30]!r}")
+            for idx, blk in enumerate(self.main.blk_list):
+                xyxy_val = [round(float(x),1) for x in blk.xyxy] if blk.xyxy is not None and hasattr(blk.xyxy, '__len__') and len(blk.xyxy) else []
+                _dbg(f"  blk[{idx}] id={id(blk)}"
+                     f" block_id={getattr(blk,'block_id','MISSING')!r}"
+                     f" xyxy={xyxy_val}"
+                     f" angle={blk.angle:.1f}"
+                     f" translation={getattr(blk,'translation','')[:30]!r}")
+            # ── end DEBUG ──
 
-            # Identify new blocks based on position and rotation
-            new_blocks = [
-                blk for blk in self.main.blk_list
-                if (int(blk.xyxy[0]), int(blk.xyxy[1]), blk.angle) not in existing_text_items.values()
-            ]
+            # Build set of block_ids already present as live TextBlockItems.
+            existing_block_ids = set()
+            for item in self.main.image_viewer.text_items:
+                bid = getattr(item, 'block_id', '') or ''
+                if bid:
+                    existing_block_ids.add(bid)
+
+            # Identify new blocks: skip any block whose block_id already has
+            # a live TextBlockItem on the scene.  For legacy items without a
+            # block_id, fall back to position + rotation matching.
+            existing_coords = set()
+            for item in self.main.image_viewer.text_items:
+                if not getattr(item, 'block_id', ''):
+                    existing_coords.add(
+                        (int(item.pos().x()), int(item.pos().y()), item.rotation())
+                    )
+
+            new_blocks = []
+            for blk in self.main.blk_list:
+                bid = getattr(blk, 'block_id', '') or ''
+                if bid and bid in existing_block_ids:
+                    continue
+                if not bid and (int(blk.xyxy[0]), int(blk.xyxy[1]), blk.angle) in existing_coords:
+                    continue
+                new_blocks.append(blk)
+
+            # ── DEBUG: trace matching result ──
+            _dbg("existing_block_ids:", existing_block_ids)
+            _dbg("existing_coords:", existing_coords)
+            for blk in self.main.blk_list:
+                bid = getattr(blk, 'block_id', '') or ''
+                in_ids = bid in existing_block_ids if bid else False
+                _dbg(f"  blk block_id={bid!r} in_existing_ids={in_ids}")
+            _dbg("new_blocks count:", len(new_blocks))
+            for nb in new_blocks:
+                _dbg(f"  new_block block_id={getattr(nb,'block_id','MISSING')!r}"
+                     f" xyxy={[round(float(x), 1) for x in nb.xyxy] if nb.xyxy is not None else []}"
+                     f" translation={getattr(nb,'translation','')[:30]!r}")
+            # ── end DEBUG ──
 
             self.main.image_viewer.clear_rectangles()
             self.main.curr_tblock = None

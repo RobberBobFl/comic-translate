@@ -34,10 +34,10 @@ from app.projects.project_state import (
 from modules.utils.archives import make
 from modules.utils.paths import get_user_data_dir, get_default_project_autosave_dir
 
-# "Stitch into batches" webtoon export: each combined image holds at most this
-# many original pages and weighs at most this many bytes (PNG-encoded).
-WEBTOON_BATCH_MAX_PAGES = 25
+# "Stitch into batches" webtoon export: each combined image weighs at most
+# this many bytes (PNG-encoded).
 WEBTOON_BATCH_MAX_BYTES = 10 * 1024 * 1024
+WEBP_MAX_DIM = 16383  # WebP codec hard limit per axis
 from modules.utils.language_utils import to_canonical_language_name
 
 logger = logging.getLogger(__name__)
@@ -632,7 +632,7 @@ class ProjectController:
         layout.addWidget(QtWidgets.QLabel(self.main.tr("How should the stitched webtoon be exported?")))
         rb_pages = QtWidgets.QRadioButton(self.main.tr("Separate pages (split)"))
         rb_single = QtWidgets.QRadioButton(self.main.tr("Single file"))
-        rb_batches = QtWidgets.QRadioButton(self.main.tr("Stitch into batches (\u226425 pages, \u226410 MB)"))
+        rb_batches = QtWidgets.QRadioButton(self.main.tr("Stitch into batches (\u226410 MB)"))
         rb_batches.setChecked(True)
         for rb in (rb_pages, rb_single, rb_batches):
             layout.addWidget(rb)
@@ -1145,8 +1145,11 @@ class ProjectController:
                         if grp != group["group_name"]:
                             continue
                         page_number += 1
-                        sv_pth = os.path.join(group_dir, f"page_{page_number:04d}.png")
-                        imk.write_image(sv_pth, page_img)
+                        h, w = page_img.shape[:2]
+                        use_webp = batch_stitched and h <= WEBP_MAX_DIM and w <= WEBP_MAX_DIM
+                        ext = ".webp" if use_webp else ".png"
+                        sv_pth = os.path.join(group_dir, f"page_{page_number:04d}{ext}")
+                        imk.write_image(sv_pth, page_img, quality=85 if use_webp else None)
                 else:
                     for page_number, page_idx in enumerate(group["page_indices"], start=1):
                         file_path = self.main.image_files[page_idx]
@@ -1269,17 +1272,21 @@ class ProjectController:
     @staticmethod
     def _build_batched_pages(
         split_pages: list[tuple[np.ndarray, str]],
-        max_pages: int = WEBTOON_BATCH_MAX_PAGES,
         max_bytes: int = WEBTOON_BATCH_MAX_BYTES,
+        max_height: int = 16000,
     ) -> list[tuple[np.ndarray, str]]:
         """Group consecutive pages (within each chapter) into combined batch
-        images, each holding as many pages as possible while staying within
-        *max_pages* pages and *max_bytes* bytes when PNG-encoded.
+        images. A new batch starts when adding the next page would exceed
+        *max_bytes* (WebP quality 85) OR the combined height would exceed
+        *max_height* pixels.
 
         Used by the "stitch into batches" webtoon export mode. All pages share
         the stitched webtoon width, so vertical concatenation is valid.
         """
         from collections import OrderedDict
+
+        def _webp_size(arr: np.ndarray) -> int:
+            return len(cv2.imencode(".webp", arr, [cv2.IMWRITE_WEBP_QUALITY, 85])[1])
 
         grouped: "OrderedDict[str, list[np.ndarray]]" = OrderedDict()
         for img, grp in split_pages:
@@ -1287,23 +1294,23 @@ class ProjectController:
 
         result: list[tuple[np.ndarray, str]] = []
         for grp, imgs in grouped.items():
-            page_sizes = [int(len(cv2.imencode(".png", im)[1])) for im in imgs]
+            page_sizes = [_webp_size(im) for im in imgs]
             batch: list[np.ndarray] = []
             batch_bytes = 0
+            batch_height = 0
             for im, page_size in zip(imgs, page_sizes):
-                if batch and (
-                    len(batch) + 1 > max_pages or batch_bytes + page_size > max_bytes
-                ):
+                im_h = im.shape[0]
+                if batch and (batch_bytes + page_size > max_bytes or batch_height + im_h > max_height):
                     result.append((np.concatenate(batch, axis=0), grp))
                     batch = []
                     batch_bytes = 0
+                    batch_height = 0
                 batch.append(im)
                 batch_bytes += page_size
+                batch_height += im_h
             if batch:
                 combined = np.concatenate(batch, axis=0)
-                # Concatenation may compress slightly worse than the per-page sum
-                # predicted; if so, drop the final page into its own batch.
-                if len(batch) > 1 and len(cv2.imencode(".png", combined)[1]) > max_bytes:
+                if len(batch) > 1 and _webp_size(combined) > max_bytes:
                     last = batch.pop()
                     result.append((np.concatenate(batch, axis=0), grp))
                     result.append((last, grp))
@@ -2000,6 +2007,201 @@ class ProjectController:
         )
         logger.info("Exported text JSON to %s (%d pages, %d blocks)", path, len(pages_data), total_blocks)
 
+    def export_text_txt(self):
+        """Export OCR text and translations to a plain TXT file."""
+        current_page_only = self.main.settings_page.ui.current_page_only_checkbox.isChecked()
+
+        if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
+            self.main.image_ctrl.save_current_image_state()
+
+        if current_page_only:
+            if self.main.curr_img_idx < 0 or self.main.curr_img_idx >= len(self.main.image_files):
+                MMessage.warning(
+                    self.main.tr("No current page"), parent=self.main
+                )
+                return
+            current_file = self.main.image_files[self.main.curr_img_idx]
+            pages_to_export = {current_file: self.main.image_states.get(current_file, {})}
+        else:
+            pages_to_export = dict(self.main.image_states)
+
+        if not pages_to_export:
+            MMessage.warning(
+                self.main.tr("No pages to export"), parent=self.main
+            )
+            return
+
+        lines = []
+        page_num = 1
+        total_blocks = 0
+        for file_path in self.main.image_files:
+            if file_path not in pages_to_export:
+                continue
+            state = pages_to_export[file_path]
+            blk_list = state.get('blk_list', [])
+
+            lines.append(f"{page_num} страница")
+            for i, blk in enumerate(blk_list, 1):
+                text = blk.text or ""
+                trans = blk.translation or ""
+                lines.append(f'{i}. {text} - "{trans}"')
+                total_blocks += 1
+            lines.append("")
+            page_num += 1
+
+        default_name = "translations.txt"
+        if page_num == 2:
+            base = os.path.splitext(os.path.basename(
+                [f for f in self.main.image_files if f in pages_to_export][0]
+            ))[0]
+            default_name = f"{base}_translations.txt"
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self.main,
+            self.main.tr("Export Text (TXT)"),
+            default_name,
+            "TXT (*.txt)",
+        )
+        if not path:
+            return
+
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+
+        MMessage.info(
+            self.main.tr("Exported {n} blocks from {p} page(s)").format(
+                n=total_blocks, p=page_num - 1
+            ),
+            parent=self.main,
+        )
+        logger.info("Exported text TXT to %s (%d pages, %d blocks)", path, page_num - 1, total_blocks)
+
+    def _sync_text_items_for_page(self, file_path: str, affected_blk_ids: set[str]) -> None:
+        """Re-wrap text_items_state entries for blocks whose translation changed.
+
+        Only touches pages that have already been rendered (i.e. have entries in
+        ``text_items_state``).  Pages that were never rendered are left alone —
+        their ``blk_list`` already holds the updated ``translation`` and will be
+        picked up the next time Render Text runs.
+
+        For legacy projects where ``text_items_state`` entries lack ``block_id``,
+        falls back to a position + rotation match.
+        """
+        from modules.rendering.render import pyside_word_wrap, is_vertical_block, render_box_for_block
+        from modules.utils.language_utils import get_language_code, is_no_space_lang
+        from modules.utils.common_utils import is_close
+
+        state = self.main.image_states.get(file_path, {})
+        viewer_state = state.get("viewer_state", {})
+        text_items = viewer_state.get("text_items_state")
+        if not text_items:
+            return
+
+        blk_list = state.get("blk_list", [])
+        if not blk_list:
+            return
+
+        # Build block lookups
+        blk_by_id: dict[str, object] = {}
+        for b in blk_list:
+            bid = getattr(b, 'block_id', None)
+            if bid:
+                blk_by_id[bid] = b
+
+        # Determine target language code from project state
+        target_lang_fallback = self.main.t_combo.currentText()
+        target_lang = state.get("target_lang", target_lang_fallback)
+        target_lang_en = self.main.lang_mapping.get(target_lang, None)
+        trg_lng_cd = get_language_code(target_lang_en)
+
+        # Upper-case setting from UI
+        upper_case = self.main.settings_page.ui.uppercase_checkbox.isChecked()
+
+        # Render settings for re-wrapping
+        font_family = self.main.font_dropdown.currentText()
+        line_spacing = float(self.main.line_spacing_dropdown.currentText())
+        outline_width = float(self.main.outline_width_dropdown.currentText())
+        bold = self.main.bold_button.isChecked()
+        italic = self.main.italic_button.isChecked()
+        underline = self.main.underline_button.isChecked()
+        align_id = self.main.alignment_tool_group.get_dayu_checked()
+        alignment = self.main.button_to_alignment[align_id]
+        direction = self.main.text_ctrl.render_settings().direction
+        max_font_size = self.main.settings_page.get_max_font_size()
+        min_font_size = self.main.settings_page.get_min_font_size()
+
+        updated = False
+        for ti in text_items:
+            bid = ti.get("block_id", "") or ""
+
+            # --- Match block to text_item ---
+            blk = None
+            if bid and bid in blk_by_id:
+                blk = blk_by_id[bid]
+            else:
+                # Legacy fallback: match by position + rotation
+                pos = ti.get("position", (0, 0))
+                rot = ti.get("rotation", 0)
+                for b in blk_list:
+                    if (is_close(b.xyxy[0], pos[0], 5)
+                            and is_close(b.xyxy[1], pos[1], 5)
+                            and is_close(b.angle, rot, 1)):
+                        blk = b
+                        break
+
+            if blk is None or not blk.translation:
+                continue
+
+            # Only update if this block was affected by the import
+            blk_bid = getattr(blk, 'block_id', '') or ''
+            if blk_bid and blk_bid not in affected_blk_ids:
+                continue
+            if not blk_bid:
+                # Legacy: always update (can't filter by id)
+                pass
+
+            translation = blk.translation
+            if not translation or not any(ch.isalnum() for ch in translation):
+                continue
+
+            # Apply upper-case formatting (matches render_text behaviour)
+            if upper_case and not translation.isupper():
+                translation = translation.upper()
+            elif not upper_case and translation.isupper():
+                translation = translation.lower().capitalize()
+
+            # Re-wrap
+            block_width = ti.get("width") or (blk.xyxy[2] - blk.xyxy[0])
+            block_height = ti.get("height") or (blk.xyxy[3] - blk.xyxy[1])
+            vertical = is_vertical_block(blk, trg_lng_cd)
+
+            wrapped, new_font_size, _w, _h = pyside_word_wrap(
+                translation,
+                font_family,
+                block_width,
+                block_height,
+                line_spacing,
+                outline_width,
+                bold,
+                italic,
+                underline,
+                alignment,
+                direction,
+                max_font_size,
+                min_font_size,
+                vertical,
+                is_no_space_lang(trg_lng_cd),
+                return_metrics=True,
+            )
+
+            ti["text"] = wrapped
+            ti["plain_text"] = translation
+            ti["font_size"] = new_font_size
+            updated = True
+
+        if updated:
+            viewer_state["text_items_state"] = text_items
+
     def import_text_json(self):
         """Import translations from a JSON file, updating only blk.translation."""
         import json
@@ -2165,21 +2367,47 @@ class ProjectController:
 
         # Determine affected files and current file for UI sync
         affected_files: set[str] = set()
-        for _, _, fp in apply_queue:
+        affected_blk_ids: set[str] = set()
+        for project_blk, _, fp in apply_queue:
             affected_files.add(fp)
+            bid = getattr(project_blk, 'block_id', None)
+            if bid:
+                affected_blk_ids.add(bid)
 
         current_file = None
         if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
             current_file = self.main.image_files[self.main.curr_img_idx]
 
-        # If the current page was affected, sync the live blk_list and update UI
+        # Sync live TextBlockItems for the current page
         if current_file and current_file in affected_files:
             self.main.blk_list = self.main.image_states[current_file]['blk_list']
-            # Refresh text edits to reflect new translations
             try:
-                self.main.text_ctrl.set_src_trg_all()
+                self.main.manual_workflow_ctrl.update_translated_text_items(single_blk=False)
+            except Exception:
+                logger.exception("update_translated_text_items failed after import")
+            # Queue save AFTER threaded pyside_word_wrap completes.
+            # update_translated_text_items queues format_translations + word_wrap
+            # operations; run_finish_only queues behind them.
+            def _save_after_import():
+                try:
+                    self.main.image_controller.save_current_image_state()
+                except Exception:
+                    pass
+            try:
+                self.main.run_finish_only(finished_callback=_save_after_import)
             except Exception:
                 pass
+
+        # Sync text_items_state for non-current rendered pages
+        for fp in affected_files:
+            if fp != current_file:
+                self._sync_text_items_for_page(fp, affected_blk_ids)
+
+        # Refresh text edits to reflect new translations
+        try:
+            self.main.text_ctrl.set_src_trg_all()
+        except Exception:
+            pass
 
         # Report results
         parts = [self.main.tr("Imported: {n}").format(n=matched_by_id + matched_by_index)]

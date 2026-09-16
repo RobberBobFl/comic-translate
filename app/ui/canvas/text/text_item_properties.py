@@ -59,6 +59,10 @@ class TextItemProperties:
     vertical: bool = False
     v_margin: float = 0.0  # top margin used to vertically center text in its block
     
+    # Stable identifier linking this text item back to its TextBlock.
+    # Empty string for legacy projects that predate this field.
+    block_id: str = ""
+
     # Advanced properties
     selection_outlines: list = field(default_factory=list)
             
@@ -130,6 +134,9 @@ class TextItemProperties:
         # Advanced
         props.selection_outlines = data.get('selection_outlines', [])
         
+        # Block linking
+        props.block_id = data.get('block_id', '') or ''
+        
         return props
     
     @classmethod
@@ -179,6 +186,9 @@ class TextItemProperties:
         # Advanced properties
         props.selection_outlines = getattr(item, 'selection_outlines', []).copy()
         
+        # Block linking
+        props.block_id = getattr(item, 'block_id', '') or ''
+        
         return props
     
     def to_dict(self) -> dict:
@@ -207,6 +217,7 @@ class TextItemProperties:
             'vertical': self.vertical,
             'v_margin': self.v_margin,
             'selection_outlines': self.selection_outlines,
+            'block_id': self.block_id,
         }
 
 

@@ -15,7 +15,7 @@ from app.ui.canvas.text_item import OutlineInfo, OutlineType
 from modules.rendering.render import get_best_render_area, is_vertical_block, pyside_word_wrap, render_box_for_block
 from modules.utils.image_utils import get_smart_text_color
 from modules.utils.language_utils import get_language_code, is_no_space_lang
-from modules.utils.textblock import TextBlock
+from modules.utils.textblock import TextBlock, ensure_block_id
 from modules.utils.translator_utils import format_translations, get_raw_text, get_raw_translation, is_renderable_translation
 
 if TYPE_CHECKING:
@@ -182,6 +182,7 @@ class RenderMixin:
                 v_margin=item_v_margin,
                 direction=direction,
                 vertical=vertical,
+                block_id=ensure_block_id(block),
                 selection_outlines=[
                     OutlineInfo(
                         0,

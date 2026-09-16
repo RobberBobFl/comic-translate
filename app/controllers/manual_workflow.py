@@ -729,6 +729,9 @@ class ManualWorkflowController:
         )
 
     def update_translated_text_items(self, single_blk: bool) -> None:
+        import sys
+        _dbg = lambda *a: print("[DBG-UPDATE]", *a, file=sys.stderr, flush=True)
+        _dbg(f"update_translated_text_items called: single_blk={single_blk}")
         
         def set_new_text(
             text_item: TextBlockItem, 
@@ -745,6 +748,7 @@ class ManualWorkflowController:
             self.main.text_ctrl._refit_text_item_to_block(text_item, blk)
 
         text_items_to_process = self._get_visible_text_items()
+        _dbg(f"  text_items_to_process count: {len(text_items_to_process)}")
         if not text_items_to_process:
             self.finish_ocr_translate(single_blk)
             return
@@ -755,21 +759,49 @@ class ManualWorkflowController:
         trg_lng_cd = get_language_code(target_lang_en)
 
         def on_format_finished() -> None:
+            import sys
+            _dbg = lambda *a: print("[DBG-UPDATE]", *a, file=sys.stderr, flush=True)
+            _dbg("=== update_translated_text_items DEBUG ===")
+
+            # Build block_id → block lookup for O(1) matching.
+            blk_by_id = {}
+            for b in self.main.blk_list:
+                bid = getattr(b, 'block_id', None)
+                if bid:
+                    blk_by_id[bid] = b
+
+            _dbg(f"blk_list has {len(self.main.blk_list)} blocks")
+            _dbg(f"blk_by_id has {len(blk_by_id)} entries")
+            _dbg(f"text_items_to_process has {len(text_items_to_process)} items")
+
             for text_item in text_items_to_process:
                 text_item.handleDeselection()
-                x1, y1 = int(text_item.pos().x()), int(text_item.pos().y())
-                rot = text_item.rotation()
 
-                blk = next(
-                    (
-                        b
-                        for b in self.main.blk_list
-                        if is_close(b.xyxy[0], x1, 5)
-                        and is_close(b.xyxy[1], y1, 5)
-                        and is_close(b.angle, rot, 1)
-                    ),
-                    None,
-                )
+                # Primary: match by block_id
+                blk = None
+                item_bid = getattr(text_item, 'block_id', '') or ''
+                if item_bid and item_bid in blk_by_id:
+                    blk = blk_by_id[item_bid]
+                    _dbg(f"  item block_id={item_bid!r} → MATCHED by block_id")
+                else:
+                    # Legacy fallback: match by position + rotation
+                    x1, y1 = int(text_item.pos().x()), int(text_item.pos().y())
+                    rot = text_item.rotation()
+                    _dbg(f"  item block_id={item_bid!r} → fallback coords ({x1},{y1},{rot})")
+                    blk = next(
+                        (
+                            b
+                            for b in self.main.blk_list
+                            if is_close(b.xyxy[0], x1, 5)
+                            and is_close(b.xyxy[1], y1, 5)
+                            and is_close(b.angle, rot, 1)
+                        ),
+                        None,
+                    )
+                    if blk:
+                        _dbg(f"    coords match: blk.block_id={getattr(blk,'block_id','MISSING')!r}")
+                    else:
+                        _dbg(f"    NO coords match")
                 if not (blk and blk.translation):
                     continue
 
@@ -804,6 +836,7 @@ class ManualWorkflowController:
 
             self.main.run_finish_only(finished_callback=self.main.on_manual_finished)
 
+        _dbg(f"  launching format_translations thread, blk_list has {len(self.main.blk_list)} blocks")
         self.main.run_threaded(
             lambda: format_translations(self.main.blk_list, trg_lng_cd, upper_case=upper),
             None,

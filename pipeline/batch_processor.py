@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor
 from modules.detection.processor import TextBlockDetector
 from modules.translation.processor import Translator
 from modules.translation.scene_analyzer import SceneAnalyzer
-from modules.utils.textblock import sort_blk_list
+from modules.utils.textblock import sort_blk_list, ensure_block_id
 from modules.utils.pipeline_config import get_config
 from modules.utils.image_utils import generate_mask, get_smart_text_color
 from modules.utils.language_utils import get_language_code, is_no_space_lang
@@ -578,6 +578,7 @@ class BatchProcessor:
                     v_margin=item_v_margin,
                     direction=direction,
                     vertical=vertical,
+                    block_id=ensure_block_id(blk),
                     selection_outlines=[
                         OutlineInfo(0, len(translation), 
                         outline_color, 

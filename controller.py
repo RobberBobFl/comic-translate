@@ -274,6 +274,7 @@ class ComicTranslate(ComicTranslateUI):
 
         # Text JSON export/import
         self.settings_page.ui.export_text_button.clicked.connect(self.project_ctrl.export_text_json)
+        self.settings_page.ui.export_text_button_txt.clicked.connect(self.project_ctrl.export_text_txt)
         self.settings_page.ui.import_text_button.clicked.connect(self.project_ctrl.import_text_json)
 
         # Reading Order mode

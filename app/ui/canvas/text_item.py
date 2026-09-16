@@ -56,7 +56,8 @@ class TextBlockItem(QGraphicsTextItem):
              bold=False, 
              italic=False, 
              underline=False,
-             direction=Qt.LayoutDirection.LeftToRight):
+             direction=Qt.LayoutDirection.LeftToRight,
+             block_id=""):
 
         super().__init__(text)
         self.text_color = render_color
@@ -71,6 +72,7 @@ class TextBlockItem(QGraphicsTextItem):
         self.alignment = alignment
         self.line_spacing = line_spacing
         self.direction = direction
+        self.block_id = block_id
 
         self.layout = None
         self.vertical = False
