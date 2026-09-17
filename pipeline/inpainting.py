@@ -129,7 +129,7 @@ class InpaintingHandler:
             if path is None:
                 continue
             brush_hex = QColor(stroke.get('brush', '#00000000')).name(QColor.HexArgb)
-            if brush_hex == "#80ff0000":
+            if brush_hex == "#b4ff0000":
                 gen_painter.drawPath(path)
                 has_any = True
                 continue
@@ -150,7 +150,7 @@ class InpaintingHandler:
         gen_mask = self._qimage_to_np(gen_qimg)
         kernel = np.ones((5, 5), np.uint8)
         human_mask = imk.dilate(human_mask, kernel, iterations=2)
-        gen_mask = imk.dilate(gen_mask, kernel, iterations=3)
+        gen_mask = imk.dilate(gen_mask, kernel, iterations=1)
         mask = np.where((human_mask > 0) | (gen_mask > 0), 255, 0).astype(np.uint8)
         if np.count_nonzero(mask) == 0:
             return None
@@ -650,6 +650,25 @@ class InpaintingHandler:
                 self._format_block_debug_label(block),
                 reason,
             )
+
+        # Clip residual mask to union of bubble boundaries so that
+        # dilation artifacts or imperfect eraser strokes outside bubbles
+        # do not leak into the NN inpainting stage.
+        if blk_list:
+            bubble_union = np.zeros(residual_mask.shape, dtype=bool)
+            for b in blk_list:
+                bxy = getattr(b, "bubble_xyxy", None)
+                if bxy is None or len(bxy) < 4:
+                    continue
+                bx1, by1, bx2, by2 = [int(v) for v in bxy[:4]]
+                by1 = max(0, by1)
+                bx1 = max(0, bx1)
+                by2 = min(residual_mask.shape[0], by2)
+                bx2 = min(residual_mask.shape[1], bx2)
+                if by2 > by1 and bx2 > bx1:
+                    bubble_union[by1:by2, bx1:bx2] = True
+            if np.any(bubble_union):
+                residual_mask[~bubble_union] = 0
 
         return cleaned_image, residual_mask, cleaned_blocks
 

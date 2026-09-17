@@ -36,7 +36,7 @@ class MoveableRectItem(QGraphicsRectItem):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setAcceptHoverEvents(True)
-        self.setBrush(QBrush(QColor(255, 192, 203, 125)))  # Transparent pink
+        self.setBrush(QBrush(QColor(255, 0, 0, 120)))  # Bright semi-transparent red
         self.setTransformOriginPoint(self.boundingRect().center())
         self.setZValue(1)
         

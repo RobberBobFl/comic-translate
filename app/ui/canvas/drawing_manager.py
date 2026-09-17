@@ -130,7 +130,7 @@ class DrawingManager:
         new_path = QPainterPath()
         
         brush_color = QColor(item.brush().color().name(QColor.HexArgb))
-        if brush_color == "#80ff0000":  # Generated (filled) segmentation path
+        if brush_color == "#b4ff0000":  # Generated (filled) segmentation path
             # Map erase shape into item's local coordinates to ensure robust boolean ops
             try:
                 local_erase_path = item.mapFromScene(erase_path)
@@ -140,8 +140,10 @@ class DrawingManager:
                 local_erase_path.translate(-item.pos().x(), -item.pos().y())
 
             # Ensure consistent fill rule for robust subtraction of filled polygons
-            path.setFillRule(Qt.FillRule.WindingFill)
-            local_erase_path.setFillRule(Qt.FillRule.WindingFill)
+            # OddEvenFill handles hole creation from subtracted() more reliably
+            # than WindingFill for complex multi-contour paths.
+            path.setFillRule(Qt.FillRule.OddEvenFill)
+            local_erase_path.setFillRule(Qt.FillRule.OddEvenFill)
 
             result = path.subtracted(local_erase_path)
             if not result.isEmpty():
@@ -227,7 +229,7 @@ class DrawingManager:
             pen.setCapStyle(Qt.RoundCap)
             pen.setJoinStyle(Qt.RoundJoin)
             brush = QBrush(QColor(stroke['brush']))
-            if brush.color() == QColor("#80ff0000"):
+            if brush.color() == QColor("#b4ff0000"):
                 self._scene.addPath(stroke['path'], pen, brush)
             else:
                 self._scene.addPath(stroke['path'], pen)
@@ -313,7 +315,7 @@ class DrawingManager:
 
         for item in self._scene.items():
             if isinstance(item, QGraphicsPathItem) and item != self.viewer.photo:
-                painter = gen_painter if QColor(item.brush().color().name(QColor.HexArgb)) == "#80ff0000" else human_painter
+                painter = gen_painter if QColor(item.brush().color().name(QColor.HexArgb)) == "#b4ff0000" else human_painter
                 # Get the path bounding rect to see where the stroke is
                 item_pos = item.pos()
                 # Draw the path - the painter already has the transformation applied
@@ -341,7 +343,7 @@ class DrawingManager:
         # Dilate using backend (ksize approximated by kernel size)
         kernel = np.ones((5,5), np.uint8)
         human_mask = imk.dilate(human_mask, kernel, iterations=2)
-        gen_mask = imk.dilate(gen_mask, kernel, iterations=3)
+        gen_mask = imk.dilate(gen_mask, kernel, iterations=1)
 
         # Combine masks (bitwise_or equivalent)
         final_mask = np.where((human_mask > 0) | (gen_mask > 0), 255, 0).astype(np.uint8)
@@ -354,7 +356,7 @@ class DrawingManager:
             return
 
         # Wrap in one GraphicsPathItem & emit
-        fill_color = QtGui.QColor(255, 0, 0, 128)  # Semi-transparent red
+        fill_color = QtGui.QColor(255, 0, 0, 180)  # Bright semi-transparent red
         outline_color = QtGui.QColor(255, 0, 0)    # Solid red
         item = QtWidgets.QGraphicsPathItem(stroke['path'])
         item.setPen(QtGui.QPen(outline_color, 2, QtCore.Qt.SolidLine))
@@ -437,7 +439,7 @@ class DrawingManager:
         if crop_mask is not None and np.any(crop_mask):
             contours, _ = imk.find_contours(crop_mask)
             path = QtGui.QPainterPath()
-            path.setFillRule(Qt.FillRule.WindingFill)
+            path.setFillRule(Qt.FillRule.OddEvenFill)
             for cnt in contours:
                 pts = cnt.squeeze(1)
                 if pts.ndim != 2 or pts.shape[0] < 3:
@@ -460,7 +462,7 @@ class DrawingManager:
         stroke = {
             'path': path,
             'pen': QColor(255, 0, 0).name(QColor.HexArgb),
-            'brush': QColor(255, 0, 0, 128).name(QColor.HexArgb),
+            'brush': QColor(255, 0, 0, 180).name(QColor.HexArgb),
             'width': 2,
         }
         return stroke

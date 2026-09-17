@@ -67,7 +67,7 @@ class PathCommandBase:
         path_item.setPath(properties['path'])
         path_item.setPen(pen)
         
-        if properties['brush'] == "#80ff0000":
+        if properties['brush'] == "#b4ff0000":
             brush_color = QColor(properties['brush'])
             path_item.setBrush(QBrush(brush_color))
             

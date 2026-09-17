@@ -44,7 +44,7 @@ class BrushStrokeManager:
                 pen.setJoinStyle(Qt.RoundJoin)
                 
                 brush = QBrush(QColor(stroke_data['brush']))
-                if brush.color() == QColor("#80ff0000"):
+                if brush.color() == QColor("#b4ff0000"):
                     self._scene.addPath(scene_path, pen, brush)
                 else:
                     self._scene.addPath(scene_path, pen)
@@ -88,7 +88,7 @@ class BrushStrokeManager:
                 # Process this brush stroke using coordinate converter
                 stroke_data = {
                     'path': item.path(),
-                    'pen': item.pen().color().name(QColor.HexArgb) if hasattr(item, 'pen') else '#80ff0000',
+                    'pen': item.pen().color().name(QColor.HexArgb) if hasattr(item, 'pen') else '#b4ff0000',
                     'brush': item.brush().color().name(QColor.HexArgb) if hasattr(item, 'brush') else '#00000000',
                     'width': item.pen().width() if hasattr(item, 'pen') else 25
                 }
