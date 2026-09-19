@@ -87,6 +87,7 @@ class UserTranslator(TranslationEngine):
         context_blocks: list = None,
         batch_size: int = None,
         scene_description: str = None,
+        scene_block_metadata: dict = None,
     ) -> tuple[List[TextBlock], bool]:
         """
         Sends the translation request to the web API.

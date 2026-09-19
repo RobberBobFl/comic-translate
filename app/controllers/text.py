@@ -1241,7 +1241,12 @@ class TextController:
 
         scene_description = ""
         scene_block_metadata = {}
-        if self.main.curr_img_idx >= 0 and self.main.curr_img_idx < len(self.main.image_files):
+        llm_settings = self.main.settings_page.get_llm_settings()
+        if (
+            llm_settings.get("use_scene_description", False)
+            and self.main.curr_img_idx >= 0
+            and self.main.curr_img_idx < len(self.main.image_files)
+        ):
             current_file = self.main.image_files[self.main.curr_img_idx]
             state = self.main.image_states.get(current_file, {})
             scene_description = state.get("scene_description", "") or ""
