@@ -310,10 +310,45 @@ class TextController:
             return selected_items
         return [self.main.curr_tblock_item] if self.main.curr_tblock_item else []
 
+    def _transfer_panel_selection_to_item(self, item: TextBlockItem) -> bool:
+        """Carry over the panel (t_text_edit) text selection to the canvas item's
+        cursor so that formatting applied from the toolbar hits that span instead
+        of the whole block.
+
+        Returns True when a panel selection was transferred.
+        """
+        panel = self.main.t_text_edit
+        if not isinstance(item, TextBlockItem):
+            return False
+        # Only trust the panel selection while the item itself is not in text
+        # editing mode (otherwise the item owns the selection).
+        if getattr(item, 'editing_mode', False):
+            return False
+        panel_cursor = panel.textCursor()
+        if not panel_cursor.hasSelection():
+            return False
+        # The panel mirrors the item's plain text, so offsets line up with the
+        # document positions of the item.
+        plain = item.toPlainText()
+        start = max(0, min(panel_cursor.selectionStart(), len(plain)))
+        end = max(0, min(panel_cursor.selectionEnd(), len(plain)))
+        if start >= end:
+            return False
+        item.enter_editing_mode()
+        cursor = item.textCursor()
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        item.setTextCursor(cursor)
+        return True
+
     def _apply_format_to_selected(self, macro_name: str, apply_fn):
         items = self._selected_text_items()
         if not items:
             return
+
+        # A panel selection only makes sense for a single target block.
+        if len(items) == 1:
+            self._transfer_panel_selection_to_item(items[0])
 
         commands = []
         for item in items:
@@ -336,7 +371,7 @@ class TextController:
                 stack.endMacro()
 
         if self.main.curr_tblock_item in items:
-            self.set_values_for_blk_item(self.main.curr_tblock_item)
+            self._refresh_toolbar_for_item(self.main.curr_tblock_item)
 
     def update_text_block(self):
         if self.main.curr_tblock:
@@ -651,32 +686,46 @@ class TextController:
             command.finalize_new_state()
             self.main.push_command(command)
 
+    def _refresh_toolbar_for_item(self, item):
+        """Refresh the toolbar to reflect the item's current selection (or its
+        whole-block state when nothing is selected)."""
+        if getattr(item, 'editing_mode', False) and item.textCursor().hasSelection():
+            self.set_values_from_highlight(item.get_selected_text_properties(item.textCursor()))
+        else:
+            self.set_values_for_blk_item(item)
+
     def bold(self):
         if self.main.curr_tblock_item:
             item = self.main.curr_tblock_item
+            self._transfer_panel_selection_to_item(item)
             command = TextFormatCommand(self.main.image_viewer, item)
             state = self.main.bold_button.isChecked()
             item.set_bold(state)
             command.finalize_new_state()
             self.main.push_command(command)
+            self._refresh_toolbar_for_item(item)
 
     def italic(self):
         if self.main.curr_tblock_item:
             item = self.main.curr_tblock_item
+            self._transfer_panel_selection_to_item(item)
             command = TextFormatCommand(self.main.image_viewer, item)
             state = self.main.italic_button.isChecked()
             item.set_italic(state)
             command.finalize_new_state()
             self.main.push_command(command)
+            self._refresh_toolbar_for_item(item)
 
     def underline(self):
         if self.main.curr_tblock_item:
             item = self.main.curr_tblock_item
+            self._transfer_panel_selection_to_item(item)
             command = TextFormatCommand(self.main.image_viewer, item)
             state = self.main.underline_button.isChecked()
             item.set_underline(state)
             command.finalize_new_state()
             self.main.push_command(command)
+            self._refresh_toolbar_for_item(item)
 
     def on_outline_color_change(self):
         outline_color = self.main.get_color()

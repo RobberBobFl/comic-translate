@@ -191,7 +191,10 @@ class TextBlockItem(QGraphicsTextItem):
             self.setHtml(text)
             self.setTextWidth(width)
             self.set_outline(self.outline_color, self.outline_width)
-            self.apply_all_attributes()
+            # The HTML already carries per-span character formatting; only fix
+            # the outline and block-level layout. Merging the block-level char
+            # attributes over the whole document would erase those spans.
+            self.apply_block_attributes()
         else:
             self.set_plain_text(text)
 
@@ -207,12 +210,12 @@ class TextBlockItem(QGraphicsTextItem):
         return bool(re.search(r'<(div|span|p|br|html|body|style)[^>]*>', text, re.IGNORECASE))
 
     def set_font(self, font_family, font_size):
+        # Ensure minimum font size.
+        font_size = max(1, font_size)
+
         if not self.textCursor().hasSelection():
             self.font_family = font_family
             self.font_size = font_size
-
-        # Ensure minimum font size.
-        font_size = max(1, font_size)
 
         # Fallback to application default font family if none provided
         effective_family = font_family.strip() if isinstance(font_family, str) and font_family.strip() else QApplication.font().family()
@@ -278,10 +281,10 @@ class TextBlockItem(QGraphicsTextItem):
         # Only merge if we have a selection OR if it's not a color change on HTML.
         # This prevents clobbering inline span colors during project loading/global changes.
         is_global_html_color = not has_selection and attribute == 'color' and self.is_html(self.toHtml())
-        
+
         if not is_global_html_color:
             if not has_selection:
-                cursor.select(QTextCursor.SelectionType.Document)    
+                cursor.select(QTextCursor.SelectionType.Document)
             cursor.mergeCharFormat(char_format)
 
         # Update the document's default format only if there is no selection
@@ -296,12 +299,17 @@ class TextBlockItem(QGraphicsTextItem):
                 font.setPointSize(value)
                 self.document().setDefaultFont(font)
             self.document().setDefaultTextOption(doc_format)
-        
-        # Clear the selection by moving the cursor to the end of the document
-        cursor.clearSelection()
-        cursor.movePosition(QTextCursor.End)
 
-        self.setTextCursor(cursor)
+        # Keep a genuine user selection intact so consecutive format operations
+        # (bold, then italic, then size) keep hitting the same span. A synthetic
+        # whole-document selection (created above when nothing was selected) is
+        # cleared again so the setters' hasSelection() guards stay consistent.
+        if has_selection:
+            self.setTextCursor(cursor)
+        else:
+            cleared = QTextCursor(self.document())
+            self.setTextCursor(cleared)
+
         self.update()
 
     def set_line_spacing(self, spacing):
@@ -489,6 +497,17 @@ class TextBlockItem(QGraphicsTextItem):
         self.update_text_width()
         self.set_alignment(self.alignment)
 
+    def apply_block_attributes(self):
+        """Apply only block-level attributes (line spacing, alignment, width).
+
+        Used when loading HTML that already carries per-span character
+        formatting: merging the block-level char attributes over the whole
+        document would erase those spans.
+        """
+        self.set_line_spacing(self.line_spacing)
+        self.update_text_width()
+        self.set_alignment(self.alignment)
+
     def mouseDoubleClickEvent(self, event):
         if not self.editing_mode:
             self.enter_editing_mode()
@@ -498,6 +517,9 @@ class TextBlockItem(QGraphicsTextItem):
                 cursor.setPosition(hit)
                 self.setTextCursor(cursor)
         super().mouseDoubleClickEvent(event)
+        # Toolbar should reflect the (possibly empty) selection after entering
+        # editing mode or repositioning the caret.
+        self._on_selection_changed()
 
     def mousePressEvent(self, event):
         # Handle single clicks in editing mode for vertical text
@@ -656,8 +678,13 @@ class TextBlockItem(QGraphicsTextItem):
             self._drag_selecting = False
             self._drag_select_anchor = None
             event.accept()
+            self._on_selection_changed()
             return
         super().mouseReleaseEvent(event)
+        if self.editing_mode:
+            # A mouse-up in editing mode usually finalizes a text selection
+            # (e.g. drag-select of a word); refresh the toolbar to match it.
+            self._on_selection_changed()
 
     def contextMenuEvent(self, event):
         super().contextMenuEvent(event)
@@ -816,6 +843,13 @@ class TextBlockItem(QGraphicsTextItem):
                         return
 
         self.resize_start = scene_pos
+
+    def _on_selection_changed(self):
+        """Emit the current selection's formatting so the toolbar reflects the
+        span being edited instead of always the whole-block state."""
+        cursor = self.textCursor()
+        properties = self.get_selected_text_properties(cursor)
+        self.text_highlighted.emit(properties)
 
     def on_selection_changed(self):
         cursor = self.textCursor()
