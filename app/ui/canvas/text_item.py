@@ -859,6 +859,11 @@ class TextBlockItem(QGraphicsTextItem):
 
     def get_selected_text_properties(self, cursor: QTextCursor):
         if not cursor.hasSelection():
+            from app.ui.canvas.text.text_item_properties import get_h_margins
+            try:
+                h_margin = get_h_margins(self.document())
+            except Exception:
+                h_margin = 0.0
             return {
                 'font_family': self.font_family,
                 'font_size': self.font_size,
@@ -870,6 +875,7 @@ class TextBlockItem(QGraphicsTextItem):
                 'outline': self.outline,
                 'outline_color': self.outline_color.name() if self.outline_color else None,
                 'outline_width': self.outline_width,
+                'h_margin': h_margin,
             }
 
         start = cursor.selectionStart()

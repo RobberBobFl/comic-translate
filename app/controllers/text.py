@@ -15,6 +15,8 @@ from app.ui.canvas.text_item import TextBlockItem
 from app.ui.canvas.text.text_item_properties import (
     TextItemProperties,
     set_center_v_margin,
+    set_h_margins,
+    get_h_margins,
 )
 
 from modules.utils.textblock import TextBlock, ensure_block_id
@@ -186,6 +188,13 @@ class TextController:
         direction = render_settings.direction
         vertical = is_vertical_block(blk, trg_lng_cd)
 
+        # Horizontal padding keeps the wrapped text off the bubble's left/right
+        # edges; 0 keeps the previous full-width behaviour.
+        try:
+            h_margin = max(0.0, float(self.main.h_margin_dropdown.currentText()))
+        except (TypeError, ValueError):
+            h_margin = 0.0
+
         properties = TextItemProperties(
             text=text,
             font_family=font_family,
@@ -218,45 +227,34 @@ class TextController:
         # non-vertical block (including rotated ones), so the text wraps to the
         # bubble width and can be centered vertically regardless of angle.
         if not vertical:
-            properties.width = bw
+            properties.width = max(1.0, bw - 2.0 * h_margin)
+            if h_margin > 0:
+                properties.h_margin = h_margin
 
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text(text)
-
-        # ── DEBUG: trace new item creation ──
-        import sys
-        _dbg = lambda *a: print("[DBG-BLK]", *a, file=sys.stderr, flush=True)
-        _dbg("on_blk_rendered: NEW item created")
-        _dbg(f"  new_item id={id(text_item)}"
-             f" block_id={getattr(text_item,'block_id','MISSING')!r}"
-             f" pos=({text_item.pos().x():.1f},{text_item.pos().y():.1f})"
-             f" rot={text_item.rotation():.1f}"
-             f" text={text_item.toPlainText()[:30]!r}")
-        xyxy_val2 = [round(float(x),1) for x in blk.xyxy] if blk.xyxy is not None and hasattr(blk.xyxy, '__len__') and len(blk.xyxy) else []
-        _dbg(f"  blk block_id={getattr(blk,'block_id','MISSING')!r}"
-             f" xyxy={xyxy_val2}")
-        # Check for duplicates
-        dupes = [i for i in self.main.image_viewer.text_items
-                 if getattr(i, 'block_id', '') and
-                 i.block_id == getattr(text_item, 'block_id', '') and
-                 i is not text_item]
-        if dupes:
-            _dbg(f"  ⚠ DUPLICATE! {len(dupes)} existing items with same block_id:")
-            for d in dupes:
-                _dbg(f"    dupe id={id(d)} pos=({d.pos().x():.1f},{d.pos().y():.1f})"
-                     f" text={d.toPlainText()[:30]!r}")
-        _dbg(f"  text_items now has {len(self.main.image_viewer.text_items)} items")
-        _dbg(f"  scene has {sum(1 for i in self.main.image_viewer._scene.items() if type(i).__name__=='TextBlockItem')} TextBlockItems")
-        # ── end DEBUG ──
 
         # Vertically center the text inside the bubble and shrink the font if it
         # would overflow, so the translation sits in the middle of the bubble
         # for every block (rotated included). Vertical text is laid out by the
         # VerticalTextDocumentLayout, which centers it on its own axis.
         if not vertical and bw and bh:
-            min_font = max(1.0, blk.min_font_size if blk.min_font_size > 0 else 4.0)
+            # In fixed mode render_settings() already pinned min == max to the
+            # toolbar size, so honour that here too instead of the block's own
+            # min_font_size (which would let the text shrink anyway).
+            if render_settings.max_font_size > 0 and \
+               render_settings.min_font_size == render_settings.max_font_size:
+                min_font = float(render_settings.min_font_size)
+            else:
+                min_font = max(1.0, blk.min_font_size if blk.min_font_size > 0 else 4.0)
             fit_and_center_text_item(text_item, bw, bh, min_font, alignment,
                                      render_settings.max_font_size)
+
+            # set_plain_text() above rebuilds the document and drops the root
+            # frame margins, so the horizontal padding is applied last, the same
+            # way fit_and_center_text_item applies the vertical one.
+            if h_margin > 0:
+                set_h_margins(text_item.document(), h_margin)
 
         # Update or append the block in the main controller's blk_list
         existing_idx = next(
@@ -647,6 +645,16 @@ class TextController:
             command.finalize_new_state()
             self.main.push_command(command)
 
+    def on_h_margin_change(self, margin: str):
+        if self.main.curr_tblock_item and margin:
+            item = self.main.curr_tblock_item
+            command = TextFormatCommand(self.main.image_viewer, item)
+            margin_px = max(0.0, float(margin))
+            set_h_margins(item.document(), margin_px)
+            item.update()
+            command.finalize_new_state()
+            self.main.push_command(command)
+
     def on_font_color_change(self):
         font_color = self.main.get_color()
         if font_color and font_color.isValid():
@@ -683,6 +691,25 @@ class TextController:
             item.set_alignment(QtCore.Qt.AlignmentFlag.AlignRight)
             command.finalize_new_state()
             self.main.push_command(command)
+
+    def _set_h_margin_dropdown(self, item=None, props=None):
+        """Show the current horizontal padding in the toolbar, without
+        triggering the change signal (which would push an undo command)."""
+        margin = None
+        if item is not None:
+            try:
+                margin = get_h_margins(item.document())
+            except Exception:
+                margin = None
+        elif props is not None:
+            margin = props.get('h_margin') if isinstance(props, dict) else getattr(props, 'h_margin', None)
+        if margin is None:
+            return
+        self.main.h_margin_dropdown.blockSignals(True)
+        try:
+            self.main.h_margin_dropdown.setCurrentText(str(int(margin)))
+        finally:
+            self.main.h_margin_dropdown.blockSignals(False)
 
     def _refresh_toolbar_for_item(self, item):
         """Refresh the toolbar to reflect the item's current selection (or its
@@ -826,6 +853,8 @@ class TextController:
             self.main.outline_width_dropdown.setCurrentText(str(text_item.outline_width))
             self.main.outline_checkbox.setChecked(text_item.outline)
 
+            self._set_h_margin_dropdown(item=text_item)
+
             self.main.bold_button.setChecked(text_item.bold)
             self.main.italic_button.setChecked(text_item.italic)
             self.main.underline_button.setChecked(text_item.underline)
@@ -889,6 +918,8 @@ class TextController:
 
             self.main.outline_width_dropdown.setCurrentText(str(outline_width)) if outline_width else None
             self.main.outline_checkbox.setChecked(outline)
+
+            self._set_h_margin_dropdown(props=item_highlighted)
 
             self.main.bold_button.setChecked(bold)
             self.main.italic_button.setChecked(italic)
@@ -1348,11 +1379,27 @@ class TextController:
         target_lang = self.main.lang_mapping.get(self.main.t_combo.currentText(), None)
         direction = get_layout_direction(target_lang)
 
+        # "Fixed" mode pins every block to the toolbar font size: min == max so
+        # the auto-fit loops in pyside_word_wrap / fit_and_center_text_item
+        # cannot shrink or grow the text away from the chosen size.
+        fixed_size = 0.0
+        if self.main.fixed_font_size_checkbox.isChecked():
+            try:
+                fixed_size = max(1.0, float(self.main.font_size_dropdown.currentText()))
+            except (TypeError, ValueError):
+                fixed_size = 0.0
+
+        if fixed_size > 0:
+            min_font = max_font = int(fixed_size)
+        else:
+            min_font = int(self.main.settings_page.ui.min_font_spinbox.value())
+            max_font = int(self.main.settings_page.ui.max_font_spinbox.value())
+
         return TextRenderingSettings(
             alignment_id = self.main.alignment_tool_group.get_dayu_checked(),
             font_family = self.main.font_dropdown.currentText(),
-            min_font_size = int(self.main.settings_page.ui.min_font_spinbox.value()),
-            max_font_size = int(self.main.settings_page.ui.max_font_spinbox.value()),
+            min_font_size = min_font,
+            max_font_size = max_font,
             color = self.main.block_font_color_button.property('selected_color'),
             upper_case = self.main.settings_page.ui.uppercase_checkbox.isChecked(),
             outline = self.main.outline_checkbox.isChecked(),

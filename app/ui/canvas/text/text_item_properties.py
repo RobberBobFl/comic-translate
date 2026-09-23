@@ -27,6 +27,25 @@ def get_center_v_margin(doc) -> float:
     """Read the vertical-centering margin back from a document's root frame."""
     return max(0.0, doc.rootFrame().frameFormat().topMargin() - FRAME_MARGIN_BASE)
 
+
+def set_h_margins(doc, margin: float) -> None:
+    """Apply symmetric horizontal padding to a document's root frame.
+
+    Mirrors set_center_v_margin: the left/right root-frame margins shrink the
+    area the text is laid out into, so long lines wrap before reaching the
+    bubble edges instead of overflowing them.
+    """
+    fmt = doc.rootFrame().frameFormat()
+    fmt.setLeftMargin(FRAME_MARGIN_BASE + max(0.0, float(margin)))
+    fmt.setRightMargin(FRAME_MARGIN_BASE + max(0.0, float(margin)))
+    doc.rootFrame().setFrameFormat(fmt)
+
+
+def get_h_margins(doc) -> float:
+    """Read the horizontal padding back from a document's root frame."""
+    fmt = doc.rootFrame().frameFormat()
+    return max(0.0, min(fmt.leftMargin(), fmt.rightMargin()) - FRAME_MARGIN_BASE)
+
 @dataclass
 class TextItemProperties:
     """Dataclass for TextBlockItem properties to reduce duplication in construction"""
@@ -58,6 +77,7 @@ class TextItemProperties:
     height: Optional[float] = None
     vertical: bool = False
     v_margin: float = 0.0  # top margin used to vertically center text in its block
+    h_margin: float = 0.0  # left/right padding that keeps text off the bubble edges
     
     # Stable identifier linking this text item back to its TextBlock.
     # Empty string for legacy projects that predate this field.
@@ -130,6 +150,7 @@ class TextItemProperties:
         props.height = data.get('height')
         props.vertical = data.get('vertical', False)
         props.v_margin = data.get('v_margin', 0.0)
+        props.h_margin = data.get('h_margin', 0.0)
         
         # Advanced
         props.selection_outlines = data.get('selection_outlines', [])
@@ -180,8 +201,10 @@ class TextItemProperties:
                 # block: Qt ignores QTextBlockFormat top margins for the first
                 # paragraph, so the frame is the only place it is honored.
                 props.v_margin = get_center_v_margin(item.document())
+                props.h_margin = get_h_margins(item.document())
             except Exception:
                 props.v_margin = 0.0
+                props.h_margin = 0.0
         
         # Advanced properties
         props.selection_outlines = getattr(item, 'selection_outlines', []).copy()
@@ -216,6 +239,7 @@ class TextItemProperties:
             'height': self.height,
             'vertical': self.vertical,
             'v_margin': self.v_margin,
+            'h_margin': self.h_margin,
             'selection_outlines': self.selection_outlines,
             'block_id': self.block_id,
         }

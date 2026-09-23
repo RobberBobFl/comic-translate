@@ -198,14 +198,21 @@ class WorkspaceMixin:
         self.font_size_dropdown.setFixedWidth(60)
         self.font_size_dropdown.set_editable(True)
 
+        self.fixed_font_size_checkbox = QtWidgets.QCheckBox(self.tr("Fixed"))
+        self.fixed_font_size_checkbox.setToolTip(
+            self.tr("Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.")
+        )
+        self.fixed_font_size_checkbox.setFixedHeight(28)
+
         self.line_spacing_dropdown = MComboBox().small()
         self.line_spacing_dropdown.setToolTip(self.tr("Line Spacing"))
-        self.line_spacing_dropdown.addItems(["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"])
+        self.line_spacing_dropdown.addItems(["0.7", "0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.4", "1.5"])
         self.line_spacing_dropdown.setFixedWidth(60)
         self.line_spacing_dropdown.set_editable(True)
 
         font_settings_layout.addWidget(self.font_dropdown)
         font_settings_layout.addWidget(self.font_size_dropdown)
+        font_settings_layout.addWidget(self.fixed_font_size_checkbox)
         font_settings_layout.addWidget(self.line_spacing_dropdown)
         font_settings_layout.addStretch()
 
@@ -239,11 +246,19 @@ class WorkspaceMixin:
         self.underline_button = self.create_tool_button(svg="underline.svg", checkable=True)
         self.underline_button.setToolTip(self.tr("Underline"))
 
+        self.h_margin_dropdown = MComboBox().small()
+        self.h_margin_dropdown.setToolTip(self.tr("Horizontal padding inside the bubble"))
+        self.h_margin_dropdown.addItems(["0", "2", "4", "6", "8", "10"])
+        self.h_margin_dropdown.setCurrentText("0")
+        self.h_margin_dropdown.setFixedWidth(60)
+        self.h_margin_dropdown.set_editable(True)
+
         main_text_settings_layout.addWidget(self.block_font_color_button)
         main_text_settings_layout.addWidget(self.alignment_tool_group)
         main_text_settings_layout.addWidget(self.bold_button)
         main_text_settings_layout.addWidget(self.italic_button)
         main_text_settings_layout.addWidget(self.underline_button)
+        main_text_settings_layout.addWidget(self.h_margin_dropdown)
         main_text_settings_layout.addStretch()
 
         outline_settings_layout = QtWidgets.QHBoxLayout()

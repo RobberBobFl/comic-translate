@@ -3,7 +3,7 @@ import imkit as imk
 import numpy as np
 from app.path_materialization import ensure_path_materialized
 from .text_item import TextBlockItem
-from .text.text_item_properties import TextItemProperties, set_center_v_margin
+from .text.text_item_properties import TextItemProperties, set_center_v_margin, set_h_margins
 
 class ImageSaveRenderer:
     def __init__(self, image: np.ndarray):
@@ -69,6 +69,8 @@ class ImageSaveRenderer:
                 # Root-frame margin: QTextBlockFormat top margins are ignored
                 # by Qt for the first paragraph, which would pin text to top.
                 set_center_v_margin(text_item.document(), text_props.v_margin)
+            if text_props.h_margin:
+                set_h_margins(text_item.document(), text_props.h_margin)
             text_item.selection_outlines = text_props.selection_outlines.copy()
             text_item.update()
 

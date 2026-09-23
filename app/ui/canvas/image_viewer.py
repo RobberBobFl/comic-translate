@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 
 from .text_item import TextBlockItem
-from .text.text_item_properties import TextItemProperties, set_center_v_margin
+from .text.text_item_properties import TextItemProperties, set_center_v_margin, set_h_margins
 from .rectangle import MoveableRectItem
 from .rotate_cursor import RotateHandleCursors
 from .drawing_manager import DrawingManager
@@ -610,6 +610,12 @@ class ImageViewer(QGraphicsView):
         # silently pin the text to the top.
         if getattr(properties, "v_margin", 0) and not getattr(properties, "vertical", False):
             set_center_v_margin(item.document(), properties.v_margin)
+
+        # Horizontal padding keeps text off the bubble's left/right edges. Like
+        # the vertical margin it lives on the root frame, whose margins the
+        # layout engine subtracts from the wrapping width.
+        if getattr(properties, "h_margin", 0):
+            set_h_margins(item.document(), properties.h_margin)
         
         # Set direction if specified
         item.set_direction(properties.direction)
@@ -636,26 +642,9 @@ class ImageViewer(QGraphicsView):
         self._scene.addItem(item)
         self.text_items.append(item)
 
-        # ── DEBUG ──
-        import sys
-        _dbg = lambda *a: print("[DBG-ADD]", *a, file=sys.stderr, flush=True)
-        _dbg(f"add_text_item: id={id(item)}"
-             f" block_id={getattr(item,'block_id','MISSING')!r}"
-             f" pos=({item.pos().x():.1f},{item.pos().y():.1f})")
-        _dbg(f"  text_items count now: {len(self.text_items)}")
-        _dbg(f"  scene TextBlockItem count: {sum(1 for i in self._scene.items() if type(i).__name__=='TextBlockItem')}")
-        # Check for prior items with same block_id
-        bid = getattr(item, 'block_id', '') or ''
-        if bid:
-            prior = [i for i in self.text_items
-                     if getattr(i, 'block_id', '') == bid and i is not item]
-            if prior:
-                _dbg(f"  ⚠ {len(prior)} PRIOR items with block_id={bid!r}")
-        # ── end DEBUG ──
-        
         # Emit the connect signal for the text item
         self.connect_text_item.emit(item)
-        
+
         return item
 
     def get_selected_text_items(self) -> list[TextBlockItem]:
