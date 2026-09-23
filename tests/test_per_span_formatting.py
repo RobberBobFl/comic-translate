@@ -191,7 +191,9 @@ def test_panel_selection_maps_onto_item(app):
     transferred = controller._transfer_panel_selection_to_item(item)
 
     assert transferred is True
-    assert item.editing_mode is True
+    # The item must NOT be left in editing mode: that would make it keep
+    # intercepting input and block later panel selections for the same block.
+    assert item.editing_mode is False
     cursor = item.textCursor()
     assert (cursor.selectionStart(), cursor.selectionEnd()) == (6, 11)
 
@@ -212,7 +214,35 @@ def test_transferred_panel_selection_limits_bold(app):
     assert bold == [False] * 6 + [True] * 5
 
 
-def test_panel_selection_ignored_when_item_already_editing(app):
+def test_consecutive_panel_selections_format_different_words(app):
+    """Regression: after the first panel-driven format the block used to stay in
+    editing mode, so every later panel selection was ignored and the format kept
+    hitting the first word (or the whole block)."""
+    controller = _make_controller(app)
+    controller.main.t_text_edit.setPlainText("one two three")
+    item = TextBlockItem("one two three", font_family="Sans Serif", font_size=20)
+
+    def _panel_select(start, end):
+        panel_cursor = controller.main.t_text_edit.textCursor()
+        panel_cursor.setPosition(start)
+        panel_cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        controller.main.t_text_edit.setTextCursor(panel_cursor)
+        controller._transfer_panel_selection_to_item(item)
+
+    _panel_select(4, 7)   # "two"
+    item.set_bold(True)
+    _panel_select(8, 13)  # "three"
+    item.set_italic(True)
+
+    bold, italic, _ = _per_char(item)
+    assert bold == [False] * 4 + [True] * 3 + [False] * 6
+    assert italic == [False] * 8 + [True] * 5
+    assert item.editing_mode is False
+
+
+def test_panel_selection_works_when_item_already_editing(app):
+    """A panel selection is an explicit user action and wins over whatever span
+    the item happened to have selected on the canvas."""
     controller = _make_controller(app)
     controller.main.t_text_edit.setPlainText("hello world")
     panel_cursor = controller.main.t_text_edit.textCursor()
@@ -224,9 +254,9 @@ def test_panel_selection_ignored_when_item_already_editing(app):
     item.enter_editing_mode()
     _select_span(item, 6, 11)
 
-    assert controller._transfer_panel_selection_to_item(item) is False
+    assert controller._transfer_panel_selection_to_item(item) is True
     cursor = item.textCursor()
-    assert (cursor.selectionStart(), cursor.selectionEnd()) == (6, 11)
+    assert (cursor.selectionStart(), cursor.selectionEnd()) == (0, 5)
 
 
 def test_no_panel_selection_is_noop(app):
@@ -302,3 +332,37 @@ def test_bold_italic_buttons_format_panel_selection(app):
     assert italic == [False] * 6 + [True] * 5
     # Toolbar reflects the span's formatting, not the block default.
     assert controller.main.bold_button.isChecked() is True
+
+
+def test_consecutive_button_formats_hit_consecutive_selections(app):
+    """Regression for the reported bug: the first panel-driven format worked,
+    but a second one did not, and the block stayed 'active' until the user
+    clicked something else."""
+    scene = QGraphicsScene()
+    item = TextBlockItem("one two three", font_family="Sans Serif", font_size=20)
+    scene.addItem(item)
+
+    controller = _make_controller(app)
+    controller.main = _ToolbarFakeMain(item, scene)
+    controller.main.t_text_edit.setPlainText("one two three")
+    controller.widgets_to_block = []
+    controller.block_text_item_widgets = lambda widgets: None
+    controller.unblock_text_item_widgets = lambda widgets: None
+
+    def _panel_select(start, end):
+        panel_cursor = controller.main.t_text_edit.textCursor()
+        panel_cursor.setPosition(start)
+        panel_cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        controller.main.t_text_edit.setTextCursor(panel_cursor)
+
+    _panel_select(4, 7)  # "two"
+    controller.main.bold_button.setChecked(True)
+    controller.bold()
+    _panel_select(8, 13)  # "three"
+    controller.main.italic_button.setChecked(True)
+    controller.italic()
+
+    bold, italic, _ = _per_char(item)
+    assert bold == [False] * 4 + [True] * 3 + [False] * 6
+    assert italic == [False] * 8 + [True] * 5
+    assert item.editing_mode is False

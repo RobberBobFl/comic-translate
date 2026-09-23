@@ -320,21 +320,19 @@ class TextController:
         panel = self.main.t_text_edit
         if not isinstance(item, TextBlockItem):
             return False
-        # Only trust the panel selection while the item itself is not in text
-        # editing mode (otherwise the item owns the selection).
-        if getattr(item, 'editing_mode', False):
-            return False
         panel_cursor = panel.textCursor()
         if not panel_cursor.hasSelection():
             return False
         # The panel mirrors the item's plain text, so offsets line up with the
-        # document positions of the item.
+        # document positions of the item. Setting the cursor without entering
+        # editing mode is enough: mergeCharFormat() works on the stored cursor,
+        # and the item does not get stuck intercepting keyboard input (which
+        # would block later panel selections for the same block).
         plain = item.toPlainText()
         start = max(0, min(panel_cursor.selectionStart(), len(plain)))
         end = max(0, min(panel_cursor.selectionEnd(), len(plain)))
         if start >= end:
             return False
-        item.enter_editing_mode()
         cursor = item.textCursor()
         cursor.setPosition(start)
         cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
@@ -689,8 +687,9 @@ class TextController:
     def _refresh_toolbar_for_item(self, item):
         """Refresh the toolbar to reflect the item's current selection (or its
         whole-block state when nothing is selected)."""
-        if getattr(item, 'editing_mode', False) and item.textCursor().hasSelection():
-            self.set_values_from_highlight(item.get_selected_text_properties(item.textCursor()))
+        cursor = item.textCursor() if hasattr(item, 'textCursor') else None
+        if cursor is not None and cursor.hasSelection():
+            self.set_values_from_highlight(item.get_selected_text_properties(cursor))
         else:
             self.set_values_for_blk_item(item)
 
