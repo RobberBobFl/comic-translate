@@ -638,22 +638,24 @@ class TextController:
 
     def on_line_spacing_change(self, line_spacing: str):
         if self.main.curr_tblock_item and line_spacing:
-            item = self.main.curr_tblock_item
-            command = TextFormatCommand(self.main.image_viewer, item)
             spacing = float(line_spacing)
-            item.set_line_spacing(spacing)
-            command.finalize_new_state()
-            self.main.push_command(command)
+            self._apply_format_to_selected(
+                "change_text_line_spacing",
+                lambda item: item.set_line_spacing(spacing),
+            )
 
     def on_h_margin_change(self, margin: str):
         if self.main.curr_tblock_item and margin:
-            item = self.main.curr_tblock_item
-            command = TextFormatCommand(self.main.image_viewer, item)
             margin_px = max(0.0, float(margin))
-            set_h_margins(item.document(), margin_px)
-            item.update()
-            command.finalize_new_state()
-            self.main.push_command(command)
+
+            def _apply(item):
+                set_h_margins(item.document(), margin_px)
+                item.update()
+
+            self._apply_format_to_selected(
+                "change_text_h_margin",
+                _apply,
+            )
 
     def on_font_color_change(self):
         font_color = self.main.get_color()

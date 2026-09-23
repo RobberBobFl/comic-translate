@@ -78,7 +78,8 @@ class _FakeMain:
         self.italic_button = QCheckBox()
         self.underline_button = QCheckBox()
         self.line_spacing_dropdown = QComboBox()
-        self.line_spacing_dropdown.addItem("1.0")
+        self.line_spacing_dropdown.addItems(["1.0", "1.2"])
+        self.line_spacing_dropdown.setEditable(True)
         self.h_margin_dropdown = QComboBox()
         self.h_margin_dropdown.addItems(["0", "4", "6"])
         self.h_margin_dropdown.setEditable(True)
@@ -276,3 +277,97 @@ def test_line_spacing_below_one_is_honoured(app):
     cursor = QTextCursor(item.document())
     cursor.select(QTextCursor.SelectionType.Document)
     assert cursor.blockFormat().lineHeight() == pytest.approx(80.0)
+
+
+# ── multi-select: every formatting control hits all selected blocks ─────────
+
+def _block_line_height(item):
+    cursor = QTextCursor(item.document())
+    cursor.select(QTextCursor.SelectionType.Document)
+    return cursor.blockFormat().lineHeight()
+
+
+def test_multi_select_line_spacing_hits_all_blocks(app, viewer_parent):
+    """Regression: with several blocks selected, line spacing only changed on
+    the last-clicked block because the handler used curr_tblock_item directly
+    instead of _apply_format_to_selected."""
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(200, 200, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    for x, text in ((10, "aaa bbb ccc"), (60, "ddd eee fff"), (110, "ggg hhh iii")):
+        blk = TextBlock()
+        blk.xyxy = [x, 10, x + 50, 60]
+        blk.translation = text
+        controller.on_blk_rendered(text, 20, blk, "x.png")
+
+    items = list(viewer.text_items)
+    assert len(items) == 3
+    for item in items:
+        item.selected = True
+    main.curr_tblock_item = items[0]
+
+    main.line_spacing_dropdown.setEditText("0.8")
+    controller.on_line_spacing_change("0.8")
+
+    heights = [_block_line_height(item) for item in items]
+    assert heights == [80.0, 80.0, 80.0]
+
+
+def test_multi_select_h_margin_hits_all_blocks(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(200, 200, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    for x, text in ((10, "aaa bbb ccc"), (60, "ddd eee fff"), (110, "ggg hhh iii")):
+        blk = TextBlock()
+        blk.xyxy = [x, 10, x + 50, 60]
+        blk.translation = text
+        controller.on_blk_rendered(text, 20, blk, "x.png")
+
+    items = list(viewer.text_items)
+    for item in items:
+        item.selected = True
+    main.curr_tblock_item = items[0]
+
+    main.h_margin_dropdown.setEditText("6")
+    controller.on_h_margin_change("6")
+
+    margins = [get_h_margins(item.document()) for item in items]
+    assert margins == [6.0, 6.0, 6.0]
+
+
+def test_multi_select_font_size_hits_all_blocks(app, viewer_parent):
+    """Font size already worked via _apply_format_to_selected; kept as a guard
+    so the three controls stay consistent."""
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(200, 200, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    for x, text in ((10, "aaa bbb ccc"), (60, "ddd eee fff"), (110, "ggg hhh iii")):
+        blk = TextBlock()
+        blk.xyxy = [x, 10, x + 50, 60]
+        blk.translation = text
+        controller.on_blk_rendered(text, 20, blk, "x.png")
+
+    items = list(viewer.text_items)
+    for item in items:
+        item.selected = True
+    main.curr_tblock_item = items[0]
+
+    main.font_size_dropdown.setEditText("24")
+    controller.on_font_size_change("24")
+
+    assert [item.font_size for item in items] == [24, 24, 24]
