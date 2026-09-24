@@ -33,6 +33,7 @@ from app.controllers.shortcuts import ShortcutController
 from app.controllers.task_runner import TaskRunnerController
 from app.controllers.batch_report import BatchReportController
 from app.controllers.manual_workflow import ManualWorkflowController
+from app.controllers.bubble_expand import BubbleExpandController
 from modules.utils.exceptions import InsufficientCreditsException, ContentFlaggedException
 from modules.translation.exceptions import LLMInvalidResponseError
 
@@ -125,6 +126,7 @@ class ComicTranslate(ComicTranslateUI):
         self.task_runner_ctrl = TaskRunnerController(self)
         self.batch_report_ctrl = BatchReportController(self)
         self.manual_workflow_ctrl = ManualWorkflowController(self)
+        self.bubble_expand_ctrl = BubbleExpandController(self)
         self.image_viewer.main_page = self
         try:
             if self._memlogger is not None:
@@ -218,6 +220,7 @@ class ComicTranslate(ComicTranslateUI):
         self.change_all_blocks_size_dec.clicked.connect(lambda: self.text_ctrl.change_all_blocks_size(-int(self.change_all_blocks_size_diff.text())))
         self.change_all_blocks_size_inc.clicked.connect(lambda: self.text_ctrl.change_all_blocks_size(int(self.change_all_blocks_size_diff.text())))
         self.delete_button.clicked.connect(self.delete_selected_box)
+        self.expand_bubble_button.clicked.connect(self.bubble_expand_ctrl.expand_selected)
 
         # Connect text edit widgets
         self.s_text_edit.textChanged.connect(self.text_ctrl.update_text_block)

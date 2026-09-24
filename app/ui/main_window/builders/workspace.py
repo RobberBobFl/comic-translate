@@ -411,6 +411,15 @@ class WorkspaceMixin:
         self.paint_fill_rect_button.clicked.connect(self.toggle_paint_fill_rect_tool)
         self.tool_buttons["paint_fill_rect"] = self.paint_fill_rect_button
 
+        # Experimental: recover + expand a speech bubble around the selected
+        # text block (manual editor only, no automatic pipeline involvement).
+        self.expand_bubble_button = self.create_tool_button(
+            svg="mdi--comic-thought-bubble-outline.svg", checkable=False
+        )
+        self.expand_bubble_button.setToolTip(self.tr(
+            "Expand Bubble (experimental): enlarge the bubble around the selected text block"
+        ))
+
         self.paint_color_swatch = QtWidgets.QLabel()
         self.paint_color_swatch.setFixedSize(22, 22)
         self.paint_color_swatch.setStyleSheet(
@@ -423,6 +432,7 @@ class WorkspaceMixin:
         retouch_tools_lay.addWidget(self.paint_eraser_button)
         retouch_tools_lay.addWidget(self.paint_fill_rect_button)
         retouch_tools_lay.addWidget(self.paint_color_swatch)
+        retouch_tools_lay.addWidget(self.expand_bubble_button)
         retouch_tools_lay.addStretch()
         tools_layout.addLayout(retouch_tools_lay)
 
@@ -547,7 +557,7 @@ class WorkspaceMixin:
         disable_retouch = checked and not stitch_enabled
         enabled = not disable_retouch
         for btn in (self.eyedropper_button, self.paint_button, self.paint_eraser_button,
-                    self.paint_fill_rect_button):
+                    self.paint_fill_rect_button, self.expand_bubble_button):
             btn.setEnabled(enabled)
         self.paint_slider.setEnabled(enabled)
         self.paint_color_swatch.setEnabled(enabled)
