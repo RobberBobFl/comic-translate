@@ -17,7 +17,8 @@ if os.environ.get("QT_QPA_PLATFORM", "") == "":
 import pytest
 from PySide6 import QtCore
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPixmap, QTextCursor, QTextDocument, QUndoStack
+from PySide6.QtGui import (QImage, QPixmap, QTextCharFormat, QTextCursor,
+                           QTextDocument, QFont, QUndoStack)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
                                QPushButton, QWidget)
 
@@ -387,14 +388,156 @@ def test_apply_spacing_negative_tightens(app):
     assert item.document().size().height() <= height_before
 
 
-def test_apply_spacing_zero_is_a_noop(app):
+def test_apply_spacing_zero_is_a_noop_on_fresh_document(app):
     from app.ui.canvas.text_item import TextBlockItem
 
     item = TextBlockItem("word word", font_family="Sans Serif", font_size=20)
     item.setPlainText("word word")
     item.setTextWidth(300)
+    height_before = item.document().size().height()
     item.apply_spacing()  # defaults are 0; must not raise or change metrics
     assert item.document().defaultFont().letterSpacing() == 0.0
+    assert item.document().size().height() == height_before
+
+
+def test_apply_spacing_zero_clears_previous_spacing(app):
+    """Regression: returning to 0 must restore the original metrics.
+
+    apply_spacing() used to bail out entirely when both values were 0, leaving
+    the last nonzero spacing baked into the document font.
+    """
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.setPlainText(text)
+    item.setTextWidth(300)
+    base_ideal = item.document().idealWidth()
+
+    item.letter_spacing = 6.0
+    item.word_spacing = 12.0
+    item.apply_spacing()
+    spaced_ideal = item.document().idealWidth()
+    assert spaced_ideal != base_ideal
+
+    # Back to default: the document must measure exactly as it did before any
+    # spacing was applied, not stay at the spaced width.
+    item.letter_spacing = 0.0
+    item.word_spacing = 0.0
+    item.apply_spacing()
+    assert item.document().idealWidth() == base_ideal
+    assert item.document().defaultFont().letterSpacing() == 0.0
+    assert item.document().defaultFont().wordSpacing() == 0.0
+
+
+def test_apply_spacing_repeated_zero_is_stable(app):
+    """Toggling spacing on and off repeatedly must always land on the same
+    metrics (the fix point of the re-fit loop aside, the *document* itself must
+    be deterministic)."""
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.setPlainText(text)
+    item.setTextWidth(300)
+    base_ideal = item.document().idealWidth()
+
+    for _ in range(3):
+        item.letter_spacing = 5.0
+        item.apply_spacing()
+        assert item.document().idealWidth() != base_ideal
+        item.letter_spacing = 0.0
+        item.apply_spacing()
+        assert item.document().idealWidth() == base_ideal
+
+
+def test_apply_spacing_after_set_font_char_formats(app):
+    """Regression: set_font() merges a full QFont into the whole document, so
+    every fragment carries its own font. Qt's layout then prefers the fragment
+    font over the document's default font, and spacing applied only to the
+    default font was silently ignored."""
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.set_plain_text(text)          # goes through set_font -> char formats
+    item.setTextWidth(300)
+    cursor = item.textCursor()
+    cursor.select(QTextCursor.SelectionType.Document)
+    assert cursor.charFormat().fontFamilies()[0] == "Sans Serif"
+
+    base_ideal = item.document().idealWidth()
+    item.letter_spacing = 6.0
+    item.word_spacing = 12.0
+    item.apply_spacing()
+
+    assert item.document().idealWidth() != base_ideal
+    cursor.select(QTextCursor.SelectionType.Document)
+    # The merged format keeps the family and gains the spacing.
+    assert cursor.charFormat().fontFamilies()[0] == "Sans Serif"
+
+
+def test_apply_spacing_preserves_per_span_formatting(app):
+    """Bold/italic/colour spans must survive applying spacing; only the
+    letter/word spacing changes."""
+    from app.ui.canvas.text_item import TextBlockItem
+    from PySide6.QtGui import QColor
+
+    text = "bold part, then a red part"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.set_plain_text(text)
+    item.setTextWidth(300)
+
+    cursor = item.textCursor()
+    cursor.setPosition(0)
+    cursor.setPosition(9, QTextCursor.MoveMode.KeepAnchor)   # "bold part"
+    bold_fmt = QTextCharFormat()
+    bold_fmt.setFontWeight(QFont.Bold)
+    cursor.mergeCharFormat(bold_fmt)
+    cursor.setPosition(18)
+    cursor.setPosition(21, QTextCursor.MoveMode.KeepAnchor)  # "red"
+    red_fmt = QTextCharFormat()
+    red_fmt.setForeground(QColor("red"))
+    cursor.mergeCharFormat(red_fmt)
+
+    def span_report():
+        out = {}
+        for pos, tag in ((4, "bold"), (14, "plain"), (19, "red")):
+            c = item.textCursor()
+            c.setPosition(pos)
+            f = c.charFormat()
+            out[tag] = (f.fontWeight() == QFont.Bold,
+                        f.foreground().color().name(),
+                        f.fontFamilies()[0],
+                        f.fontPointSize())
+        return out
+
+    before = span_report()
+    item.letter_spacing = 4.0
+    item.word_spacing = 8.0
+    item.apply_spacing()
+    after = span_report()
+
+    assert before == after, "per-span formatting changed"
+    # And the spacing really did land.
+    assert item.document().defaultFont().letterSpacing() == 4.0
+
+
+def test_apply_spacing_is_idempotent(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.set_plain_text(text)
+    item.setTextWidth(300)
+    item.letter_spacing = 4.0
+    item.word_spacing = 8.0
+    item.apply_spacing()
+
+    first = item.document().idealWidth()
+    item.apply_spacing()
+    second = item.document().idealWidth()
+    assert first == second
 
 
 def test_spacing_survives_set_font_size(app):

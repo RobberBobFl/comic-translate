@@ -231,21 +231,70 @@ class TextBlockItem(QGraphicsTextItem):
         self.apply_spacing()
 
     def apply_spacing(self):
-        """Apply letter_spacing/word_spacing to the document's font.
+        """Apply letter_spacing/word_spacing to the document.
 
-        QFont.setLetterSpacing(AbsoluteSpacing) and setWordSpacing change how
-        the text is laid out, so wider spacing wraps earlier and narrower
-        spacing fits more per line. Setting them on the document's default font
-        is what actually affects the layout (mergeCharFormat alone does not).
-        Fresh QFont objects must be installed after setPlainText/setHtml,
-        which reset the default font.
+        QFont.setLetterSpacing(AbsoluteSpacing) and setWordSpacing change how the
+        text is laid out, so wider spacing wraps earlier and narrower spacing
+        fits more per line. Two places must carry them:
+
+        * the document's default font, used for fragments that have no explicit
+          char-format font;
+        * every fragment whose char format *does* carry an explicit font. Qt's
+          rich-text layout prefers the fragment's char-format font over the
+          default one, so spacing set only on the default font is silently
+          ignored once a fragment has its own font -- which is the normal state
+          after set_font()/set_html() (and after undo/redo), which merge a full
+          QFont into the whole document.
+
+        Always run, even when both values are 0: that is how a previous nonzero
+        spacing is cleared instead of left baked into the fonts.
+
+        The spacing is baked into a copy of each fragment's own QFont
+        (preserving family/size/weight/italic/underline/etc.) and merged back
+        over that fragment's exact range. The ranges come from
+        QTextFragment.iteration rather than a QTextCursor: a cursor reports the
+        format of the fragment to its right (or the merged format of a
+        selection), so cursor-driven run detection corrupts neighbouring spans.
         """
-        if self.letter_spacing == 0.0 and self.word_spacing == 0.0:
-            return
-        font = self.document().defaultFont()
-        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, self.letter_spacing)
-        font.setWordSpacing(self.word_spacing)
-        self.document().setDefaultFont(font)
+        letter_spacing = float(getattr(self, "letter_spacing", 0.0) or 0.0)
+        word_spacing = float(getattr(self, "word_spacing", 0.0) or 0.0)
+
+        doc = self.document()
+        default_font = doc.defaultFont()
+        default_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+        default_font.setWordSpacing(word_spacing)
+        doc.setDefaultFont(default_font)
+
+        cursor = QTextCursor(doc)
+        block = doc.begin()
+        while block.isValid():
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                iterator += 1
+                fmt = fragment.charFormat()
+                # A fragment without its own font is laid out from the default
+                # font (spaced above); merging a synthesised font here would
+                # clobber its family/size.
+                families = fmt.fontFamilies()
+                size = fmt.fontPointSize()
+                if not families or not families[0] or size <= 0:
+                    continue
+                font = QFont(families[0])
+                font.setPointSizeF(size)
+                font.setWeight(QFont.Weight(fmt.fontWeight()))
+                font.setItalic(fmt.fontItalic())
+                font.setUnderline(fmt.fontUnderline())
+                font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+                font.setWordSpacing(word_spacing)
+                new_fmt = QTextCharFormat()
+                new_fmt.setFont(font)
+                start = fragment.position()
+                cursor.setPosition(start)
+                cursor.setPosition(start + fragment.length(),
+                                   QTextCursor.MoveMode.KeepAnchor)
+                cursor.mergeCharFormat(new_fmt)
+            block = block.next()
 
     def set_font_size(self, font_size):
         font_size = max(1, font_size)
