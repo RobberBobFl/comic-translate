@@ -73,6 +73,11 @@ class TextBlockItem(QGraphicsTextItem):
         self.line_spacing = line_spacing
         self.direction = direction
         self.block_id = block_id
+        # Extra px added between letters / between words (QFont AbsoluteSpacing
+        # and QFont::setWordSpacing). Applied to the document font in
+        # apply_spacing(); 0 keeps Qt's default metrics.
+        self.letter_spacing = 0.0
+        self.word_spacing = 0.0
 
         self.layout = None
         self.vertical = False
@@ -221,6 +226,26 @@ class TextBlockItem(QGraphicsTextItem):
         effective_family = font_family.strip() if isinstance(font_family, str) and font_family.strip() else QApplication.font().family()
         font = QFont(effective_family, font_size)
         self.update_text_format('font', font)
+        # update_text_format sets the default font, but letter/word spacing must
+        # be applied on top of it to affect the layout metrics.
+        self.apply_spacing()
+
+    def apply_spacing(self):
+        """Apply letter_spacing/word_spacing to the document's font.
+
+        QFont.setLetterSpacing(AbsoluteSpacing) and setWordSpacing change how
+        the text is laid out, so wider spacing wraps earlier and narrower
+        spacing fits more per line. Setting them on the document's default font
+        is what actually affects the layout (mergeCharFormat alone does not).
+        Fresh QFont objects must be installed after setPlainText/setHtml,
+        which reset the default font.
+        """
+        if self.letter_spacing == 0.0 and self.word_spacing == 0.0:
+            return
+        font = self.document().defaultFont()
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, self.letter_spacing)
+        font.setWordSpacing(self.word_spacing)
+        self.document().setDefaultFont(font)
 
     def set_font_size(self, font_size):
         font_size = max(1, font_size)
@@ -505,6 +530,9 @@ class TextBlockItem(QGraphicsTextItem):
         document would erase those spans.
         """
         self.set_line_spacing(self.line_spacing)
+        # Spacing is a font-level (not char-format) property, so it is safe to
+        # re-apply here without clobbering per-span formats.
+        self.apply_spacing()
         self.update_text_width()
         self.set_alignment(self.alignment)
 
@@ -859,11 +887,7 @@ class TextBlockItem(QGraphicsTextItem):
 
     def get_selected_text_properties(self, cursor: QTextCursor):
         if not cursor.hasSelection():
-            from app.ui.canvas.text.text_item_properties import get_h_margins
-            try:
-                h_margin = get_h_margins(self.document())
-            except Exception:
-                h_margin = 0.0
+            # Spacing is stored on the item, not on the document.
             return {
                 'font_family': self.font_family,
                 'font_size': self.font_size,
@@ -875,7 +899,8 @@ class TextBlockItem(QGraphicsTextItem):
                 'outline': self.outline,
                 'outline_color': self.outline_color.name() if self.outline_color else None,
                 'outline_width': self.outline_width,
-                'h_margin': h_margin,
+                'letter_spacing': float(getattr(self, "letter_spacing", 0.0) or 0.0),
+                'word_spacing': float(getattr(self, "word_spacing", 0.0) or 0.0),
             }
 
         start = cursor.selectionStart()

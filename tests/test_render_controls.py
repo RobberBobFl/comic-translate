@@ -1,12 +1,12 @@
-"""Tests for the rendering controls: fixed font size and horizontal padding.
+"""Tests for the rendering controls: fixed font size and text spacing.
 
 Covers:
   - the "Fixed" checkbox pins render_settings() to a single font size so every
     block on the page renders at the toolbar size instead of auto-fitting
-  - the horizontal-margin dropdown shrinks the wrap width and keeps the text
-    off the bubble edges
-  - h_margin persists through TextItemProperties and defaults to 0 for legacy
-    project state that predates the field
+  - the letter/word-spacing dropdowns change the document's font metrics so the
+    text wraps wider or tighter, and the auto-fit accounts for the spacing
+  - spacing persists through TextItemProperties and defaults to 0 for legacy
+    project state that predates the fields
 """
 
 import os
@@ -15,16 +15,13 @@ if os.environ.get("QT_QPA_PLATFORM", "") == "":
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 import pytest
+from PySide6 import QtCore
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPixmap, QTextCursor
+from PySide6.QtGui import QImage, QPixmap, QTextCursor, QTextDocument, QUndoStack
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
                                QPushButton, QWidget)
 
-from app.ui.canvas.text.text_item_properties import (
-    TextItemProperties,
-    get_h_margins,
-    set_h_margins,
-)
+from app.ui.canvas.text.text_item_properties import TextItemProperties
 from app.ui.canvas.image_viewer import ImageViewer
 from app.controllers.text import TextController
 from modules.utils.textblock import TextBlock
@@ -50,6 +47,10 @@ class _FakeSettingsPage:
         self.ui.max_font_spinbox = QDoubleSpinBox()
         self.ui.max_font_spinbox.setValue(40)
         self.ui.uppercase_checkbox = QCheckBox()
+
+    def _set_spinboxes(self, min_value, max_value):
+        self.ui.min_font_spinbox.setValue(min_value)
+        self.ui.max_font_spinbox.setValue(max_value)
 
 
 class _FakeMain:
@@ -80,18 +81,28 @@ class _FakeMain:
         self.line_spacing_dropdown = QComboBox()
         self.line_spacing_dropdown.addItems(["1.0", "1.2"])
         self.line_spacing_dropdown.setEditable(True)
-        self.h_margin_dropdown = QComboBox()
-        self.h_margin_dropdown.addItems(["0", "4", "6"])
-        self.h_margin_dropdown.setEditable(True)
+        self.letter_spacing_dropdown = QComboBox()
+        self.letter_spacing_dropdown.addItems(["-2", "-1", "0", "1", "2", "3", "4", "5", "6"])
+        self.letter_spacing_dropdown.setCurrentText("0")
+        self.letter_spacing_dropdown.setEditable(True)
+        self.word_spacing_dropdown = QComboBox()
+        self.word_spacing_dropdown.addItems(["-4", "-2", "0", "2", "4", "6", "8", "10", "12"])
+        self.word_spacing_dropdown.setCurrentText("0")
+        self.word_spacing_dropdown.setEditable(True)
         self.t_combo = QComboBox()
         self.t_combo.addItem("English")
         self.lang_mapping = {"English": "English"}
+        # The spacing handlers route through _apply_format_to_selected, which
+        # transfers the translation panel's selection to the item; an empty
+        # selection means "whole block", which is what these tests exercise.
+        self.t_text_edit = type("P", (), {"textCursor": lambda self: QTextCursor(QTextDocument())})()
         self.image_viewer = viewer
         self.webtoon_mode = False
         self.blk_list = []
         self.curr_img_idx = 0
         self.image_files = ["x.png"]
-        self.undo_group = type("G", (), {"activeStack": lambda self: None})()
+        self.undo_group = type("G", (), {"activeStack": lambda self: self._stack})()
+        self.undo_group._stack = QUndoStack()
         self.button_to_alignment = {1: Qt.AlignmentFlag.AlignCenter}
 
     def push_command(self, command):
@@ -105,6 +116,13 @@ def _make_controller(main):
     controller = TextController.__new__(TextController)
     controller.main = main
     controller._suspend_text_command = False
+    # undo/redo of a format command refreshes the toolbar; set_values_for_blk_item
+    # blocks these widgets while writing back the item's values.
+    controller.widgets_to_block = []
+    # The toolbar refresh needs the full widget tree (alignment button group
+    # etc.), which _FakeMain does not model; the tests assert on item geometry
+    # directly, so skip it.
+    controller._refresh_toolbar_for_item = lambda item: None
     return controller
 
 
@@ -179,93 +197,6 @@ def test_on_blk_rendered_honours_fixed_size(app, viewer_parent):
     assert item.document().size().height() > 60.0
 
 
-# ── horizontal margin ────────────────────────────────────────────────────────
-
-def test_set_and_get_h_margins_roundtrip(app):
-    from app.ui.canvas.text_item import TextBlockItem
-
-    item = TextBlockItem("hello world", font_family="Sans Serif", font_size=20)
-    item.setTextWidth(200)
-    set_h_margins(item.document(), 6.0)
-    assert get_h_margins(item.document()) == 6.0
-
-
-def test_h_margins_shrink_the_wrap_area(app):
-    from app.ui.canvas.text_item import TextBlockItem
-
-    item = TextBlockItem("word " * 12, font_family="Sans Serif", font_size=20)
-    item.setTextWidth(200)
-    height_before = item.document().size().height()
-    set_h_margins(item.document(), 10.0)
-    item.document().setTextWidth(200)
-    height_after = item.document().size().height()
-    # Padding narrows the writable area, so the text wraps onto more lines.
-    assert height_after > height_before
-
-
-def test_on_blk_rendered_applies_h_margin(app, viewer_parent):
-    viewer = ImageViewer(viewer_parent)
-
-    image = QImage(200, 200, QImage.Format.Format_RGB32)
-    image.fill(Qt.GlobalColor.white)
-    viewer.setPhoto(QPixmap.fromImage(image))
-
-    main = _FakeMain(viewer)
-    main.h_margin_dropdown.setCurrentText("6")
-    controller = _make_controller(main)
-
-    blk = TextBlock()
-    blk.xyxy = [10, 10, 170, 170]
-    blk.translation = "hello world this is a test"
-    controller.on_blk_rendered("hello world this is a test", 20, blk, "x.png")
-
-    item = viewer.text_items[-1]
-    assert get_h_margins(item.document()) == 6.0
-    # Bubble width 160 minus 2 * 6 padding.
-    assert abs(item.boundingRect().width() - 148.0) < 1.0
-
-
-def test_on_blk_rendered_without_margin_keeps_full_width(app, viewer_parent):
-    viewer = ImageViewer(viewer_parent)
-
-    image = QImage(200, 200, QImage.Format.Format_RGB32)
-    image.fill(Qt.GlobalColor.white)
-    viewer.setPhoto(QPixmap.fromImage(image))
-
-    main = _FakeMain(viewer)
-    controller = _make_controller(main)
-
-    blk = TextBlock()
-    blk.xyxy = [10, 10, 170, 170]
-    blk.translation = "hello world this is a test"
-    controller.on_blk_rendered("hello world this is a test", 20, blk, "x.png")
-
-    item = viewer.text_items[-1]
-    assert get_h_margins(item.document()) == 0.0
-    assert abs(item.boundingRect().width() - 160.0) < 1.0
-
-
-# ── persistence ──────────────────────────────────────────────────────────────
-
-def test_h_margin_roundtrips_through_properties(app):
-    from app.ui.canvas.text_item import TextBlockItem
-
-    item = TextBlockItem("hello world", font_family="Sans Serif", font_size=20)
-    item.setTextWidth(200)
-    set_h_margins(item.document(), 6.0)
-
-    props = TextItemProperties.from_text_item(item)
-    assert props.h_margin == 6.0
-    assert props.to_dict()["h_margin"] == 6.0
-
-    restored = TextItemProperties.from_dict(props.to_dict())
-    assert restored.h_margin == 6.0
-
-
-def test_h_margin_defaults_to_zero_for_legacy_state(app):
-    props = TextItemProperties.from_dict({"font_size": 20})
-    assert props.h_margin == 0.0
-
 
 # ── line spacing below 1.0 ───────────────────────────────────────────────────
 
@@ -318,33 +249,6 @@ def test_multi_select_line_spacing_hits_all_blocks(app, viewer_parent):
     assert heights == [80.0, 80.0, 80.0]
 
 
-def test_multi_select_h_margin_hits_all_blocks(app, viewer_parent):
-    viewer = ImageViewer(viewer_parent)
-    image = QImage(200, 200, QImage.Format.Format_RGB32)
-    image.fill(Qt.GlobalColor.white)
-    viewer.setPhoto(QPixmap.fromImage(image))
-
-    main = _FakeMain(viewer)
-    controller = _make_controller(main)
-
-    for x, text in ((10, "aaa bbb ccc"), (60, "ddd eee fff"), (110, "ggg hhh iii")):
-        blk = TextBlock()
-        blk.xyxy = [x, 10, x + 50, 60]
-        blk.translation = text
-        controller.on_blk_rendered(text, 20, blk, "x.png")
-
-    items = list(viewer.text_items)
-    for item in items:
-        item.selected = True
-    main.curr_tblock_item = items[0]
-
-    main.h_margin_dropdown.setEditText("6")
-    controller.on_h_margin_change("6")
-
-    margins = [get_h_margins(item.document()) for item in items]
-    assert margins == [6.0, 6.0, 6.0]
-
-
 def test_multi_select_font_size_hits_all_blocks(app, viewer_parent):
     """Font size already worked via _apply_format_to_selected; kept as a guard
     so the three controls stay consistent."""
@@ -371,3 +275,331 @@ def test_multi_select_font_size_hits_all_blocks(app, viewer_parent):
     controller.on_font_size_change("24")
 
     assert [item.font_size for item in items] == [24, 24, 24]
+
+
+# ── fixed font size render mode ──────────────────────────────────────────────
+
+def test_fixed_mode_pins_every_block_to_one_size(app):
+    from modules.rendering.render import pyside_word_wrap
+    from PySide6.QtCore import Qt
+
+    text = "word " * 8
+    sizes = []
+    for bw, bh in ((120, 60), (400, 80), (80, 80), (300, 300)):
+        _, size, _, _ = pyside_word_wrap(
+            text, "Sans Serif", bw, bh, 1.2, 1.0, False, False, False,
+            Qt.AlignmentFlag.AlignCenter, Qt.LayoutDirection.LeftToRight,
+            init_font_size=24, min_font_size=24, vertical=False,
+            no_space_language=False, return_metrics=True,
+        )
+        sizes.append(size)
+    assert sizes == [24, 24, 24, 24]
+
+
+def test_fixed_mode_off_keeps_per_block_autofit(app):
+    from modules.rendering.render import pyside_word_wrap
+    from PySide6.QtCore import Qt
+
+    text = "word " * 8
+    sizes = []
+    for bw, bh in ((120, 60), (400, 80), (300, 300)):
+        _, size, _, _ = pyside_word_wrap(
+            text, "Sans Serif", bw, bh, 1.2, 1.0, False, False, False,
+            Qt.AlignmentFlag.AlignCenter, Qt.LayoutDirection.LeftToRight,
+            init_font_size=40, min_font_size=4, vertical=False,
+            no_space_language=False, return_metrics=True,
+        )
+        sizes.append(size)
+    # A tiny box shrinks, a big box grows: the legacy auto-fit is intact.
+    assert sizes[0] < sizes[1] <= sizes[2]
+
+
+def test_render_settings_fixed_pins_min_equal_to_max(app):
+    main = _FakeMain(None)
+    controller = _make_controller(main)
+    main.settings_page._set_spinboxes(4, 40)
+
+    main.fixed_font_size_checkbox.setChecked(False)
+    settings = controller.render_settings()
+    assert settings.min_font_size == 4 and settings.max_font_size == 40
+
+    main.fixed_font_size_checkbox.setChecked(True)
+    main.font_size_dropdown.setCurrentText("24")
+    settings = controller.render_settings()
+    assert settings.min_font_size == settings.max_font_size == 24
+
+
+# ── letter / word spacing ─────────────────────────────────────────────────────
+
+def test_render_settings_reads_spacing_dropdowns(app):
+    main = _FakeMain(None)
+    controller = _make_controller(main)
+
+    main.letter_spacing_dropdown.setCurrentText("3")
+    main.word_spacing_dropdown.setCurrentText("6")
+    settings = controller.render_settings()
+    assert settings.letter_spacing == 3.0
+    assert settings.word_spacing == 6.0
+
+
+def test_render_settings_spacing_falls_back_on_partial_input(app):
+    main = _FakeMain(None)
+    controller = _make_controller(main)
+
+    main.letter_spacing_dropdown.setEditText("-")
+    main.word_spacing_dropdown.setEditText("abc")
+    settings = controller.render_settings()
+    assert settings.letter_spacing == 0.0
+    assert settings.word_spacing == 0.0
+
+
+def test_apply_spacing_changes_document_metrics(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.setPlainText(text)
+    item.setTextWidth(300)
+    height_before = item.document().size().height()
+
+    item.letter_spacing = 6.0
+    item.word_spacing = 12.0
+    item.apply_spacing()
+
+    # Wider text wraps onto more lines, so the document grows.
+    assert item.document().size().height() > height_before
+    font = item.document().defaultFont()
+    assert font.letterSpacing() == 6.0
+    assert font.wordSpacing() == 12.0
+
+
+def test_apply_spacing_negative_tightens(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.setPlainText(text)
+    item.setTextWidth(300)
+    height_before = item.document().size().height()
+
+    item.letter_spacing = -1.0
+    item.apply_spacing()
+    assert item.document().size().height() <= height_before
+
+
+def test_apply_spacing_zero_is_a_noop(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    item = TextBlockItem("word word", font_family="Sans Serif", font_size=20)
+    item.setPlainText("word word")
+    item.setTextWidth(300)
+    item.apply_spacing()  # defaults are 0; must not raise or change metrics
+    assert item.document().defaultFont().letterSpacing() == 0.0
+
+
+def test_spacing_survives_set_font_size(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    text = "word word word word word"
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=20)
+    item.setPlainText(text)
+    item.setTextWidth(300)
+    item.letter_spacing = 6.0
+    item.word_spacing = 12.0
+    item.apply_spacing()
+
+    item.set_font_size(14)
+
+    font = item.document().defaultFont()
+    assert font.letterSpacing() == 6.0
+    assert font.wordSpacing() == 12.0
+
+
+def test_spacing_roundtrips_through_properties(app):
+    from app.ui.canvas.text_item import TextBlockItem
+
+    item = TextBlockItem("hello world", font_family="Sans Serif", font_size=20)
+    item.setTextWidth(200)
+    item.letter_spacing = 2.5
+    item.word_spacing = 4.0
+
+    props = TextItemProperties.from_text_item(item)
+    assert props.letter_spacing == 2.5
+    assert props.word_spacing == 4.0
+
+    d = props.to_dict()
+    assert d["letter_spacing"] == 2.5
+    assert d["word_spacing"] == 4.0
+
+    restored = TextItemProperties.from_dict(d)
+    assert restored.letter_spacing == 2.5
+    assert restored.word_spacing == 4.0
+
+
+def test_spacing_defaults_to_zero_for_legacy_state(app):
+    props = TextItemProperties.from_dict({"font_size": 20})
+    assert props.letter_spacing == 0.0
+    assert props.word_spacing == 0.0
+
+
+def test_pyside_word_wrap_accounts_for_spacing(app):
+    """The measuring font must carry the spacing, otherwise the auto-fit picks
+    a size that overflows once the spacing is applied."""
+    from modules.rendering.render import pyside_word_wrap
+    from PySide6.QtCore import Qt
+
+    text = "word word word word word"
+    # Same box and target size, with and without spacing.
+    _, size_plain, _, h_plain = pyside_word_wrap(
+        text, "Sans Serif", 300, 200, 1.2, 1.0, False, False, False,
+        Qt.AlignmentFlag.AlignCenter, Qt.LayoutDirection.LeftToRight,
+        init_font_size=20, min_font_size=8, vertical=False,
+        no_space_language=False, return_metrics=True,
+    )
+    _, size_spaced, _, h_spaced = pyside_word_wrap(
+        text, "Sans Serif", 300, 200, 1.2, 1.0, False, False, False,
+        Qt.AlignmentFlag.AlignCenter, Qt.LayoutDirection.LeftToRight,
+        init_font_size=20, min_font_size=8, vertical=False,
+        no_space_language=False, return_metrics=True,
+        letter_spacing=6.0, word_spacing=12.0,
+    )
+    # Spaced text is wider at the same size, so it either wraps taller or the
+    # fit shrinks the font; in both cases the measured height differs.
+    assert (h_spaced != h_plain) or (size_spaced != size_plain)
+
+
+def test_on_blk_rendered_applies_spacing(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(300, 300, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+
+    main = _FakeMain(viewer)
+    main.letter_spacing_dropdown.setCurrentText("4")
+    main.word_spacing_dropdown.setCurrentText("8")
+    controller = _make_controller(main)
+
+    blk = TextBlock()
+    blk.xyxy = [50, 50, 250, 250]
+    blk.translation = "word " * 8
+    controller.on_blk_rendered("word " * 8, 20, blk, "x.png")
+
+    item = viewer.text_items[-1]
+    assert item.letter_spacing == 4.0
+    assert item.word_spacing == 8.0
+    font = item.document().defaultFont()
+    assert font.letterSpacing() == 4.0
+    assert font.wordSpacing() == 8.0
+
+
+def _render_one(controller, xyxy, text, font=20):
+    blk = TextBlock()
+    blk.xyxy = xyxy
+    blk.translation = text
+    controller.on_blk_rendered(text, font, blk, "x.png")
+    return controller.main.image_viewer.text_items[-1]
+
+
+def test_on_letter_spacing_change_refits(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    item = _render_one(controller, [50, 50, 350, 350], "word " * 8)
+    main.curr_tblock_item = item
+    h_before = item.document().size().height()
+
+    main.letter_spacing_dropdown.setEditText("5")
+    controller.on_letter_spacing_change("5")
+
+    assert item.letter_spacing == 5.0
+    assert item.document().size().height() != h_before
+
+
+def test_on_spacing_change_ignores_partial_input(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    item = _render_one(controller, [50, 50, 350, 350], "word " * 8)
+    main.curr_tblock_item = item
+    before = item.letter_spacing
+
+    for partial in ("-", "", "--", "abc", None):
+        controller.on_letter_spacing_change(partial)  # must not raise
+        controller.on_word_spacing_change(partial)
+
+    assert item.letter_spacing == before
+
+    controller.on_letter_spacing_change("3")
+    assert item.letter_spacing == 3.0
+
+
+def test_on_spacing_change_applies_to_all_when_nothing_selected(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    items = [
+        _render_one(controller, [50, 50, 150, 150], "word " * 4),
+        _render_one(controller, [200, 50, 300, 150], "word " * 5),
+        _render_one(controller, [50, 200, 150, 300], "word " * 6),
+    ]
+    main.curr_tblock_item = None
+    for item in items:
+        item.selected = False
+
+    controller.on_word_spacing_change("6")
+
+    assert [item.word_spacing for item in items] == [6.0, 6.0, 6.0]
+
+
+def test_on_spacing_change_prefers_selection_over_all(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    selected = _render_one(controller, [50, 50, 150, 150], "word " * 4)
+    other = _render_one(controller, [200, 50, 300, 150], "word " * 5)
+    selected.selected = True
+    other.selected = False
+    main.curr_tblock_item = None
+
+    controller.on_letter_spacing_change("2")
+
+    assert selected.letter_spacing == 2.0
+    assert other.letter_spacing == 0.0
+
+
+def test_on_spacing_change_undo_restores_value(app, viewer_parent):
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    item = _render_one(controller, [50, 50, 350, 350], "word " * 8)
+    main.curr_tblock_item = item
+    stack = main.undo_group.activeStack()
+
+    controller.on_letter_spacing_change("4")
+    assert item.letter_spacing == 4.0
+
+    stack.undo()
+    assert item.letter_spacing == 0.0
+
+    stack.redo()
+    assert item.letter_spacing == 4.0

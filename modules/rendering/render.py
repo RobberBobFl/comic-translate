@@ -37,6 +37,8 @@ class TextRenderingSettings:
     underline: bool
     line_spacing: str
     direction: Qt.LayoutDirection
+    letter_spacing: float = 0.0
+    word_spacing: float = 0.0
 
 def array_to_pil(rgb_image: np.ndarray):
     # Image is already in RGB format, just convert to PIL
@@ -312,7 +314,9 @@ def pyside_word_wrap(
     min_font_size: int = 10, 
     vertical: bool = False,
     no_space_language: bool = False,
-    return_metrics: bool = False
+    return_metrics: bool = False,
+    letter_spacing: float = 0.0,
+    word_spacing: float = 0.0
 ) -> tuple:
     
     """Break long text to multiple lines, and find the largest point size
@@ -324,7 +328,13 @@ def pyside_word_wrap(
         font.setBold(bold)
         font.setItalic(italic)
         font.setUnderline(underline)
-
+        # The measuring font must carry the same letter/word spacing as the
+        # rendered document, otherwise the auto-fit picks a size that
+        # overflows once the spacing is applied.
+        if letter_spacing != 0.0:
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+        if word_spacing != 0.0:
+            font.setWordSpacing(word_spacing)
         return font
 
     def eval_metrics(
@@ -480,7 +490,9 @@ def manual_wrap(
     alignment: Qt.AlignmentFlag, 
     direction: Qt.LayoutDirection, 
     init_font_size: int = 40, 
-    min_font_size: int = 10
+    min_font_size: int = 10,
+    letter_spacing: float = 0.0,
+    word_spacing: float = 0.0
 ):
     
     target_lang = main_page.lang_mapping.get(main_page.t_combo.currentText(), None)
@@ -510,7 +522,10 @@ def manual_wrap(
             init_font_size, 
             min_font_size,
             vertical,
-            is_no_space_lang(trg_lng_cd)
+            is_no_space_lang(trg_lng_cd),
+            False,
+            letter_spacing,
+            word_spacing
         )
         
         main_page.blk_rendered.emit(translation, font_size, blk, image_path)

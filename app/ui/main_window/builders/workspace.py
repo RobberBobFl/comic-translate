@@ -246,19 +246,29 @@ class WorkspaceMixin:
         self.underline_button = self.create_tool_button(svg="underline.svg", checkable=True)
         self.underline_button.setToolTip(self.tr("Underline"))
 
-        self.h_margin_dropdown = MComboBox().small()
-        self.h_margin_dropdown.setToolTip(self.tr("Horizontal padding inside the bubble"))
-        self.h_margin_dropdown.addItems(["0", "2", "4", "6", "8", "10"])
-        self.h_margin_dropdown.setCurrentText("0")
-        self.h_margin_dropdown.setFixedWidth(60)
-        self.h_margin_dropdown.set_editable(True)
+        # Letter and word spacing (px). Editable so any value can be typed,
+        # including negatives (tighter) and fractions.
+        self.letter_spacing_dropdown = MComboBox().small()
+        self.letter_spacing_dropdown.setToolTip(self.tr("Spacing between letters (px)"))
+        self.letter_spacing_dropdown.addItems(["-2", "-1", "0", "1", "2", "3", "4", "5", "6"])
+        self.letter_spacing_dropdown.setCurrentText("0")
+        self.letter_spacing_dropdown.setFixedWidth(60)
+        self.letter_spacing_dropdown.set_editable(True)
+
+        self.word_spacing_dropdown = MComboBox().small()
+        self.word_spacing_dropdown.setToolTip(self.tr("Spacing between words (px)"))
+        self.word_spacing_dropdown.addItems(["-4", "-2", "0", "2", "4", "6", "8", "10", "12"])
+        self.word_spacing_dropdown.setCurrentText("0")
+        self.word_spacing_dropdown.setFixedWidth(60)
+        self.word_spacing_dropdown.set_editable(True)
 
         main_text_settings_layout.addWidget(self.block_font_color_button)
         main_text_settings_layout.addWidget(self.alignment_tool_group)
         main_text_settings_layout.addWidget(self.bold_button)
         main_text_settings_layout.addWidget(self.italic_button)
         main_text_settings_layout.addWidget(self.underline_button)
-        main_text_settings_layout.addWidget(self.h_margin_dropdown)
+        main_text_settings_layout.addWidget(self.letter_spacing_dropdown)
+        main_text_settings_layout.addWidget(self.word_spacing_dropdown)
         main_text_settings_layout.addStretch()
 
         outline_settings_layout = QtWidgets.QHBoxLayout()

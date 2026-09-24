@@ -32,6 +32,10 @@ class TextFormatCommand(QUndoCommand, RectCommandBase):
         if matching_item:
             matching_item.set_text(self.new_html, self.new_item_prp.width)
             matching_item.__dict__.update(self.new_dict)
+            # Spacing lives on the item (__dict__), so it is restored by the
+            # update above; re-apply it to the document font so the relaid-out
+            # text keeps its letter/word spacing.
+            matching_item.apply_spacing()
             matching_item.update()
 
     def undo(self):
@@ -39,4 +43,5 @@ class TextFormatCommand(QUndoCommand, RectCommandBase):
         if matching_item:
             matching_item.set_text(self.old_html, self.old_item_prp.width)
             matching_item.__dict__.update(self.old_dict)
+            matching_item.apply_spacing()
             matching_item.update()

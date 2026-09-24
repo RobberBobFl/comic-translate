@@ -15,8 +15,6 @@ from app.ui.canvas.text_item import TextBlockItem
 from app.ui.canvas.text.text_item_properties import (
     TextItemProperties,
     set_center_v_margin,
-    set_h_margins,
-    get_h_margins,
 )
 
 from modules.utils.textblock import TextBlock, ensure_block_id
@@ -188,12 +186,16 @@ class TextController:
         direction = render_settings.direction
         vertical = is_vertical_block(blk, trg_lng_cd)
 
-        # Horizontal padding keeps the wrapped text off the bubble's left/right
-        # edges; 0 keeps the previous full-width behaviour.
+        # Letter / word spacing (px). Editable dropdowns, so any value can be
+        # typed: negatives tighten, fractions are honoured as-is.
         try:
-            h_margin = max(0.0, float(self.main.h_margin_dropdown.currentText()))
+            letter_spacing = float(self.main.letter_spacing_dropdown.currentText())
         except (TypeError, ValueError):
-            h_margin = 0.0
+            letter_spacing = 0.0
+        try:
+            word_spacing = float(self.main.word_spacing_dropdown.currentText())
+        except (TypeError, ValueError):
+            word_spacing = 0.0
 
         properties = TextItemProperties(
             text=text,
@@ -212,6 +214,8 @@ class TextController:
             rotation=blk.angle,
             vertical=vertical,
             block_id=ensure_block_id(blk),
+            letter_spacing=letter_spacing,
+            word_spacing=word_spacing,
         )
 
         # Anchor the translation to the speech bubble (when detected) instead of
@@ -227,12 +231,14 @@ class TextController:
         # non-vertical block (including rotated ones), so the text wraps to the
         # bubble width and can be centered vertically regardless of angle.
         if not vertical:
-            properties.width = max(1.0, bw - 2.0 * h_margin)
-            if h_margin > 0:
-                properties.h_margin = h_margin
+            properties.width = bw
 
         text_item = self.main.image_viewer.add_text_item(properties)
         text_item.set_plain_text(text)
+        # The spacing change handlers re-fit an existing item against the same
+        # box, so keep the render geometry on the item itself (not just on
+        # properties, which TextFormatCommand snapshots separately).
+        text_item._render_box = (bx, by, bw, bh)
 
         # Vertically center the text inside the bubble and shrink the font if it
         # would overflow, so the translation sits in the middle of the bubble
@@ -249,12 +255,6 @@ class TextController:
                 min_font = max(1.0, blk.min_font_size if blk.min_font_size > 0 else 4.0)
             fit_and_center_text_item(text_item, bw, bh, min_font, alignment,
                                      render_settings.max_font_size)
-
-            # set_plain_text() above rebuilds the document and drops the root
-            # frame margins, so the horizontal padding is applied last, the same
-            # way fit_and_center_text_item applies the vertical one.
-            if h_margin > 0:
-                set_h_margins(text_item.document(), h_margin)
 
         # Update or append the block in the main controller's blk_list
         existing_idx = next(
@@ -337,8 +337,13 @@ class TextController:
         item.setTextCursor(cursor)
         return True
 
-    def _apply_format_to_selected(self, macro_name: str, apply_fn):
+    def _apply_format_to_selected(self, macro_name: str, apply_fn, include_all: bool = False):
+        # include_all: when nothing is selected, fall back to every block on the
+        # page so a toolbar control also works without clicking a block first.
         items = self._selected_text_items()
+        if not items and include_all:
+            items = [ti for ti in self.main.image_viewer.text_items
+                     if isinstance(ti, TextBlockItem)]
         if not items:
             return
 
@@ -644,18 +649,67 @@ class TextController:
                 lambda item: item.set_line_spacing(spacing),
             )
 
-    def on_h_margin_change(self, margin: str):
-        if self.main.curr_tblock_item and margin:
-            margin_px = max(0.0, float(margin))
+    def _on_spacing_change(self, kind: str, value: str):
+        """Shared handler for letter/word spacing.
 
-            def _apply(item):
-                set_h_margins(item.document(), margin_px)
-                item.update()
+        ``kind`` is 'letter' or 'word'. The dropdowns are editable, so
+        currentTextChanged fires on every keystroke: '-', '1.' etc. are valid
+        prefixes but not parseable yet. Ignore those rather than crashing; the
+        final value is applied when the user finishes typing.
+        """
+        if not value:
+            return
+        try:
+            # No clamping: negatives tighten the text, fractions are honoured.
+            px = float(value)
+        except (TypeError, ValueError):
+            return
 
-            self._apply_format_to_selected(
-                "change_text_h_margin",
-                _apply,
-            )
+        def _apply(item):
+            if kind == "letter":
+                item.letter_spacing = px
+            else:
+                item.word_spacing = px
+            # Re-apply the document font so the new spacing takes effect, then
+            # re-fit/re-center against the original render box so the text
+            # still fills the bubble.
+            item.apply_spacing()
+            box = getattr(item, "_render_box", None)
+            if box is None:
+                # Item was not created by on_blk_rendered (e.g. a legacy
+                # project): fall back to the current geometry.
+                bx, by = item.pos().x(), item.pos().y()
+                bw = item.textWidth()
+                bh = item.boundingRect().height()
+                box = (bx, by, bw, bh)
+            bx, by, bw, bh = box
+
+            item.setTextWidth(bw)
+
+            min_font = max(1.0, getattr(item, "font_size", 20.0) * 0.25)
+            max_font = 0.0
+            render_settings = self.render_settings()
+            if render_settings.max_font_size > 0 and \
+               render_settings.min_font_size == render_settings.max_font_size:
+                min_font = float(render_settings.min_font_size)
+                max_font = float(render_settings.max_font_size)
+            fit_and_center_text_item(item, bw, bh, min_font,
+                                     item.alignment, max_font)
+            item.update()
+
+        # Selected blocks if any (multi-select), otherwise every block on the
+        # page, so the control also works without clicking a block first.
+        self._apply_format_to_selected(
+            f"change_text_{kind}_spacing",
+            _apply,
+            include_all=True,
+        )
+
+    def on_letter_spacing_change(self, spacing: str):
+        self._on_spacing_change("letter", spacing)
+
+    def on_word_spacing_change(self, spacing: str):
+        self._on_spacing_change("word", spacing)
 
     def on_font_color_change(self):
         font_color = self.main.get_color()
@@ -694,24 +748,35 @@ class TextController:
             command.finalize_new_state()
             self.main.push_command(command)
 
-    def _set_h_margin_dropdown(self, item=None, props=None):
-        """Show the current horizontal padding in the toolbar, without
-        triggering the change signal (which would push an undo command)."""
-        margin = None
-        if item is not None:
-            try:
-                margin = get_h_margins(item.document())
-            except Exception:
-                margin = None
-        elif props is not None:
-            margin = props.get('h_margin') if isinstance(props, dict) else getattr(props, 'h_margin', None)
-        if margin is None:
+    def _set_spacing_dropdown(self, dropdown, value):
+        """Show a spacing value in the toolbar without triggering the change
+        signal (which would push an undo command)."""
+        if value is None:
             return
-        self.main.h_margin_dropdown.blockSignals(True)
         try:
-            self.main.h_margin_dropdown.setCurrentText(str(int(margin)))
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        dropdown.blockSignals(True)
+        try:
+            # Preserve fractional values instead of truncating to int.
+            text = str(int(value)) if value.is_integer() else str(value)
+            dropdown.setCurrentText(text)
         finally:
-            self.main.h_margin_dropdown.blockSignals(False)
+            dropdown.blockSignals(False)
+
+    def _refresh_spacing_dropdowns(self, item=None, props=None):
+        """Sync the letter/word spacing dropdowns from an item or props dict."""
+        if item is not None:
+            letter = getattr(item, "letter_spacing", None)
+            word = getattr(item, "word_spacing", None)
+        elif props is not None:
+            letter = props.get('letter_spacing') if isinstance(props, dict) else getattr(props, 'letter_spacing', None)
+            word = props.get('word_spacing') if isinstance(props, dict) else getattr(props, 'word_spacing', None)
+        else:
+            return
+        self._set_spacing_dropdown(self.main.letter_spacing_dropdown, letter)
+        self._set_spacing_dropdown(self.main.word_spacing_dropdown, word)
 
     def _refresh_toolbar_for_item(self, item):
         """Refresh the toolbar to reflect the item's current selection (or its
@@ -855,7 +920,7 @@ class TextController:
             self.main.outline_width_dropdown.setCurrentText(str(text_item.outline_width))
             self.main.outline_checkbox.setChecked(text_item.outline)
 
-            self._set_h_margin_dropdown(item=text_item)
+            self._refresh_spacing_dropdowns(item=text_item)
 
             self.main.bold_button.setChecked(text_item.bold)
             self.main.italic_button.setChecked(text_item.italic)
@@ -921,7 +986,7 @@ class TextController:
             self.main.outline_width_dropdown.setCurrentText(str(outline_width)) if outline_width else None
             self.main.outline_checkbox.setChecked(outline)
 
-            self._set_h_margin_dropdown(props=item_highlighted)
+            self._refresh_spacing_dropdowns(props=item_highlighted)
 
             self.main.bold_button.setChecked(bold)
             self.main.italic_button.setChecked(italic)
@@ -991,8 +1056,13 @@ class TextController:
             align_id = self.main.alignment_tool_group.get_dayu_checked()
             alignment = self.main.button_to_alignment[align_id]
             direction = render_settings.direction
-            max_font_size = self.main.settings_page.get_max_font_size()
-            min_font_size = self.main.settings_page.get_min_font_size()
+            # Read the toolbar sizes through render_settings() so the "Fixed"
+            # checkbox is honoured: when it is checked, min == max == the chosen
+            # size, which pins every block to one size (no binary-search fit).
+            # When unchecked, these are the settings-page spinbox values and the
+            # per-block auto-fit behaves exactly as before.
+            max_font_size = render_settings.max_font_size
+            min_font_size = render_settings.min_font_size
             setting_font_color = QColor(render_settings.color)
             outline_color = (
                 QColor(render_settings.outline_color)
@@ -1068,6 +1138,8 @@ class TextController:
                             vertical,
                             is_no_space_lang(trg_lng_cd),
                             return_metrics=True,
+                            letter_spacing=render_settings.letter_spacing,
+                            word_spacing=render_settings.word_spacing,
                         )
 
                         font_color = get_smart_text_color(blk.font_color, setting_font_color)
@@ -1245,8 +1317,11 @@ class TextController:
             lambda: format_translations(self.main.blk_list, trg_lng_cd, upper_case=upper)
             )
 
-            min_font_size = self.main.settings_page.get_min_font_size()
-            max_font_size = self.main.settings_page.get_max_font_size()
+            # Through render_settings() so the "Fixed" checkbox is honoured
+            # (min == max pins every block to one size, no auto-fit). Unchecked,
+            # these are the spinbox values and the legacy auto-fit is preserved.
+            min_font_size = render_settings.min_font_size
+            max_font_size = render_settings.max_font_size
 
             align_id = self.main.alignment_tool_group.get_dayu_checked()
             alignment = self.main.button_to_alignment[align_id]
@@ -1277,7 +1352,9 @@ class TextController:
                 alignment, 
                 direction, 
                 max_font_size,
-                min_font_size
+                min_font_size,
+                render_settings.letter_spacing,
+                render_settings.word_spacing
             )
 
     def on_render_complete(self, rendered_image: np.ndarray):
@@ -1397,6 +1474,17 @@ class TextController:
             min_font = int(self.main.settings_page.ui.min_font_spinbox.value())
             max_font = int(self.main.settings_page.ui.max_font_spinbox.value())
 
+        # Letter/word spacing: editable dropdowns, so any value can be typed.
+        # Unparseable/partial input (e.g. '-' while typing) falls back to 0.
+        try:
+            letter_spacing = float(self.main.letter_spacing_dropdown.currentText())
+        except (TypeError, ValueError):
+            letter_spacing = 0.0
+        try:
+            word_spacing = float(self.main.word_spacing_dropdown.currentText())
+        except (TypeError, ValueError):
+            word_spacing = 0.0
+
         return TextRenderingSettings(
             alignment_id = self.main.alignment_tool_group.get_dayu_checked(),
             font_family = self.main.font_dropdown.currentText(),
@@ -1411,5 +1499,7 @@ class TextController:
             italic = self.main.italic_button.isChecked(),
             underline = self.main.underline_button.isChecked(),
             line_spacing = self.main.line_spacing_dropdown.currentText(),
-            direction = direction
+            direction = direction,
+            letter_spacing = letter_spacing,
+            word_spacing = word_spacing,
         )

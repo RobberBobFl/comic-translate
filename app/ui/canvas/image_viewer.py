@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 
 from .text_item import TextBlockItem
-from .text.text_item_properties import TextItemProperties, set_center_v_margin, set_h_margins
+from .text.text_item_properties import TextItemProperties, set_center_v_margin
 from .rectangle import MoveableRectItem
 from .rotate_cursor import RotateHandleCursors
 from .drawing_manager import DrawingManager
@@ -611,11 +611,11 @@ class ImageViewer(QGraphicsView):
         if getattr(properties, "v_margin", 0) and not getattr(properties, "vertical", False):
             set_center_v_margin(item.document(), properties.v_margin)
 
-        # Horizontal padding keeps text off the bubble's left/right edges. Like
-        # the vertical margin it lives on the root frame, whose margins the
-        # layout engine subtracts from the wrapping width.
-        if getattr(properties, "h_margin", 0):
-            set_h_margins(item.document(), properties.h_margin)
+        # Letter/word spacing are applied to the document font by the item
+        # itself (see TextBlockItem.apply_spacing); seed the values here so a
+        # loaded project starts with the saved spacing.
+        item.letter_spacing = float(getattr(properties, "letter_spacing", 0.0) or 0.0)
+        item.word_spacing = float(getattr(properties, "word_spacing", 0.0) or 0.0)
         
         # Set direction if specified
         item.set_direction(properties.direction)
