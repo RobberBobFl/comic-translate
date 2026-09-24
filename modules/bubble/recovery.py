@@ -160,25 +160,45 @@ def interior_color(rgb: np.ndarray, gray: np.ndarray, text_xyxy, bubble_xyxy,
 
 # ------------------------------------------------------------------- outer Cx
 def measure_stroke_width(gray: np.ndarray, interior: np.ndarray,
-                         max_r: int = 12) -> int:
+                         max_r: int = 7) -> int:
     """Stroke width in px: consecutive dark rings just outside the interior.
 
     Successive 1px dilations walk outward from the interior boundary; the
-    stroke is the run of rings whose mean grey stays below ``STROKE_GRAY``
-    (the first ring is usually the anti-aliased stroke edge, hence a limit
-    above pure black). Stage 7 measured 4-8px (median 5) this way.
+    stroke is the run of rings where a significant fraction of pixels stay
+    dark (ink outline). Stops when the ring exits the stroke into light
+    background or screentone, or hits the maximum comic stroke width (6px).
     """
     cur = (interior > 0).astype(np.uint8)
     w = 0
-    for _ in range(max_r):
+    base_median = None
+    for step in range(max_r):
         d = cv2.dilate(cur, ELL3)
         ring = (d > 0) & (cur == 0)
         if not ring.any():
             break
-        if float(gray[ring].mean()) >= STROKE_GRAY:
-            break
+        vals = gray[ring]
+        med = float(np.median(vals))
+        dark_frac = float((vals < STROKE_GRAY).mean())
+        if step == 0:
+            base_median = med
+            if dark_frac < 0.45 or med >= STROKE_GRAY:
+                break
+        else:
+            if dark_frac < 0.45 or med >= STROKE_GRAY or (med - base_median >= 30 and med >= DARK_STROKE):
+                break
         w += 1
         cur = d
+
+    w = min(w, 6)
+
+    # Safe fallback: if measured 0 (e.g. broken border / large bridge / noisy boundary),
+    # but a significant portion (>=25%) of the boundary is dark ink, fall back to 4px.
+    if w == 0:
+        d1 = cv2.dilate((interior > 0).astype(np.uint8), ELL3)
+        ring0 = (d1 > 0) & (interior == 0)
+        if ring0.any() and float((gray[ring0] < DARK_STROKE).mean()) >= 0.25:
+            w = 4
+
     return w
 
 
@@ -189,15 +209,16 @@ def expand_to_outer(interior: np.ndarray, k: int) -> np.ndarray:
     return fill_holes(cur.astype(np.uint8) * 255)
 
 
-def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.4,
-                   max_frag_frac: float = 0.4, min_cont: float = 0.9):
+def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
+                   max_frag_frac: float = 0.4, min_cont: float = 0.85):
     """Drop mask regions beyond deep convexity-defect necks (tails, merged blobs).
 
     A deep defect marks a neck where the mask protrudes away from the body
     (a speech-bubble tail, or a neighbouring white region the recovery leaked
-    into). The cut runs through the defect's deepest point, perpendicular to
-    the hull edge; the side away from the mask centroid is discarded and left
-    as original pixels (never expanded, never repainted).
+    into). Tail trimming cuts across the neck between the defect notches
+    (paired defects at the tail tip, or perpendicular to the protrusion direction
+    for deep unpaired defects). The side away from the mask centroid is discarded
+    and left as original pixels (never expanded, never repainted).
 
     Guards: a candidate cut is skipped when it would remove more than
     ``max_frag_frac`` of the mask or drop the text containment below
@@ -205,7 +226,8 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.4,
     the guards the original mask comes back untouched.
     """
     mask = (outer > 0).astype(np.uint8)
-    stats = {"trimmed": False, "fragments": 0.0, "containment": containment(mask, text_xyxy)}
+    orig_cont = containment(mask, text_xyxy)
+    stats = {"trimmed": False, "fragments": 0.0, "containment": orig_cont}
     if mask.sum() == 0:
         return outer, np.zeros_like(mask), stats
 
@@ -224,39 +246,97 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.4,
     dt = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
     dmax = max(1.0, float(dt.max()))
     ys, xs = np.where(mask > 0)
-    centre = (float(xs.mean()), float(ys.mean()))
+    centre = np.array([float(xs.mean()), float(ys.mean())])
     total = int(mask.sum())
     yy, xx = np.mgrid[0:H, 0:W]
 
     kept = mask.copy()
     fragments = np.zeros_like(mask)
     frag_px = 0
-    for d in defects[:, 0]:
-        depth = d[3] / 256.0
-        if depth / dmax < thresh:
-            continue
-        p0 = c[int(d[0])].reshape(2).astype(float)
-        p1 = c[int(d[1])].reshape(2).astype(float)
-        far = c[int(d[2])].reshape(2).astype(float)
-        u = p1 - p0
-        un = float(np.linalg.norm(u))
-        if un < 1e-6:
-            continue
-        u /= un
+    handled_defects = set()
 
-        def side(x, y):
-            return u[0] * (x - far[0]) + u[1] * (y - far[1])
-
-        sc = side(*centre)
-        if sc == 0:
+    # Pass 1: paired defects sharing a tail tip vertex on the convex hull
+    for i in range(len(defects)):
+        if i in handled_defects:
             continue
-        frag = (mask > 0) & (np.sign(side(xx, yy)) != np.sign(sc))
+        d1 = defects[i, 0]
+        p_tip1 = c[int(d1[1])][0].astype(float)
+        depth1 = float(d1[3]) / 256.0
+        for j in range(len(defects)):
+            if i == j or j in handled_defects:
+                continue
+            d2 = defects[j, 0]
+            p_tip2 = c[int(d2[0])][0].astype(float)
+            depth2 = float(d2[3]) / 256.0
+            if np.linalg.norm(p_tip1 - p_tip2) <= max(16.0, 0.15 * dmax):
+                if depth1 >= 4.0 and depth2 >= 4.0 and max(depth1, depth2) / dmax >= 0.16:
+                    tip_pt = (p_tip1 + p_tip2) / 2.0
+                    far1 = c[int(d1[2])][0].astype(float)
+                    far2 = c[int(d2[2])][0].astype(float)
+
+                    # Ensure tip protrudes farther from center than the notches
+                    dtip = np.linalg.norm(tip_pt - centre)
+                    if dtip <= np.linalg.norm(far1 - centre) or dtip <= np.linalg.norm(far2 - centre):
+                        continue
+
+                    v = far2 - far1
+                    vn = float(np.linalg.norm(v))
+                    if vn < 1e-6:
+                        continue
+                    n = np.array([-v[1], v[0]]) / vn
+                    if np.dot(n, tip_pt - far1) < 0:
+                        n = -n
+
+                    side = n[0] * (xx - far1[0]) + n[1] * (yy - far1[1])
+                    frag = (kept > 0) & (side > 0)
+                    area = int(frag.sum())
+                    if area == 0 or area > max_frag_frac * total:
+                        continue
+                    trial = kept & (frag == 0)
+                    if containment(trial, text_xyxy) < min(min_cont, orig_cont):
+                        continue
+
+                    kept = trial
+                    fragments |= frag
+                    frag_px += area
+                    handled_defects.add(i)
+                    handled_defects.add(j)
+
+    # Pass 2: unpaired deep defects (e.g. leaked blob or single notch)
+    for i in range(len(defects)):
+        if i in handled_defects:
+            continue
+        d = defects[i, 0]
+        depth = float(d[3]) / 256.0
+        if depth < 6.0 or depth / dmax < thresh:
+            continue
+        p0 = c[int(d[0])][0].astype(float)
+        p1 = c[int(d[1])][0].astype(float)
+        far = c[int(d[2])][0].astype(float)
+
+        dist0 = np.linalg.norm(p0 - centre)
+        dist1 = np.linalg.norm(p1 - centre)
+        tip_pt = p1 if dist1 > dist0 else p0
+        dist_tip = max(dist0, dist1)
+        dist_far = np.linalg.norm(far - centre)
+        if dist_tip <= dist_far:
+            continue
+
+        n = tip_pt - far
+        vn = float(np.linalg.norm(n))
+        if vn < 1e-6:
+            continue
+        n /= vn
+
+        side = n[0] * (xx - far[0]) + n[1] * (yy - far[1])
+        frag = (kept > 0) & (side > 0)
         area = int(frag.sum())
         if area == 0 or area > max_frag_frac * total:
             continue
         trial = kept & (frag == 0)
-        if containment(trial, text_xyxy) < min_cont:
+        if containment(trial, text_xyxy) < min(min_cont, orig_cont):
             continue
+
         kept = trial
         fragments |= frag
         frag_px += area
@@ -289,6 +369,8 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
         method = "C->Cx"
     else:
         inner = interior_color(rgb, gray, text_xyxy, bubble_xyxy, text_mask)
+        if inner is not None and containment(inner, text_xyxy) < 0.5:
+            inner = None
         method = "C2->C2x"
     if inner is None:
         return None
