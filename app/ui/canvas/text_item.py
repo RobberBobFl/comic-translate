@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsItem, \
      QApplication, QWidget, QStyleOptionGraphicsItem
 from PySide6.QtGui import QFont, QCursor, QColor, \
-     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter
+     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen
 from PySide6.QtCore import Qt, QRectF, Signal, QPointF
 import math, copy
 from dataclasses import dataclass
@@ -336,11 +336,20 @@ class TextBlockItem(QGraphicsTextItem):
         cursor = self.textCursor()
         has_selection = cursor.hasSelection()
 
+        def apply_bold(cf, v):
+            cf.setFontWeight(QFont.Bold if v else QFont.Normal)
+            if v:
+                pen = QPen(self.text_color, max(0.6, self.font_size * 0.04))
+                pen.setJoinStyle(Qt.RoundJoin)
+                cf.setTextOutline(pen)
+            else:
+                cf.setTextOutline(QPen(Qt.NoPen))
+
         format_operations = {
             'color': lambda cf, v: cf.setForeground(v),
             'font': lambda cf, v: cf.setFont(v),
             'size': lambda cf, v: cf.setFontPointSize(v),
-            'bold': lambda cf, v: cf.setFontWeight(QFont.Bold if v else QFont.Normal),
+            'bold': apply_bold,
             'italic': lambda cf, v: cf.setFontItalic(v),
             'underline': lambda cf, v: cf.setFontUnderline(v),
         }
