@@ -17,7 +17,9 @@ if os.environ.get("QT_QPA_PLATFORM", "") == "":
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 import pytest
-from PySide6.QtGui import QTextCursor
+import re
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor, QColor
 from PySide6.QtWidgets import (QApplication, QTextEdit, QToolButton, QComboBox,
                                QPushButton, QCheckBox, QGraphicsScene)
 
@@ -50,6 +52,21 @@ def _per_char(item: TextBlockItem):
         italic.append(fmt.font().italic())
         size.append(fmt.fontPointSize())
     return bold, italic, size
+
+
+def _per_char_outline(item: TextBlockItem):
+    """Return (has_pen, width, color_name) lists, one entry per character."""
+    cursor = QTextCursor(item.document())
+    n = len(item.toPlainText())
+    has_pen, width, color = [], [], []
+    for pos in range(n):
+        cursor.setPosition(pos)
+        cursor.setPosition(pos + 1, QTextCursor.MoveMode.KeepAnchor)
+        pen = cursor.charFormat().textOutline()
+        has_pen.append(pen.style() != Qt.PenStyle.NoPen)
+        width.append(pen.widthF())
+        color.append(pen.color().name())
+    return has_pen, width, color
 
 
 # ── per-span application ────────────────────────────────────────────────────
@@ -374,3 +391,153 @@ def test_consecutive_button_formats_hit_consecutive_selections(app):
     assert bold == [False] * 4 + [True] * 3 + [False] * 6
     assert italic == [False] * 8 + [True] * 5
     assert item.editing_mode is False
+
+
+# ── faux-bold stroke width/color tracking ────────────────────────────────────
+#
+# Bold readability on fonts without a real Bold face comes from a thin outline
+# in the text color. Its width is proportional to the font size, so it must be
+# re-derived whenever a bold span's size or color changes -- otherwise the
+# stroke stays baked at its old value while the glyph rescales or recolors.
+
+def _make_editable(text="hello world", size=20):
+    item = TextBlockItem(text, font_family="Sans Serif", font_size=size)
+    # Mirrors the app, which always applies the item font to the document
+    # before the user formats anything.
+    item.set_text(text, 600.0)
+    item.enter_editing_mode()
+    return item
+
+
+def test_faux_bold_width_proportional_to_font_size(app):
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+
+    item.set_bold(True)
+
+    has_pen, width, _ = _per_char_outline(item)
+    assert has_pen == [True] * 5 + [False] * 6
+    assert width[:5] == [pytest.approx(20 * 0.04)] * 5
+
+
+def test_faux_bold_width_tracks_span_font_size_change(app):
+    """Resizing an already-bold span must rescale the stroke with it."""
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+    _select_span(item, 0, 5)  # the selection survives, but be explicit
+
+    item.set_font_size(40)
+
+    has_pen, width, _ = _per_char_outline(item)
+    assert has_pen[:5] == [True] * 5
+    assert width[:5] == [pytest.approx(40 * 0.04)] * 5
+    # The rest was never bolded: no outline property at all.
+    assert has_pen[5:] == [False] * 6
+
+
+def test_faux_bold_width_uses_each_spans_own_size(app):
+    """An oversized word (e.g. an SFX) inside a smaller block must get the
+    stroke for *its* size, not the block's."""
+    item = _make_editable(text="aa bb", size=20)
+    _select_span(item, 3, 5)
+    item.set_font_size(48)
+
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+
+    _, width, _ = _per_char_outline(item)
+    # "aa" and the separator keep the block size; only "bb" was resized.
+    assert width[:3] == [pytest.approx(20 * 0.04)] * 3
+    assert width[3:5] == [pytest.approx(48 * 0.04)] * 2
+
+
+def test_faux_bold_color_tracks_span_color(app):
+    item = _make_editable()
+    _select_span(item, 0, 5)
+
+    item.set_color(QColor("red"))
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+
+    _, _, color = _per_char_outline(item)
+    assert color[:5] == ["#ff0000"] * 5
+
+    _select_span(item, 0, 5)
+    item.set_color(QColor("blue"))
+
+    _, _, color = _per_char_outline(item)
+    assert color[:5] == ["#0000ff"] * 5
+
+
+def test_faux_bold_cleared_when_bold_turned_off(app):
+    item = _make_editable()
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+
+    item.set_bold(False)
+
+    has_pen, _, _ = _per_char_outline(item)
+    assert has_pen == [False] * 11
+
+
+def test_faux_bold_survives_html_roundtrip(app):
+    """toHtml()/setHtml() is how undo/redo, save/load and the export renderer
+    move text around; the stroke must survive that trip."""
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+    html = item.toHtml()
+
+    reloaded = TextBlockItem(font_family="Sans Serif", font_size=20)
+    reloaded.set_text(html, 600.0)
+
+    has_pen, width, _ = _per_char_outline(reloaded)
+    assert has_pen == [True] * 5 + [False] * 6
+    assert width[:5] == [pytest.approx(20 * 0.04)] * 5
+
+
+def test_faux_bold_does_not_leak_onto_plain_text(app):
+    """Regression: a NoPen pen still makes toHtml() emit -qt-stroke-width,
+    which Qt reads back as a solid 1px outline -- so unbolding a span (or
+    merely having a non-bold span next to a bold one) silently thickened all
+    neighbouring text after every save/load. Stroke CSS may only ever appear
+    on bold spans, and never at all once everything is unbolded."""
+    def _stroke_spans(html):
+        return [m for m in re.findall(r'<span[^>]*>[^<]*</span>', html)
+                if '-qt-stroke' in m]
+
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+
+    html = item.toHtml()
+    leaked = [s for s in _stroke_spans(html) if 'font-weight:700' not in s]
+    assert not leaked, f"non-bold span carries a stroke: {leaked}"
+
+    # Unbolding everything must leave no stroke CSS behind at all.
+    _select_span(item, 0, 5)
+    item.set_bold(False)
+    assert '-qt-stroke' not in item.toHtml()
+
+    # And the same holds after a full round-trip through save/load.
+    reloaded = TextBlockItem(font_family="Sans Serif", font_size=20)
+    reloaded.set_text(html, 600.0)
+    has_pen, _, _ = _per_char_outline(reloaded)
+    assert has_pen == [True] * 5 + [False] * 6
+
+
+def test_faux_bold_retro_applied_to_legacy_html(app):
+    """Projects saved before the faux-bold fix carry a bold weight with no
+    -qt-stroke-* at all; loading must add the stroke."""
+    legacy = (
+        '<p style=" font-family:\'Sans Serif\'; font-size:20pt;">'
+        'plain <span style=" font-weight:700;">bold</span></p>'
+    )
+
+    item = TextBlockItem(font_family="Sans Serif", font_size=20)
+    item.set_text(legacy, 600.0)
+
+    has_pen, width, _ = _per_char_outline(item)
+    assert has_pen == [False] * 6 + [True] * 4
+    assert width[6:] == [pytest.approx(20 * 0.04)] * 4

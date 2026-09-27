@@ -1,12 +1,21 @@
 from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsItem, \
      QApplication, QWidget, QStyleOptionGraphicsItem
 from PySide6.QtGui import QFont, QCursor, QColor, \
-     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen
+     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen, QTextFormat
 from PySide6.QtCore import Qt, QRectF, Signal, QPointF
 import math, copy
 from dataclasses import dataclass
 from enum import Enum
 from .text.vertical_layout import VerticalTextDocumentLayout
+
+# Faux-bold stroke: on fonts with no Bold face (or a Bold face barely heavier
+# than Regular) weight 700 alone is not visibly heavier, so a thin outline in
+# the text color is added on top of the glyph. The width is proportional to the
+# font size and is re-derived whenever size/color change (see
+# _sync_faux_bold_outlines), otherwise the stroke would stay baked at its old
+# width while the glyph rescales.
+FAUX_BOLD_WIDTH_FACTOR = 0.04
+FAUX_BOLD_MIN_PX = 0.6
 
 
 @dataclass
@@ -336,14 +345,21 @@ class TextBlockItem(QGraphicsTextItem):
         cursor = self.textCursor()
         has_selection = cursor.hasSelection()
 
+        if has_selection:
+            fmt_start = cursor.selectionStart()
+            fmt_end = cursor.selectionEnd()
+        else:
+            fmt_start = 0
+            fmt_end = max(0, self.document().characterCount())
+
         def apply_bold(cf, v):
             cf.setFontWeight(QFont.Bold if v else QFont.Normal)
-            if v:
-                pen = QPen(self.text_color, max(0.6, self.font_size * 0.04))
-                pen.setJoinStyle(Qt.RoundJoin)
-                cf.setTextOutline(pen)
-            else:
-                cf.setTextOutline(QPen(Qt.NoPen))
+            # The outline is applied *and* removed per fragment by
+            # _sync_faux_bold_outlines, never here. mergeCharFormat cannot
+            # remove the textOutline property, and merging NoPen would still
+            # make toHtml() emit -qt-stroke-* CSS that comes back as a solid
+            # 1px outline after an HTML round-trip (undo/redo, save/load,
+            # export), thickening text the user never made bold.
 
         format_operations = {
             'color': lambda cf, v: cf.setForeground(v),
@@ -393,7 +409,80 @@ class TextBlockItem(QGraphicsTextItem):
             cleared = QTextCursor(self.document())
             self.setTextCursor(cleared)
 
+        # The faux-bold stroke is derived from each fragment's own size and
+        # color, so it must be re-synced whenever those change -- otherwise the
+        # stroke keeps its old width/color while the glyph rescales or
+        # recolors. Skipped alongside a skipped color merge so outlines stay
+        # matched to span colors that were deliberately left untouched.
+        if attribute in ("bold", "size", "font", "color") and not is_global_html_color:
+            self._sync_faux_bold_outlines(fmt_start, fmt_end)
+
         self.update()
+
+    def _sync_faux_bold_outlines(self, start: int, end: int) -> None:
+        """Reconcile the faux-bold outline of every fragment in [start, end).
+
+        The synthetic stroke is what makes bold readable on fonts whose Bold
+        face is missing or barely heavier than Regular. Two invariants are
+        enforced per fragment:
+
+        * bold -> a text outline whose width is proportional to the fragment's
+          own point size and whose color matches its foreground, so resizing
+          or recoloring a bold span rescales the stroke with it (an SFX word at
+          48pt inside a 20pt block, or a whole block resized after bolding);
+        * not bold -> no text outline *property* at all. The property has to be
+          removed (setCharFormat with a cleared copy), not overwritten with
+          NoPen: mergeCharFormat cannot drop properties, and a NoPen pen still
+          makes toHtml() emit -qt-stroke-width, which Qt turns back into a
+          solid 1px outline on import.
+
+        Fragment ranges come from QTextFragment iteration, not a cursor, for
+        the same reason as apply_spacing(): a cursor reports the format of the
+        fragment to its right, so cursor-driven run detection corrupts
+        neighbouring spans.
+        """
+        doc = self.document()
+        cursor = QTextCursor(doc)
+        block = doc.begin()
+        while block.isValid():
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                iterator += 1
+                f_start = fragment.position()
+                f_end = f_start + fragment.length()
+                if f_end <= start or f_start >= end:
+                    continue
+                fmt = fragment.charFormat()
+                is_bold = fmt.fontWeight() >= QFont.Bold
+                has_outline = fmt.hasProperty(QTextFormat.Property.TextOutline)
+                if not is_bold:
+                    if has_outline:
+                        cleared = QTextCharFormat(fmt)
+                        cleared.clearProperty(QTextFormat.Property.TextOutline)
+                        cursor.setPosition(max(f_start, start))
+                        cursor.setPosition(min(f_end, end),
+                                           QTextCursor.MoveMode.KeepAnchor)
+                        cursor.setCharFormat(cleared)
+                    continue
+                size = fmt.fontPointSize()
+                if size <= 0:
+                    size = doc.defaultFont().pointSizeF()
+                if size <= 0:
+                    size = self.font_size
+                brush = fmt.foreground()
+                if brush.style() != Qt.BrushStyle.NoBrush and brush.color().isValid():
+                    color = brush.color()
+                else:
+                    color = self.text_color or QColor(0, 0, 0)
+                pen = QPen(color, max(FAUX_BOLD_MIN_PX, size * FAUX_BOLD_WIDTH_FACTOR))
+                pen.setJoinStyle(Qt.RoundJoin)
+                new_fmt = QTextCharFormat()
+                new_fmt.setTextOutline(pen)
+                cursor.setPosition(max(f_start, start))
+                cursor.setPosition(min(f_end, end), QTextCursor.MoveMode.KeepAnchor)
+                cursor.mergeCharFormat(new_fmt)
+            block = block.next()
 
     def set_line_spacing(self, spacing):
         self.line_spacing = spacing
@@ -593,6 +682,11 @@ class TextBlockItem(QGraphicsTextItem):
         self.apply_spacing()
         self.update_text_width()
         self.set_alignment(self.alignment)
+        # HTML saved before the faux-bold fix carries a bold weight with no
+        # -qt-stroke-* at all (or a width baked at a since-changed size).
+        # Re-derive every bold fragment's outline so old projects render with
+        # the same stroke as newly bolded text.
+        self._sync_faux_bold_outlines(0, max(0, self.document().characterCount()))
 
     def mouseDoubleClickEvent(self, event):
         if not self.editing_mode:
