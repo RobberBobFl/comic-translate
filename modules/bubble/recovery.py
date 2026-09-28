@@ -7,9 +7,10 @@ recovery   interior mask via C (white-threshold connected components inside the
            text is not contained, then expanding through the stroke to the
            outer contour (Cx / C2x) with an auto-estimated stroke width.
 expansion  dilate the outer mask, repaint a flat fill and redraw the outline as
-           a *morphological ring* (``expanded - erode(expanded, r)``). The ring
-           hits the requested width exactly, unlike ``cv2.drawContours`` which
-           quantises stroke width in ~2px steps (Stage 7 calibration).
+           a distance-transform ring (``stroke_r`` deep from the mask edge).
+           The ring hits the requested width exactly and stays constant along
+           the perimeter, unlike ``cv2.drawContours`` which quantises stroke
+           width in ~2px steps (Stage 7 calibration).
 
 Inputs are only what the editor already holds: page RGB, text bbox and the
 optional detector bubble box. Nothing here touches the automatic pipeline.
@@ -636,17 +637,20 @@ def expand_mask(outer: np.ndarray, px: int) -> np.ndarray:
 
 def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
             fill: tuple[int, int, int] = (255, 255, 255),
-            ss: int = 3, sigma: float = 0.8) -> np.ndarray:
-    """Flat fill + morphological-ring outline (variant B from Stage 7).
+            sigma: float = 0.8) -> np.ndarray:
+    """Flat fill + outline ring at exactly ``stroke_r`` px (variant B from Stage 7).
 
     ``fill`` is the interior colour from ``estimate_fill`` (defaults to white),
     so cream / tinted balloons keep their tone instead of being flattened white.
 
-    The ring is ``expanded - erode(expanded, r)``: it reproduces the target
-    width exactly, unlike ``cv2.drawContours`` (quantised in ~2px steps). The
-    ring is computed at ``ss`` x resolution on the bubble crop and downsampled
-    with INTER_AREA, then slightly blurred - this kills the binary staircase
-    while keeping a crisp comic-style stroke.
+    The ring is ``stroke_r`` deep from the mask edge: a distance transform of
+    the mask gives every interior pixel its depth from the boundary, and the
+    ring alpha ramps 1 -> 0 across the outermost pixel
+    (``clip(stroke_r + 1 - dist)``). The dark core (alpha > 0.5) is therefore
+    exactly ``stroke_r`` px wide everywhere - the supersampled
+    ``expanded - erode(expanded, r)`` band it replaces picked up a sub-pixel
+    phase of the boundary through INTER_AREA and rendered 3-7 px for a 4 px
+    stroke. A slight blur keeps the edge anti-aliased and comic-crisp.
     """
     out = rgb.copy()
     m = (expanded > 0)
@@ -658,17 +662,14 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
         out[m] = f
         return out  # no dark outline on this bubble: repaint the fill only
 
-    x1, y1, x2, y2 = mask_bbox(expanded, pad=r + ss + 4, shape=rgb.shape[:2])
+    x1, y1, x2, y2 = mask_bbox(expanded, pad=r + 6, shape=rgb.shape[:2])
     sub = out[y1:y2, x1:x2]
     subm = m[y1:y2, x1:x2]
     sub[subm] = f
 
-    h, w = subm.shape[:2]
-    ms = cv2.resize(subm.astype(np.uint8), (w * ss, h * ss), interpolation=cv2.INTER_NEAREST)
-    k = ss * r
-    er = cv2.erode(ms, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)))
-    band = ((ms > 0) & (er == 0)).astype(np.float32)
-    alpha = cv2.resize(band, (w, h), interpolation=cv2.INTER_AREA)
+    dist = cv2.distanceTransform(subm.astype(np.uint8), cv2.DIST_L2, 5)
+    alpha = np.clip(r + 1.0 - dist, 0.0, 1.0).astype(np.float32)
+    alpha[~subm] = 0.0  # dist is 0 outside the mask: keep the ring inside it
     alpha = cv2.GaussianBlur(alpha, (0, 0), sigma)
     a = alpha[..., None]
     sub[:] = (sub * (1 - a)).astype(np.uint8)
