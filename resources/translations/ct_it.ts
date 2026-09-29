@@ -1551,8 +1551,16 @@ quindi esegui l&apos;inpainting sull&apos;immagine ridimensionata.</translation>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bend the text along an arc (up / down)</source>
+        <translation>Piega il testo lungo un arco (su / giù)</translation>
+    </message>
+    <message>
         <source>Bold + Italic</source>
         <translation>Grassetto + corsivo</translation>
+    </message>
+    <message>
+        <source>Curve</source>
+        <translation>Curva</translation>
     </message>
     <message>
         <source>Fixed</source>

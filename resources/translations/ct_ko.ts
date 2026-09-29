@@ -1551,8 +1551,16 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bend the text along an arc (up / down)</source>
+        <translation>텍스트를 호를 따라 휩니다 (위 / 아래)</translation>
+    </message>
+    <message>
         <source>Bold + Italic</source>
         <translation>굵게 + 기울임</translation>
+    </message>
+    <message>
+        <source>Curve</source>
+        <translation>곡선</translation>
     </message>
     <message>
         <source>Fixed</source>

@@ -1543,8 +1543,16 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bend the text along an arc (up / down)</source>
+        <translation>Изогнуть текст по дуге (вверх / вниз)</translation>
+    </message>
+    <message>
         <source>Bold + Italic</source>
         <translation>Жирный + курсив</translation>
+    </message>
+    <message>
+        <source>Curve</source>
+        <translation>Изгиб</translation>
     </message>
     <message>
         <source>Fixed</source>

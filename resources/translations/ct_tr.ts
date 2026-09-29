@@ -1551,8 +1551,16 @@ sonra yeniden boyutlandırılmış görselde boyama işlemi yapın.</translation
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bend the text along an arc (up / down)</source>
+        <translation>Metni bir yay boyunca bük (yukarı / aşağı)</translation>
+    </message>
+    <message>
         <source>Bold + Italic</source>
         <translation>Kalın + italik</translation>
+    </message>
+    <message>
+        <source>Curve</source>
+        <translation>Eğri</translation>
     </message>
     <message>
         <source>Fixed</source>
