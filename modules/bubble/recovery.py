@@ -369,6 +369,53 @@ def expand_to_outer(interior: np.ndarray, k: int) -> np.ndarray:
     return fill_holes(cur.astype(np.uint8) * 255)
 
 
+def _max_cross_width(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
+                     bins: int = 16) -> float:
+    """Max cross-section width of `frag` along `axis`, in pixels. Bin counts
+    are bin-length normalised: raw counts measure bin AREA, which skews the
+    frag-vs-mask comparison when their axial depths differ."""
+    ys, xs = np.where(frag)
+    if ys.size == 0:
+        return 0.0
+    t = (xs - origin[0]) * axis[0] + (ys - origin[1]) * axis[1]
+    t = t - t.min()
+    depth = max(1.0, float(t.max()))
+    idx = np.clip((t / depth * bins).astype(int), 0, bins - 1)
+    return float(np.bincount(idx, minlength=bins).max()) / (depth / bins)
+
+
+def _narrows_to_tip(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
+                    bins: int = 12) -> bool:
+    """True when `frag` is tail-like: its widest cross-section sits AT the
+    cut line and the width tapers toward the tip.
+
+    A real speech-bubble tail is widest at the cut and narrows to the tip.
+    A body wedge cut by an angular notch is widest in the MIDDLE of its
+    profile (the cut runs along the balloon body, page 19, bubble
+    "Я же говорю...") - such pieces stay in the mask.
+
+    `axis` points from the cut line toward the piece tip.
+    """
+    ys, xs = np.where(frag)
+    if ys.size == 0:
+        return True
+    dx = xs - origin[0]
+    dy = ys - origin[1]
+    t = dx * axis[0] + dy * axis[1]
+    t = t - t.min()
+    depth = float(t.max())
+    if depth < 1.0:
+        return True  # degenerate sliver: cut as before
+    idx = np.clip((t / depth * bins).astype(int), 0, bins - 1)
+    widths = np.bincount(idx, minlength=bins).astype(float)
+    if widths.argmax() >= bins // 3:
+        return False  # widest away from the cut: a wedge along the body
+    q = max(1, bins // 4)
+    base = widths[:q].mean()
+    tip = widths[-q:].mean()
+    return tip < base * 0.65
+
+
 def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
                    max_frag_frac: float = 0.4, min_cont: float = 0.85):
     """Drop mask regions beyond deep convexity-defect necks (tails, merged blobs).
@@ -455,6 +502,13 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
                     trial = kept & (frag == 0)
                     if containment(trial, text_xyxy) < min(min_cont, orig_cont):
                         continue
+                    if not _narrows_to_tip(frag, far1, n):
+                        continue  # a widening body wedge, not a tail
+                    # a tail is much narrower than the balloon itself; a cut
+                    # fragment as wide as the mask is a body piece
+                    if _max_cross_width(frag, far1, n) > \
+                            0.45 * _max_cross_width(kept, far1, n):
+                        continue
 
                     kept = trial
                     fragments |= frag
@@ -494,8 +548,15 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
         if area == 0 or area > max_frag_frac * total:
             continue
         trial = kept & (frag == 0)
+        print(f'[P2 dbg] depth={depth:.1f} dist_tip={dist_tip:.0f} far={far[0]},{far[1]} '
+              f'trial_cont={containment(trial, text_xyxy):.2f} frag_px={int((frag > 0).sum())}')
         if containment(trial, text_xyxy) < min(min_cont, orig_cont):
             continue
+        if not _narrows_to_tip(frag, far, n):
+            continue  # a widening body wedge, not a tail
+        if _max_cross_width(frag, far, n) > \
+                0.45 * _max_cross_width(kept, far, n):
+            continue  # a cut fragment as wide as the mask is a body piece
 
         kept = trial
         fragments |= frag
