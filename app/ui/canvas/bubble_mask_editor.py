@@ -391,7 +391,16 @@ class BubbleMaskEditor(QObject):
             pen.setJoinStyle(Qt.RoundJoin)
             painter.setPen(pen)
             if dot:
+                # geometric dot exactly brush_size wide; with the fat pen
+                # active drawEllipse would paint a 2x brush_size circle
+                # (fill radius brush_size/2 + brush_size/2 of pen outline)
                 r = self.brush_size / 2.0
+                painter.setPen(Qt.NoPen)
+                if erase:
+                    # Clear wipes by source coverage: the fill must be opaque
+                    painter.setBrush(QtGui.QBrush(QColor(0, 0, 0, 255)))
+                else:
+                    painter.setBrush(QtGui.QBrush(color))
                 painter.drawEllipse(p0, r, r)
             else:
                 painter.drawLine(QPointF(p0), QPointF(p1))
