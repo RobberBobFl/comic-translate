@@ -650,7 +650,10 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
     exactly ``stroke_r`` px wide everywhere - the supersampled
     ``expanded - erode(expanded, r)`` band it replaces picked up a sub-pixel
     phase of the boundary through INTER_AREA and rendered 3-7 px for a 4 px
-    stroke. A slight blur keeps the edge anti-aliased and comic-crisp.
+    stroke. The blurred tail of the ring is multiplied by the softly blurred
+    mask, so the alpha fades to zero at the smoothed mask boundary: nothing
+    bleeds in from the background and no fill-coloured halo is painted over
+    it. A slight blur keeps the edge anti-aliased and comic-crisp.
     """
     out = rgb.copy()
     m = (expanded > 0)
@@ -671,6 +674,14 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
     alpha = np.clip(r + 1.0 - dist, 0.0, 1.0).astype(np.float32)
     alpha[~subm] = 0.0  # dist is 0 outside the mask: keep the ring inside it
     alpha = cv2.GaussianBlur(alpha, (0, 0), sigma)
+
+    # The blurred ring still leaks a tail ~1px outside the mask that darkens
+    # light background art. Multiply by the mask blurred with a NARROW
+    # gaussian (0.5): the tail is suppressed to ~0.03 (invisible) while the
+    # fringe inside stays anti-aliased - no bleed-in, no fill-coloured halo.
+    m_soft = cv2.GaussianBlur(subm.astype(np.float32), (0, 0), 0.5)
+    alpha = alpha * m_soft
+
     a = alpha[..., None]
     sub[:] = (sub * (1 - a)).astype(np.uint8)
     return out
