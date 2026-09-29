@@ -1551,6 +1551,26 @@ puis effectuer l&apos;inpainting sur l&apos;image redimensionnée.</translation>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>Gras + italique</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>Fixe</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>Rend chaque bloc à la taille de police sélectionnée au lieu d'ajuster automatiquement chaque bloc à sa bulle. Le texte peut déborder des petites bulles.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>Espacement entre les lettres (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>Espacement entre les mots (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>Annuler</translation>
     </message>

@@ -1551,6 +1551,26 @@ quindi esegui l&apos;inpainting sull&apos;immagine ridimensionata.</translation>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>Grassetto + corsivo</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>Fisso</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>Rende ogni blocco con la dimensione carattere selezionata invece di adattare automaticamente ogni blocco al suo fumetto. Il testo può fuoriuscire dai fumetti piccoli.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>Spaziatura tra le lettere (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>Spaziatura tra le parole (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>Annulla</translation>
     </message>

@@ -1549,6 +1549,26 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>粗体 + 斜体</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>固定</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>使用所选字体大小渲染每个文本块，而不是自动调整每个文本块以适应其气泡。文本可能会溢出较小的气泡。</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>字母间距 (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>单词间距 (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>撤销</translation>
     </message>

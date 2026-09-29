@@ -1550,6 +1550,26 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>Fett + Kursiv</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>Fixiert</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>Jeden Block mit der ausgewählten Schriftgröße rendern, statt jeden Block automatisch an seine Sprechblase anzupassen. Text kann aus kleinen Sprechblasen herauslaufen.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>Abstand zwischen Buchstaben (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>Abstand zwischen Wörtern (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>Rückgängig</translation>
     </message>

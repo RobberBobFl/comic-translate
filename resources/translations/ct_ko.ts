@@ -1551,6 +1551,26 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>굵게 + 기울임</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>고정</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>각 블록을 말풍선에 자동 맞춤하는 대신 선택한 글꼴 크기로 렌더링합니다. 작은 말풍선에서는 텍스트가 넘칠 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>글자 간격 (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>단어 간격 (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>실행 취소</translation>
     </message>

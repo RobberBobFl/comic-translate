@@ -1551,6 +1551,26 @@ luego realiza el inpainting en la imagen redimensionada.</translation>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>Negrita + cursiva</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>Fijo</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>Renderiza cada bloque con el tamaño de fuente seleccionado en lugar de ajustar automáticamente cada bloque a su bocadillo. El texto puede desbordarse de los bocadillos pequeños.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>Espaciado entre letras (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>Espaciado entre palabras (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>Deshacer</translation>
     </message>

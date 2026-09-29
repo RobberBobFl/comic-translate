@@ -1551,6 +1551,26 @@ sonra yeniden boyutlandırılmış görselde boyama işlemi yapın.</translation
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>Kalın + italik</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>Sabit</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>Her bloğu balonuna otomatik sığdırmak yerine seçilen yazı tipi boyutunda işle. Metin küçük balonlardan taşabilir.</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>Harfler arası boşluk (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>Kelimeler arası boşluk (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>Geri Al</translation>
     </message>

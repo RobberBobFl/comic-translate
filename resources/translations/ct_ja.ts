@@ -1551,6 +1551,26 @@ then do inpainting on the resized image.</source>
 <context>
     <name>WorkspaceMixin</name>
     <message>
+        <source>Bold + Italic</source>
+        <translation>太字 + 斜体</translation>
+    </message>
+    <message>
+        <source>Fixed</source>
+        <translation>固定</translation>
+    </message>
+    <message>
+        <source>Render every block at the selected font size instead of auto-fitting each block to its bubble. Text may overflow small bubbles.</source>
+        <translation>各ブロックを吹き出しに自動調整する代わりに、選択したフォントサイズで描画します。小さい吹き出しからテキストがはみ出すことがあります。</translation>
+    </message>
+    <message>
+        <source>Spacing between letters (px)</source>
+        <translation>文字間隔 (px)</translation>
+    </message>
+    <message>
+        <source>Spacing between words (px)</source>
+        <translation>単語間隔 (px)</translation>
+    </message>
+    <message>
         <source>Undo</source>
         <translation>元に戻す</translation>
     </message>
