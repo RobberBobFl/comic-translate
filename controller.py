@@ -260,6 +260,11 @@ class ComicTranslate(ComicTranslateUI):
         self.bold_button.clicked.connect(self.text_ctrl.bold)
         self.italic_button.clicked.connect(self.text_ctrl.italic)
         self.underline_button.clicked.connect(self.text_ctrl.underline)
+        self.bold_italic_button.clicked.connect(self.text_ctrl.bold_italic)
+        # Keep the combined toggle in sync whenever either single toggle moves,
+        # including when no block is selected (no toolbar refresh happens there).
+        self.bold_button.toggled.connect(self.text_ctrl._sync_bold_italic_button)
+        self.italic_button.toggled.connect(self.text_ctrl._sync_bold_italic_button)
         self.outline_font_color_button.clicked.connect(self.text_ctrl.on_outline_color_change)
         self.outline_width_dropdown.currentTextChanged.connect(self.text_ctrl.on_outline_width_change)
         self.outline_checkbox.stateChanged.connect(self.text_ctrl.toggle_outline_settings)

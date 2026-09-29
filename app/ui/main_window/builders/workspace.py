@@ -21,6 +21,28 @@ from app.ui.webtoon_seam_dialog import SeamAdjustDialog
 from app.ui.main_window.constants import supported_source_languages, supported_target_languages
 
 
+def _park_combo_cursor(combo: QtWidgets.QComboBox) -> None:
+    """Keep an editable combo box scrolled to the start of its value.
+
+    QComboBox's line edit scrolls to the cursor, which sits at the end after
+    setCurrentText(). When the value is wider than the box (long font names,
+    spacing values) only the tail stays visible. Park the cursor at 0 whenever
+    the combo is not focused so the beginning of the value is shown.
+    """
+    line_edit = combo.lineEdit()
+    if line_edit is None:
+        return
+
+    def _park(*_args) -> None:
+        if not line_edit.hasFocus():
+            line_edit.setCursorPosition(0)
+            line_edit.deselect()
+
+    combo.currentTextChanged.connect(_park)
+    line_edit.editingFinished.connect(_park)
+    _park()
+
+
 class WorkspaceMixin:
     def _create_main_content(self):
         content_widget = QtWidgets.QWidget()
@@ -186,17 +208,20 @@ class WorkspaceMixin:
 
         text_render_layout = QtWidgets.QVBoxLayout()
         font_settings_layout = QtWidgets.QHBoxLayout()
+        font_settings_layout.setSpacing(3)
 
         self.font_dropdown = MFontComboBox().small()
         self.font_dropdown.setToolTip(self.tr("Font"))
+        _park_combo_cursor(self.font_dropdown)
         self.font_size_dropdown = MComboBox().small()
         self.font_size_dropdown.setToolTip(self.tr("Font Size"))
         self.font_size_dropdown.addItems(
             ["4", "6", "8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "28", "32", "36", "48", "72"]
         )
         self.font_size_dropdown.setCurrentText("12")
-        self.font_size_dropdown.setFixedWidth(60)
+        self.font_size_dropdown.setFixedWidth(52)
         self.font_size_dropdown.set_editable(True)
+        _park_combo_cursor(self.font_size_dropdown)
 
         self.fixed_font_size_checkbox = QtWidgets.QCheckBox(self.tr("Fixed"))
         self.fixed_font_size_checkbox.setToolTip(
@@ -207,8 +232,9 @@ class WorkspaceMixin:
         self.line_spacing_dropdown = MComboBox().small()
         self.line_spacing_dropdown.setToolTip(self.tr("Line Spacing"))
         self.line_spacing_dropdown.addItems(["0.7", "0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.4", "1.5"])
-        self.line_spacing_dropdown.setFixedWidth(60)
+        self.line_spacing_dropdown.setFixedWidth(52)
         self.line_spacing_dropdown.set_editable(True)
+        _park_combo_cursor(self.line_spacing_dropdown)
 
         font_settings_layout.addWidget(self.font_dropdown)
         font_settings_layout.addWidget(self.font_size_dropdown)
@@ -217,6 +243,7 @@ class WorkspaceMixin:
         font_settings_layout.addStretch()
 
         main_text_settings_layout = QtWidgets.QHBoxLayout()
+        main_text_settings_layout.setSpacing(3)
 
         settings = QSettings("ComicLabs", "ComicTranslate")
         settings.beginGroup("text_rendering")
@@ -226,7 +253,7 @@ class WorkspaceMixin:
 
         self.block_font_color_button = QtWidgets.QPushButton()
         self.block_font_color_button.setToolTip(self.tr("Font Color"))
-        self.block_font_color_button.setFixedSize(30, 30)
+        self.block_font_color_button.setFixedSize(28, 28)
         self.block_font_color_button.setStyleSheet(f"background-color: {dflt_clr}; border: none; border-radius: 5px;")
         self.block_font_color_button.setProperty("selected_color", dflt_clr)
 
@@ -237,6 +264,12 @@ class WorkspaceMixin:
             {"svg": "tabler--align-right.svg", "checkable": True, "tooltip": "Align Right"},
         ]
         self.alignment_tool_group.set_button_list(alignment_tools)
+        self.alignment_tool_group.set_spacing(2)
+        # 24px matches the neighbouring B/I/U tool buttons (they render ~23px)
+        # and keeps the whole row inside a narrow right panel.
+        for _btn in self.alignment_tool_group.get_button_group().buttons():
+            _btn.set_dayu_size(24)
+            _btn.setFixedSize(24, 24)
         self.alignment_tool_group.set_dayu_checked(1)
 
         self.bold_button = self.create_tool_button(svg="bold.svg", checkable=True)
@@ -245,6 +278,8 @@ class WorkspaceMixin:
         self.italic_button.setToolTip(self.tr("Italic"))
         self.underline_button = self.create_tool_button(svg="underline.svg", checkable=True)
         self.underline_button.setToolTip(self.tr("Underline"))
+        self.bold_italic_button = self.create_tool_button(svg="bold-italic.svg", checkable=True)
+        self.bold_italic_button.setToolTip(self.tr("Bold + Italic"))
 
         # Letter and word spacing (px). Editable so any value can be typed,
         # including negatives (tighter) and fractions.
@@ -252,45 +287,56 @@ class WorkspaceMixin:
         self.letter_spacing_dropdown.setToolTip(self.tr("Spacing between letters (px)"))
         self.letter_spacing_dropdown.addItems(["-2", "-1", "0", "1", "2", "3", "4", "5", "6"])
         self.letter_spacing_dropdown.setCurrentText("0")
-        self.letter_spacing_dropdown.setFixedWidth(60)
+        self.letter_spacing_dropdown.setFixedWidth(39)
+        self.letter_spacing_dropdown.lineEdit().setTextMargins(0, 0, 0, 0)
         self.letter_spacing_dropdown.set_editable(True)
+        _park_combo_cursor(self.letter_spacing_dropdown)
 
         self.word_spacing_dropdown = MComboBox().small()
         self.word_spacing_dropdown.setToolTip(self.tr("Spacing between words (px)"))
         self.word_spacing_dropdown.addItems(["-4", "-2", "0", "2", "4", "6", "8", "10", "12"])
         self.word_spacing_dropdown.setCurrentText("0")
-        self.word_spacing_dropdown.setFixedWidth(60)
+        self.word_spacing_dropdown.setFixedWidth(40)
+        self.word_spacing_dropdown.lineEdit().setTextMargins(0, 0, 0, 0)
         self.word_spacing_dropdown.set_editable(True)
+        _park_combo_cursor(self.word_spacing_dropdown)
 
         main_text_settings_layout.addWidget(self.block_font_color_button)
         main_text_settings_layout.addWidget(self.alignment_tool_group)
         main_text_settings_layout.addWidget(self.bold_button)
         main_text_settings_layout.addWidget(self.italic_button)
         main_text_settings_layout.addWidget(self.underline_button)
-        main_text_settings_layout.addWidget(self.letter_spacing_dropdown)
-        main_text_settings_layout.addWidget(self.word_spacing_dropdown)
+        main_text_settings_layout.addWidget(self.bold_italic_button)
         main_text_settings_layout.addStretch()
 
         outline_settings_layout = QtWidgets.QHBoxLayout()
+        outline_settings_layout.setSpacing(3)
 
         self.outline_checkbox = MCheckBox(self.tr("Outline"))
         self.outline_checkbox.setChecked(dflt_outline_check)
 
         self.outline_font_color_button = QtWidgets.QPushButton()
         self.outline_font_color_button.setToolTip(self.tr("Outline Color"))
-        self.outline_font_color_button.setFixedSize(30, 30)
+        self.outline_font_color_button.setFixedSize(28, 28)
         self.outline_font_color_button.setStyleSheet("background-color: white; border: none; border-radius: 5px;")
         self.outline_font_color_button.setProperty("selected_color", "#ffffff")
 
         self.outline_width_dropdown = MComboBox().small()
-        self.outline_width_dropdown.setFixedWidth(60)
+        self.outline_width_dropdown.setFixedWidth(50)
         self.outline_width_dropdown.setToolTip(self.tr("Outline Width"))
         self.outline_width_dropdown.addItems(["1.0", "1.15", "1.3", "1.4", "1.5"])
+        self.outline_width_dropdown.lineEdit().setTextMargins(0, 0, 0, 0)
         self.outline_width_dropdown.set_editable(True)
+        _park_combo_cursor(self.outline_width_dropdown)
 
         outline_settings_layout.addWidget(self.outline_checkbox)
         outline_settings_layout.addWidget(self.outline_font_color_button)
         outline_settings_layout.addWidget(self.outline_width_dropdown)
+        outline_settings_layout.addWidget(self.letter_spacing_dropdown)
+        outline_settings_layout.addSpacerItem(
+            QtWidgets.QSpacerItem(4, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        )
+        outline_settings_layout.addWidget(self.word_spacing_dropdown)
         outline_settings_layout.addStretch()
 
         rendering_divider_top = MDivider()
@@ -508,7 +554,7 @@ class WorkspaceMixin:
         splitter.addWidget(central_widget)
         splitter.addWidget(right_widget)
 
-        right_widget.setMinimumWidth(240)
+        right_widget.setMinimumWidth(260)
 
         splitter.setStretchFactor(0, 40)
         splitter.setStretchFactor(1, 80)

@@ -820,6 +820,30 @@ class TextController:
             self.main.push_command(command)
             self._refresh_toolbar_for_item(item)
 
+    def bold_italic(self):
+        state = self.main.bold_italic_button.isChecked()
+        # Mirror onto the single toggles first, so "Render" and the settings
+        # panel pick both styles up even when no block is selected.
+        self.main.bold_button.setChecked(state)
+        self.main.italic_button.setChecked(state)
+        if self.main.curr_tblock_item:
+            item = self.main.curr_tblock_item
+            self._transfer_panel_selection_to_item(item)
+            # One command for both attributes: undo reverts bold and italic
+            # together instead of leaving half of the combination applied.
+            command = TextFormatCommand(self.main.image_viewer, item)
+            item.set_bold(state)
+            item.set_italic(state)
+            command.finalize_new_state()
+            self.main.push_command(command)
+            self._refresh_toolbar_for_item(item)
+
+    def _sync_bold_italic_button(self, *_args):
+        """Keep the combined toggle equal to bold && italic."""
+        self.main.bold_italic_button.setChecked(
+            self.main.bold_button.isChecked() and self.main.italic_button.isChecked()
+        )
+
     def on_outline_color_change(self):
         outline_color = self.main.get_color()
         if outline_color and outline_color.isValid():
@@ -872,6 +896,7 @@ class TextController:
         self.main.bold_button.clicked.disconnect(self.bold)
         self.main.italic_button.clicked.disconnect(self.italic)
         self.main.underline_button.clicked.disconnect(self.underline)
+        self.main.bold_italic_button.clicked.disconnect(self.bold_italic)
 
         self.main.alignment_tool_group.get_button_group().buttons()[0].clicked.disconnect(self.left_align)
         self.main.alignment_tool_group.get_button_group().buttons()[1].clicked.disconnect(self.center_align)
@@ -885,6 +910,7 @@ class TextController:
         self.main.bold_button.clicked.connect(self.bold)
         self.main.italic_button.clicked.connect(self.italic)
         self.main.underline_button.clicked.connect(self.underline)
+        self.main.bold_italic_button.clicked.connect(self.bold_italic)
 
         self.main.alignment_tool_group.get_button_group().buttons()[0].clicked.connect(self.left_align)
         self.main.alignment_tool_group.get_button_group().buttons()[1].clicked.connect(self.center_align)
