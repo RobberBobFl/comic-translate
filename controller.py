@@ -270,6 +270,12 @@ class ComicTranslate(ComicTranslateUI):
         self.outline_checkbox.stateChanged.connect(self.text_ctrl.toggle_outline_settings)
         self.letter_spacing_dropdown.currentTextChanged.connect(self.text_ctrl.on_letter_spacing_change)
         self.word_spacing_dropdown.currentTextChanged.connect(self.text_ctrl.on_word_spacing_change)
+        # Curvature: pressed starts the undo snapshot, valueChanged applies
+        # (directly during a drag, as a one-shot command otherwise), released
+        # finalizes and pushes the drag as a single undo step.
+        self.curvature_slider.sliderPressed.connect(self.text_ctrl.on_curvature_slider_pressed)
+        self.curvature_slider.valueChanged.connect(self.text_ctrl.on_curvature_change)
+        self.curvature_slider.sliderReleased.connect(self.text_ctrl.on_curvature_slider_released)
 
         # Page List
         self.page_list.currentItemChanged.connect(self.image_ctrl.on_page_list_current_item_changed)

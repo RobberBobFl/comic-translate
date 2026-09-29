@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsItem, \
      QApplication, QWidget, QStyleOptionGraphicsItem
 from PySide6.QtGui import QFont, QCursor, QColor, \
-     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen, QTextFormat
+     QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen, QTextFormat, \
+     QFontMetricsF
 from PySide6.QtCore import Qt, QRectF, Signal, QPointF
 import math, copy
 from dataclasses import dataclass
@@ -87,6 +88,15 @@ class TextBlockItem(QGraphicsTextItem):
         # apply_spacing(); 0 keeps Qt's default metrics.
         self.letter_spacing = 0.0
         self.word_spacing = 0.0
+        # Curvature of the text arc in [-100, 100]: 0 renders the plain straight
+        # layout, +c bends each line into an upward arch (cap) and -c into a
+        # downward bowl, with |c| = 100 laying the widest line along a quarter
+        # circle (90 deg). The layout is text-on-path: glyph spacing measured
+        # along the arc equals the straight layout exactly and the rows sit on
+        # concentric circles (see _draw_document_curved). Stored on the item
+        # (not on the document) like letter/word spacing, and snapshotted by
+        # TextFormatCommand's __dict__ copy for undo/redo.
+        self.curvature = 0.0
 
         self.layout = None
         self.vertical = False
@@ -581,6 +591,70 @@ class TextBlockItem(QGraphicsTextItem):
         
         self.update()
 
+    def contentBoundingRect(self) -> QRectF:
+        """The plain document rect, without the slack boundingRect() adds for
+        curved rendering. Used where the *text* box itself matters (resize
+        anchors, saved width/height) instead of the visual hit area."""
+        return super().boundingRect()
+
+    def selectionRect(self) -> QRectF:
+        """The rect all *interaction* works against: the dashed selection
+        border, resize handles, and the page-edge constraint. Identical to
+        contentBoundingRect(); a separate name so call sites read as intent
+        (boundingRect() carries arc slack that must not drive the UI)."""
+        return self.contentBoundingRect()
+
+    def boundingRect(self) -> QRectF:
+        rect = super().boundingRect()
+        pad = self._curvature_pad(rect)
+        if pad <= 0:
+            return rect
+        return rect.adjusted(-pad, -pad, pad, pad)
+
+    def set_curvature(self, value):
+        value = max(-100.0, min(100.0, float(value or 0.0)))
+        if abs(value - float(getattr(self, "curvature", 0.0) or 0.0)) < 1e-9:
+            return
+        # prepareGeometryChange must run while the old (old-curvature) rect is
+        # still current, so the scene invalidates the right region.
+        self.prepareGeometryChange()
+        self.curvature = value
+        self.setCenterTransform()
+        self.update()
+
+    def _curvature_active(self) -> bool:
+        # Editing needs a straight layout for the caret and hit-testing, and
+        # vertical text runs through VerticalTextDocumentLayout, which the
+        # glyph pipeline below does not understand.
+        return (abs(float(getattr(self, "curvature", 0.0) or 0.0)) > 1e-9
+                and not self.editing_mode
+                and not self.vertical)
+
+    @staticmethod
+    def _arc_theta(curvature: float) -> float:
+        """Angle the widest line subtends on its arc: |c| = 100 bends it
+        through a quarter circle (90 deg)."""
+        return abs(curvature) / 100.0 * (math.pi / 2.0)
+
+    def _curvature_pad(self, rect: QRectF) -> float:
+        if not self._curvature_active():
+            return 0.0
+        width = rect.width()
+        if width <= 0:
+            return 0.0
+        theta = self._arc_theta(float(getattr(self, "curvature", 0.0) or 0.0))
+        if theta <= 1e-9:
+            return 0.0
+        # Same circle the painter uses: the widest line wraps onto a radius of
+        # width/theta. Rows away from the middle baseline sit on circles up to
+        # one text height farther out, and a row's sagitta grows with its
+        # radius, so bound it with the outermost radius. End glyphs rotated by
+        # up to theta/2 can push ink outward by about a line height in any
+        # direction.
+        radius = width / theta
+        sagitta = (radius + rect.height()) * (1.0 - math.cos(theta / 2.0))
+        return sagitta + rect.height()
+
     def paint(   
         self, 
         painter: QPainter, 
@@ -588,9 +662,44 @@ class TextBlockItem(QGraphicsTextItem):
         widget: QWidget = None
     ):
 
+        if self._curvature_active():
+            try:
+                self._draw_selection_outlines(painter, self._draw_document_curved)
+                self._draw_document_curved(painter, self.document())
+            except Exception:
+                # Any glyph-level failure (exotic script, missing font data)
+                # falls back to the straight renderer instead of blanking.
+                super().paint(painter, option, widget)
+                return
+            # QGraphicsTextItem.paint() ends by drawing Qt's dashed selection
+            # border around boundingRect(); the curved path skips super, so
+            # draw the same border around the tight selection rect (pen
+            # matches qt_graphicsItem_highlightSelected).
+            if self.isSelected():
+                painter.save()
+                painter.setPen(QPen(QColor(0, 0, 0, 127), 0, Qt.PenStyle.DashLine))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(self.selectionRect())
+                painter.restore()
+            return
+
         # Then handle any selection outlines
-        if self.selection_outlines:
-            painter.save()
+        self._draw_selection_outlines(
+            painter, lambda p, doc: doc.drawContents(p))
+
+        # Draw the normal text on top
+        super().paint(painter, option, widget)
+
+    def _draw_selection_outlines(self, painter: QPainter, draw_doc):
+        """Paint the stored selection outlines as offset copies of a
+        recoloured clone of the document. *draw_doc(painter, doc)* renders one
+        such clone; the straight path passes document drawContents, the curved
+        path passes the arc renderer so both stay in sync."""
+        if not self.selection_outlines:
+            return
+
+        painter.save()
+        try:
             for outline_info in self.selection_outlines:
                 doc = self._clone_outline_document()
 
@@ -612,17 +721,14 @@ class TextBlockItem(QGraphicsTextItem):
                     for dy in (-outline_info.width, 0, outline_info.width)
                     if dx != 0 or dy != 0
                 ]
-                
+
                 for dx, dy in offsets:
                     painter.save()
                     painter.translate(dx, dy)
-                    doc.drawContents(painter)
+                    draw_doc(painter, doc)
                     painter.restore()
-
+        finally:
             painter.restore()
-
-        # Draw the normal text on top
-        super().paint(painter, option, widget)
 
     def _clone_outline_document(self):
         source = self.document()
@@ -642,6 +748,233 @@ class TextBlockItem(QGraphicsTextItem):
             vertical_layout.set_max_size(self.layout.max_width, self.layout.max_height)
 
         return doc
+
+    @staticmethod
+    def _line_cursor_x(line, pos) -> float:
+        # PySide6 exposes QTextLine::cursorToX(int) as a (x, cursorPos) tuple.
+        result = line.cursorToX(pos)
+        if isinstance(result, tuple):
+            return float(result[0])
+        return float(result)
+
+    @staticmethod
+    def _fragment_color(fmt, default: QColor) -> QColor:
+        brush = fmt.foreground()
+        if brush.style() != Qt.BrushStyle.NoBrush and brush.color().isValid():
+            return brush.color()
+        return default
+
+    def _draw_document_curved(self, painter: QPainter, doc):
+        """Draw *doc* glyph-by-glyph with the block's lines on concentric
+        circular arcs -- text-on-path, not a warp.
+
+        The straight render places glyphs at layout position + glyph run
+        position (verified against QGraphicsTextItem's own output); this
+        walks the same structures but re-lays the text onto an arc for
+        self.curvature:
+
+        * theta = |c|/100 * pi/2 is the angle the *widest* line subtends;
+          sign(c) picks arch up (cap) vs arch down (bowl).
+        * The block circle has radius R = widest_width / theta, centered one
+          radius beyond the block's *middle* baseline. Each row sits on its
+          own concentric circle: its radius is its distance to that common
+          center, so rows run parallel and short lines bend gentler than the
+          wide ones.
+        * Glyphs walk the arc *by arc length*: a glyph's straight offset from
+          the line start is its offset along the arc. Spacing and kerning
+          measured along the arc therefore match the straight layout exactly
+          -- the letters stay an even rank, they do not fan apart at the ends
+          (the block only narrows slightly, its chord being shorter than the
+          arc).
+        * Every line's arc crosses the line's straight baseline at the line's
+          midpoint (Photoshop-arc anchoring): the ends swing below it (arch)
+          / above it (bowl) by the sagitta, so the rows keep their spacing at
+          the block's center and fan apart toward the ends instead of
+          colliding. Glyphs rotate to the arc tangent; glyph shapes themselves
+          are never scaled.
+        """
+        curvature = float(getattr(self, "curvature", 0.0) or 0.0)
+        sign = 1.0 if curvature > 0 else -1.0
+        theta = self._arc_theta(curvature)
+        if theta < 1e-6:
+            doc.drawContents(painter)
+            return
+
+        # Forces the layout: touching QTextLine/glyphRuns before the document
+        # has been laid out segfaults the Qt gui thread.
+        _ = doc.size()
+
+        # Pass 1: collect every line with its width and baseline so the whole
+        # block shares one circle.
+        line_entries = []  # (origin, fragments, line, width, x0, baseline)
+        block = doc.begin()
+        while block.isValid():
+            block_layout = block.layout()
+            origin = block_layout.position()
+            block_pos = block.position()
+            fragments = []
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                iterator += 1
+                if fragment.isValid():
+                    frag_pos = fragment.position() - block_pos
+                    fragments.append((frag_pos, frag_pos + fragment.length(),
+                                      fragment.charFormat()))
+            for line_index in range(block_layout.lineCount()):
+                line = block_layout.lineAt(line_index)
+                text_start = line.textStart()
+                text_end = text_start + line.textLength()
+                if text_end <= text_start:
+                    continue
+                x0 = self._line_cursor_x(line, text_start)
+                x1 = self._line_cursor_x(line, text_end)
+                baseline = origin.y() + line.position().y() + line.ascent()
+                line_entries.append(
+                    (origin, fragments, line, x1 - x0, x0, baseline))
+            block = block.next()
+
+        widths = [entry[3] for entry in line_entries if entry[3] > 1.0]
+        if not widths:
+            doc.drawContents(painter)
+            return
+        block_width = max(widths)
+        radius = block_width / theta
+        baselines = [entry[5] for entry in line_entries]
+        mid_baseline = (min(baselines) + max(baselines)) / 2.0
+
+        for origin, fragments, line, width, x0, baseline in line_entries:
+            if width <= 1.0:
+                # Degenerate or RTL line (cursorToX runs right-to-left): draw
+                # glyphs straight rather than at a meaningless radius.
+                self._draw_line_curved(
+                    painter, line, doc, origin, fragments,
+                    None, None, None, None, sign)
+                continue
+            # The row's circle is concentric with the block's: rows away from
+            # the middle baseline are farther from the common center. Floored
+            # at half the line width so a tall narrow block can never wrap a
+            # row past half a circle.
+            row_radius = max(radius + sign * (mid_baseline - baseline),
+                             width / 2.0)
+            row_theta = width / row_radius
+            self._draw_line_curved(
+                painter, line, doc, origin, fragments,
+                row_radius, row_theta, x0, origin.x() + x0 + width / 2.0,
+                sign)
+
+    def _draw_line_curved(self, painter, line, doc, origin, fragments,
+                          radius, theta, x0, center_x, sign):
+        """Draw one text line onto its (already sized) circle, or straight
+        when *radius* is None. *x0* is the line's left edge in block-layout
+        coordinates; *center_x* is the circle's horizontal center in the same
+        coordinates."""
+        text_start = line.textStart()
+        text_end = text_start + line.textLength()
+        if text_end <= text_start:
+            return
+
+        default_color = self.defaultTextColor()
+        for frag_start, frag_end, fmt in fragments:
+            seg_from = max(frag_start, text_start)
+            seg_to = min(frag_end, text_end)
+            if seg_to <= seg_from:
+                continue
+
+            color = self._fragment_color(fmt, default_color)
+            outline_pen = None
+            if fmt.hasProperty(QTextFormat.Property.TextOutline):
+                pen = fmt.textOutline()
+                if pen.style() != Qt.PenStyle.NoPen and pen.widthF() > 0 \
+                        and color.alpha() > 0:
+                    outline_pen = pen
+
+            underline_pen = None
+            underline_offset = 0.0
+            if fmt.fontUnderline():
+                font = fmt.font() if fmt.fontPointSize() > 0 else None
+                if font is None or font.pointSizeF() <= 0:
+                    font = doc.defaultFont()
+                metrics = QFontMetricsF(font)
+                underline_pen = QPen(
+                    color, max(1.0, metrics.underlineThickness()))
+                underline_offset = metrics.underlinePosition()
+
+            for run in line.glyphRuns(seg_from, seg_to - seg_from):
+                self._draw_run_curved(
+                    painter, run, origin, color, outline_pen,
+                    underline_pen, underline_offset,
+                    radius, theta, x0, center_x, sign)
+
+    def _draw_run_curved(self, painter, run, origin, color, outline_pen,
+                         underline_pen, underline_offset,
+                         radius, theta, x0, center_x, sign):
+        positions = run.positions()
+        glyph_indexes = list(run.glyphIndexes())
+        count = min(len(positions), len(glyph_indexes))
+        if count == 0:
+            return
+        raw_font = run.rawFont()
+        try:
+            advances = [pt.x() for pt in
+                        raw_font.advancesForGlyphIndexes(glyph_indexes)]
+        except Exception:
+            advances = []
+        if len(advances) < count:
+            advances = []
+
+        for i in range(count):
+            if advances:
+                advance = advances[i]
+            elif i + 1 < count:
+                advance = positions[i + 1].x() - positions[i].x()
+            else:
+                advance = 0.0
+
+            pos = positions[i]
+            ox = origin.x() + pos.x()
+            oy = origin.y() + pos.y()
+            try:
+                path = raw_font.pathForGlyph(glyph_indexes[i])
+            except Exception:
+                continue
+
+            if radius is None or advance <= 0:
+                # Straight fallback for degenerate slots (zero-width
+                # combining marks, empty line).
+                painter.save()
+                painter.translate(ox, oy)
+            else:
+                # Text-on-path: the glyph's straight midpoint offset from the
+                # line start is its offset along the arc (so spacing measured
+                # on the arc equals the straight layout), the glyph rotates
+                # to the tangent, and the line's midpoint stays on its
+                # straight baseline (the ends swing past it). See
+                # _draw_document_curved for the block-level geometry.
+                mid = ox + advance / 2.0
+                phi = -theta / 2.0 + (mid - (origin.x() + x0)) / radius
+                chord_x = center_x + radius * math.sin(phi)
+                drop = sign * radius * (1.0 - math.cos(phi))
+                painter.save()
+                painter.translate(chord_x, oy + drop)
+                painter.rotate(sign * math.degrees(phi))
+                painter.translate(-advance / 2.0, 0.0)
+
+            if outline_pen is not None:
+                painter.setPen(outline_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(path)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawPath(path)
+            if underline_pen is not None:
+                # Half-pixel overlap hides seams between neighbouring glyphs'
+                # underline segments on the arc.
+                painter.setPen(underline_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawLine(QPointF(-0.5, underline_offset),
+                                 QPointF(advance + 0.5, underline_offset))
+            painter.restore()
 
     def set_bold(self, state):
         if not self.textCursor().hasSelection():
@@ -815,20 +1148,28 @@ class TextBlockItem(QGraphicsTextItem):
         super().keyPressEvent(event)
 
     def enter_editing_mode(self):
+        # Geometry first, while the curved rect is still current: editing
+        # switches the render path to straight, dropping the curvature pad.
+        self.prepareGeometryChange()
         self.editing_mode = True
         self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
         self.setFlag(QGraphicsTextItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+        self.setCenterTransform()
         self.setFocus()
+        self.update()
 
     def exit_editing_mode(self):
+        self.prepareGeometryChange()
         self.editing_mode = False
         self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         self.setFlag(QGraphicsTextItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setCenterTransform()
         self.clearFocus()
+        self.update()
 
     def _on_text_changed(self):
         new_text = self.toPlainText()
@@ -898,8 +1239,10 @@ class TextBlockItem(QGraphicsTextItem):
         delta = self.mapToParent(local_pos) - self.mapToParent(last_local_pos)
         new_pos = self.pos() + delta
         
-        # Calculate the bounding rect of the rotated rectangle in scene coordinates
-        scene_rect = self.mapToScene(self.boundingRect())
+        # Calculate the bounding rect of the rotated rectangle in scene
+        # coordinates. The tight selection rect: the arc slack in
+        # boundingRect() would stop the text pad-short of the page edge.
+        scene_rect = self.mapToScene(self.selectionRect())
         bounding_rect = scene_rect.boundingRect()
         
         # Get constraint bounds
@@ -957,8 +1300,9 @@ class TextBlockItem(QGraphicsTextItem):
         rotated_delta_y = scene_delta.x() * math.sin(angle_rad) + scene_delta.y() * math.cos(angle_rad)
         rotated_delta = QPointF(rotated_delta_x, rotated_delta_y)
 
-        # Get the current rect and create a new one to modify
-        rect = self.boundingRect()
+        # Get the current rect and create a new one to modify. The unpadded
+        # rect: curvature slack must not feed into text width / font size.
+        rect = self.contentBoundingRect()
         new_rect = QRectF(rect)
         original_height = rect.height()
 
@@ -1053,6 +1397,7 @@ class TextBlockItem(QGraphicsTextItem):
                 'outline_width': self.outline_width,
                 'letter_spacing': float(getattr(self, "letter_spacing", 0.0) or 0.0),
                 'word_spacing': float(getattr(self, "word_spacing", 0.0) or 0.0),
+                'curvature': float(getattr(self, "curvature", 0.0) or 0.0),
             }
 
         start = cursor.selectionStart()
@@ -1119,6 +1464,8 @@ class TextBlockItem(QGraphicsTextItem):
 
         # Merge outline properties with other properties
         properties.update(outline_properties)
+        # Item-level (not span-level) property: always the block's curvature.
+        properties['curvature'] = float(getattr(self, "curvature", 0.0) or 0.0)
 
         return properties
     
@@ -1138,11 +1485,12 @@ class TextBlockItem(QGraphicsTextItem):
             underline=self.underline
         )
         
-        new_instance.set_text(self.toHtml(), self.boundingRect().width())
+        new_instance.set_text(self.toHtml(), self.contentBoundingRect().width())
         new_instance.setTransformOriginPoint(self.transformOriginPoint())
         new_instance.setPos(self.pos())
         new_instance.setRotation(self.rotation())
         new_instance.setScale(self.scale())
+        new_instance.prepareGeometryChange()
         new_instance.__dict__.update(copy.copy(self.__dict__))
         return new_instance
 

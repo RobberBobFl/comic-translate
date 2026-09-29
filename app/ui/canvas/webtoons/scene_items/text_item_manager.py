@@ -244,13 +244,11 @@ class TextItemManager:
         for item in self.viewer._scene.items():
             if isinstance(item, TextBlockItem):
                 text_item = item
-                # Get all pages this text item intersects with
-                text_scene_bounds = QRectF(
-                    text_item.pos().x(),
-                    text_item.pos().y(), 
-                    text_item.boundingRect().width(),
-                    text_item.boundingRect().height()
-                )
+                # Get all pages this text item intersects with. mapToScene
+                # (not pos + size): with curvature the bounding rect starts
+                # above/left of pos.
+                text_scene_bounds = text_item.mapRectToScene(
+                    text_item.boundingRect()).boundingRect()
                 
                 intersecting_pages = self.layout_manager.get_pages_for_scene_bounds(text_scene_bounds)
                 
@@ -268,10 +266,15 @@ class TextItemManager:
                         scene_pos = text_item.pos()
                         page_local_pos = self.coordinate_converter.scene_to_page_local_position(scene_pos, page_idx)
                         
+                        # Persist the unpadded rect: curvature slack in
+                        # boundingRect() would compound on every reload.
+                        content_rect = (text_item.contentBoundingRect()
+                                        if hasattr(text_item, 'contentBoundingRect')
+                                        else text_item.boundingRect())
                         base_text_data.update({
                             'position': (page_local_pos.x(), page_local_pos.y()),
-                            'width': text_item.boundingRect().width(),
-                            'height': text_item.boundingRect().height()
+                            'width': content_rect.width(),
+                            'height': content_rect.height()
                         })
                         scene_items_by_page[page_idx]['text_items'].append(base_text_data)
                 else:

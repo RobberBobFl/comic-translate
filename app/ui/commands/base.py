@@ -219,7 +219,13 @@ class RectCommandBase:
                     is_close(item.scale(), properties.scale) and
                     is_close(item.transformOriginPoint().x(), properties.transform_origin[0]) and
                     is_close(item.transformOriginPoint().y(), properties.transform_origin[1]) and
-                    is_close(item.boundingRect().width(), properties.width)):
+                    # properties.width comes from TextItemProperties (content
+                    # rect); boundingRect() carries curvature slack on top.
+                    is_close(
+                        (item.contentBoundingRect().width()
+                         if hasattr(item, 'contentBoundingRect')
+                         else item.boundingRect().width()),
+                        properties.width)):
                     return item
         return None
 

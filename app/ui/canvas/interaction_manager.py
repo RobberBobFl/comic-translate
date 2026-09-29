@@ -21,6 +21,19 @@ class InteractionManager:
         self.resize_margin_min = 0
         self.resize_margin_max = 20
 
+    @staticmethod
+    def selection_rect(item) -> QRectF:
+        """The rect interaction (handles, hit tests, rings) works against.
+
+        Curved TextBlockItems keep arc slack in boundingRect() for Qt
+        repainting; handles and hit tests must follow the tight text box
+        instead. MoveableRectItem and straight text have no slack, so both
+        fall out of the same call.
+        """
+        return (item.selectionRect()
+                if hasattr(item, "selectionRect")
+                else item.boundingRect())
+
     def set_rotate_ring(self, inner: int, outer: int):
         if inner < 0 or outer <= inner:
             raise ValueError("outer must be > inner ≥ 0")
@@ -49,7 +62,7 @@ class InteractionManager:
         """Checks if a scene position is within the item's rotation ring."""
         if not item: return False
         local = item.mapFromScene(scene_pos)
-        r = item.boundingRect()
+        r = self.selection_rect(item)
         dx = max(r.left() - local.x(), 0, local.x() - r.right())
         dy = max(r.top() - local.y(), 0, local.y() - r.bottom())
         dist = math.hypot(dx, dy)
@@ -59,7 +72,7 @@ class InteractionManager:
         """Checks if a scene position is within the item's resize area."""
         if not item: return False
         local = item.mapFromScene(scene_pos)
-        r = item.boundingRect()
+        r = self.selection_rect(item)
         dx = max(r.left() - local.x(), 0, local.x() - r.right())
         dy = max(r.top() - local.y(), 0, local.y() - r.bottom())
         dist = math.hypot(dx, dy)
@@ -76,7 +89,7 @@ class InteractionManager:
 
     def get_resize_cursor(self, item: MoveableRectItem | TextBlockItem, pos: QPointF) -> QtGui.QCursor:
         """Gets the appropriate resize cursor for a given position."""
-        rect = item.boundingRect()
+        rect = self.selection_rect(item)
         handle = self.get_handle_at_position(pos, rect)
         
         cursors = {
@@ -117,7 +130,7 @@ class InteractionManager:
 
     def get_resize_handle(self, item: MoveableRectItem | TextBlockItem, pos: QPointF) -> str | None:
         """Determines which resize handle is at a position (pos is in item's local coordinates)."""
-        return self.get_handle_at_position(pos, item.boundingRect())
+        return self.get_handle_at_position(pos, self.selection_rect(item))
 
     def get_handle_at_position(self, pos, rect):
         handle_size = self.resize_margin_max # Use manager's property

@@ -390,7 +390,7 @@ class EventHandler:
             return False
         if sel_item and self.viewer.interaction_manager._in_rotate_ring(sel_item, scene_pos):
             angle = sel_item.rotation()
-            inner_rect = sel_item.boundingRect()
+            inner_rect = self.viewer.interaction_manager.selection_rect(sel_item)
             outer_rect = inner_rect.adjusted(-self.viewer.interaction_manager.rotate_margin_max, 
                                            -self.viewer.interaction_manager.rotate_margin_max, 
                                            self.viewer.interaction_manager.rotate_margin_max, 
@@ -490,9 +490,10 @@ class EventHandler:
             return True
         
         if self.viewer.interaction_manager._in_rotate_ring(sel_item, scene_pos):
-            outer_rect = sel_item.boundingRect().adjusted(-self.viewer.interaction_manager.rotate_margin_max, 
-                                           -self.viewer.interaction_manager.rotate_margin_max, 
-                                           self.viewer.interaction_manager.rotate_margin_max, 
+            outer_rect = self.viewer.interaction_manager.selection_rect(sel_item).adjusted(
+                -self.viewer.interaction_manager.rotate_margin_max,
+                                           -self.viewer.interaction_manager.rotate_margin_max,
+                                           self.viewer.interaction_manager.rotate_margin_max,
                                            self.viewer.interaction_manager.rotate_margin_max)
             cursor = self.viewer.interaction_manager.get_rotation_cursor(outer_rect, local_pos, sel_item.rotation())
             self.viewer.viewport().setCursor(cursor)

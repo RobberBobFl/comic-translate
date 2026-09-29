@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import (QImage, QPixmap, QTextCharFormat, QTextCursor,
                            QTextDocument, QFont, QUndoStack)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
-                               QPushButton, QWidget)
+                               QLabel, QPushButton, QSlider, QWidget)
 
 from app.ui.canvas.text.text_item_properties import TextItemProperties
 from app.ui.canvas.image_viewer import ImageViewer
@@ -90,6 +90,9 @@ class _FakeMain:
         self.word_spacing_dropdown.addItems(["-4", "-2", "0", "2", "4", "6", "8", "10", "12"])
         self.word_spacing_dropdown.setCurrentText("0")
         self.word_spacing_dropdown.setEditable(True)
+        self.curvature_slider = QSlider(Qt.Horizontal)
+        self.curvature_slider.setRange(-100, 100)
+        self.curvature_value_label = QLabel("0")
         self.t_combo = QComboBox()
         self.t_combo.addItem("English")
         self.lang_mapping = {"English": "English"}
@@ -117,6 +120,7 @@ def _make_controller(main):
     controller = TextController.__new__(TextController)
     controller.main = main
     controller._suspend_text_command = False
+    controller._curvature_drag = None
     # undo/redo of a format command refreshes the toolbar; set_values_for_blk_item
     # blocks these widgets while writing back the item's values.
     controller.widgets_to_block = []

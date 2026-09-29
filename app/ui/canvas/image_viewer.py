@@ -616,6 +616,9 @@ class ImageViewer(QGraphicsView):
         # loaded project starts with the saved spacing.
         item.letter_spacing = float(getattr(properties, "letter_spacing", 0.0) or 0.0)
         item.word_spacing = float(getattr(properties, "word_spacing", 0.0) or 0.0)
+        # Curvature goes through the setter so the bounding rect / transform
+        # origin pick up the arc slack before the item joins the scene.
+        item.set_curvature(float(getattr(properties, "curvature", 0.0) or 0.0))
         
         # Set direction if specified
         item.set_direction(properties.direction)

@@ -301,6 +301,21 @@ class WorkspaceMixin:
         self.word_spacing_dropdown.set_editable(True)
         _park_combo_cursor(self.word_spacing_dropdown)
 
+        # Text curvature (-100..100): 0 straight, positive bends the line into
+        # an upward arc, negative into a downward one. The slider only *edits*
+        # the value; TextController owns undo and pushes changes to the item.
+        self.curvature_label = QtWidgets.QLabel(self.tr("Curve"))
+        self.curvature_slider = MSlider(QtCore.Qt.Horizontal)
+        self.curvature_slider.setToolTip(
+            self.tr("Bend the text along an arc (up / down)"))
+        self.curvature_slider.setRange(-100, 100)
+        self.curvature_slider.setValue(0)
+        self.curvature_slider.setFixedWidth(110)
+        self.curvature_value_label = QtWidgets.QLabel("0")
+        self.curvature_value_label.setFixedWidth(28)
+        self.curvature_value_label.setAlignment(
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+
         main_text_settings_layout.addWidget(self.block_font_color_button)
         main_text_settings_layout.addWidget(self.alignment_tool_group)
         main_text_settings_layout.addWidget(self.bold_button)
@@ -339,12 +354,20 @@ class WorkspaceMixin:
         outline_settings_layout.addWidget(self.word_spacing_dropdown)
         outline_settings_layout.addStretch()
 
+        curvature_settings_layout = QtWidgets.QHBoxLayout()
+        curvature_settings_layout.setSpacing(3)
+        curvature_settings_layout.addWidget(self.curvature_label)
+        curvature_settings_layout.addWidget(self.curvature_slider)
+        curvature_settings_layout.addWidget(self.curvature_value_label)
+        curvature_settings_layout.addStretch()
+
         rendering_divider_top = MDivider()
         rendering_divider_bottom = MDivider()
         text_render_layout.addWidget(rendering_divider_top)
         text_render_layout.addLayout(font_settings_layout)
         text_render_layout.addLayout(main_text_settings_layout)
         text_render_layout.addLayout(outline_settings_layout)
+        text_render_layout.addLayout(curvature_settings_layout)
         text_render_layout.addWidget(rendering_divider_bottom)
 
         tools_widget = QtWidgets.QWidget()

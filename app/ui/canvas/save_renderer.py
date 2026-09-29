@@ -72,6 +72,8 @@ class ImageSaveRenderer:
             # Letter/word spacing are applied to the document font by the item.
             text_item.letter_spacing = float(text_props.letter_spacing or 0.0)
             text_item.word_spacing = float(text_props.word_spacing or 0.0)
+            # Export must match the on-canvas render, arcs included.
+            text_item.set_curvature(float(text_props.curvature or 0.0))
             text_item.selection_outlines = text_props.selection_outlines.copy()
             text_item.update()
 

@@ -273,11 +273,13 @@ class CoordinateConverter:
         # Page bounds in scene coordinates
         page_rect = QRectF(page_x_offset, page_y, page_width, page_height)
         
-        # Text item bounds in scene coordinates
-        text_x = text_item.pos().x()
-        text_y = text_item.pos().y()
-        text_width = text_item.boundingRect().width()
-        text_height = text_item.boundingRect().height()
+        # Text item bounds in scene coordinates (mapRectToScene: with
+        # curvature the bounding rect does not start at pos())
+        text_rect = text_item.mapRectToScene(text_item.boundingRect()).boundingRect()
+        text_x = text_rect.x()
+        text_y = text_rect.y()
+        text_width = text_rect.width()
+        text_height = text_rect.height()
         text_right = text_x + text_width
         text_bottom = text_y + text_height
         

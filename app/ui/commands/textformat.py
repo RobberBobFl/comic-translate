@@ -31,17 +31,24 @@ class TextFormatCommand(QUndoCommand, RectCommandBase):
         matching_item = self._get_item(self.old_item_prp)
         if matching_item:
             matching_item.set_text(self.new_html, self.new_item_prp.width)
+            # The dict restore can swap curvature (and with it the padded
+            # bounding rect), so the scene must be told while the old rect
+            # is still the valid one.
+            matching_item.prepareGeometryChange()
             matching_item.__dict__.update(self.new_dict)
             # Spacing lives on the item (__dict__), so it is restored by the
             # update above; re-apply it to the document font so the relaid-out
             # text keeps its letter/word spacing.
             matching_item.apply_spacing()
+            matching_item.setCenterTransform()
             matching_item.update()
 
     def undo(self):
         matching_item = self._get_item(self.new_item_prp)
         if matching_item:
             matching_item.set_text(self.old_html, self.old_item_prp.width)
+            matching_item.prepareGeometryChange()
             matching_item.__dict__.update(self.old_dict)
             matching_item.apply_spacing()
+            matching_item.setCenterTransform()
             matching_item.update()

@@ -96,6 +96,10 @@ class TextController:
         self._suspend_text_command = False
         self._is_updating_from_edit = False
         self._render_macro_stack = None
+        # TextFormatCommand snapshots taken on sliderPressed while the
+        # curvature slider is being dragged; released finalizes and pushes
+        # them as one undo step.
+        self._curvature_drag = None
 
     def connect_text_item_signals(self, text_item: TextBlockItem, force_reconnect: bool = False):
         if getattr(text_item, "_ct_signals_connected", False) and not force_reconnect:
@@ -216,6 +220,7 @@ class TextController:
             block_id=ensure_block_id(blk),
             letter_spacing=letter_spacing,
             word_spacing=word_spacing,
+            curvature=float(self.main.curvature_slider.value()),
         )
 
         # Anchor the translation to the speech bubble (when detected) instead of
@@ -680,7 +685,9 @@ class TextController:
                 # project): fall back to the current geometry.
                 bx, by = item.pos().x(), item.pos().y()
                 bw = item.textWidth()
-                bh = item.boundingRect().height()
+                bh = (item.contentBoundingRect().height()
+                      if hasattr(item, "contentBoundingRect")
+                      else item.boundingRect().height())
                 box = (bx, by, bw, bh)
             bx, by, bw, bh = box
 
@@ -710,6 +717,96 @@ class TextController:
 
     def on_word_spacing_change(self, spacing: str):
         self._on_spacing_change("word", spacing)
+
+    def on_curvature_slider_pressed(self):
+        """Snapshot undo state at the start of a drag so the whole slide is
+        one undo step (valueChanged fires on every pixel of movement)."""
+        items = self._selected_text_items()
+        if not items:
+            items = [ti for ti in self.main.image_viewer.text_items
+                     if isinstance(ti, TextBlockItem)]
+        if len(items) == 1:
+            self._transfer_panel_selection_to_item(items[0])
+        self._curvature_drag = [
+            (TextFormatCommand(self.main.image_viewer, item), item)
+            for item in items
+        ]
+
+    def on_curvature_change(self, value: int):
+        """Slider moved. During a drag the snapshots from sliderPressed are
+        mutated in place; otherwise (keyboard, programmatic) this is a
+        one-shot change with its own undo command."""
+        try:
+            value = max(-100, min(100, int(value)))
+        except (TypeError, ValueError):
+            return
+        self.main.curvature_value_label.setText(str(value))
+
+        if self._curvature_drag is not None:
+            for _command, item in self._curvature_drag:
+                item.set_curvature(value)
+            return
+
+        self._apply_format_to_selected(
+            "change_text_curvature",
+            lambda item: item.set_curvature(value),
+            include_all=True,
+        )
+
+    def on_curvature_slider_released(self):
+        drag = self._curvature_drag
+        self._curvature_drag = None
+        if not drag:
+            return
+
+        commands = []
+        for command, _item in drag:
+            command.finalize_new_state()
+            if command.old_dict.get('curvature') != command.new_dict.get('curvature'):
+                commands.append(command)
+        if not commands:
+            return
+
+        stack = self.main.undo_group.activeStack()
+        if stack is None:
+            return
+        if len(commands) > 1:
+            stack.beginMacro("change_text_curvature")
+        try:
+            for command in commands:
+                stack.push(command)
+        finally:
+            if len(commands) > 1:
+                stack.endMacro()
+
+    def _set_curvature_slider(self, value):
+        """Show a curvature value in the toolbar without triggering the
+        change signal (which would push an undo command)."""
+        if value is None:
+            return
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        slider = self.main.curvature_slider
+        slider.blockSignals(True)
+        try:
+            rounded = int(round(value))
+            slider.setValue(rounded)
+            self.main.curvature_value_label.setText(str(rounded))
+        finally:
+            slider.blockSignals(False)
+
+    def _refresh_curvature(self, item=None, props=None):
+        """Sync the curvature slider from an item or props dict."""
+        if item is not None:
+            curvature = getattr(item, "curvature", None)
+        elif props is not None:
+            curvature = (props.get('curvature') if isinstance(props, dict)
+                         else getattr(props, 'curvature', None))
+        else:
+            return
+        self._set_curvature_slider(curvature)
 
     def on_font_color_change(self):
         font_color = self.main.get_color()
@@ -947,6 +1044,7 @@ class TextController:
             self.main.outline_checkbox.setChecked(text_item.outline)
 
             self._refresh_spacing_dropdowns(item=text_item)
+            self._refresh_curvature(item=text_item)
 
             self.main.bold_button.setChecked(text_item.bold)
             self.main.italic_button.setChecked(text_item.italic)
@@ -1013,6 +1111,7 @@ class TextController:
             self.main.outline_checkbox.setChecked(outline)
 
             self._refresh_spacing_dropdowns(props=item_highlighted)
+            self._refresh_curvature(props=item_highlighted)
 
             self.main.bold_button.setChecked(bold)
             self.main.italic_button.setChecked(italic)

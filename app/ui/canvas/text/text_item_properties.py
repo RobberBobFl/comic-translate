@@ -61,6 +61,9 @@ class TextItemProperties:
     v_margin: float = 0.0  # top margin used to vertically center text in its block
     letter_spacing: float = 0.0  # extra px between letters (QFont AbsoluteSpacing)
     word_spacing: float = 0.0  # extra px between words
+    # Bend applied to the rendered text, -100..100. 0 = straight,
+    # positive = arch upward, negative = arch downward. Horizontal text only.
+    curvature: float = 0.0
     
     # Stable identifier linking this text item back to its TextBlock.
     # Empty string for legacy projects that predate this field.
@@ -135,6 +138,7 @@ class TextItemProperties:
         props.v_margin = data.get('v_margin', 0.0)
         props.letter_spacing = data.get('letter_spacing', 0.0)
         props.word_spacing = data.get('word_spacing', 0.0)
+        props.curvature = float(data.get('curvature', 0.0) or 0.0)
         
         # Advanced
         props.selection_outlines = data.get('selection_outlines', [])
@@ -173,9 +177,13 @@ class TextItemProperties:
             origin = item.transformOriginPoint()
             props.transform_origin = (origin.x(), origin.y())
         
-        # Layout properties
-        props.width = item.boundingRect().width()
-        props.height = item.boundingRect().height()
+        # Layout properties. The unpadded rect: with curvature active,
+        # boundingRect() carries arc slack that must not be saved as the
+        # item's text width/height (it would compound on reload).
+        rect = (item.contentBoundingRect() if hasattr(item, 'contentBoundingRect')
+                else item.boundingRect())
+        props.width = rect.width()
+        props.height = rect.height()
         props.vertical = getattr(item, 'vertical', False)
         # Persist the vertical-centering top margin so it survives a project
         # save/load (the save renderer re-applies props.v_margin).
@@ -190,6 +198,7 @@ class TextItemProperties:
         # Letter/word spacing live on the item (applied to the document font).
         props.letter_spacing = float(getattr(item, "letter_spacing", 0.0) or 0.0)
         props.word_spacing = float(getattr(item, "word_spacing", 0.0) or 0.0)
+        props.curvature = float(getattr(item, "curvature", 0.0) or 0.0)
         
         # Advanced properties
         props.selection_outlines = getattr(item, 'selection_outlines', []).copy()
@@ -226,6 +235,7 @@ class TextItemProperties:
             'v_margin': self.v_margin,
             'letter_spacing': self.letter_spacing,
             'word_spacing': self.word_spacing,
+            'curvature': self.curvature,
             'selection_outlines': self.selection_outlines,
             'block_id': self.block_id,
         }

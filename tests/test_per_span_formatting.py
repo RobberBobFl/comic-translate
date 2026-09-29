@@ -21,7 +21,8 @@ import re
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor, QColor
 from PySide6.QtWidgets import (QApplication, QTextEdit, QToolButton, QComboBox,
-                               QPushButton, QCheckBox, QGraphicsScene)
+                               QLabel, QPushButton, QCheckBox, QGraphicsScene,
+                               QSlider)
 
 from app.ui.canvas.text_item import TextBlockItem
 from app.ui.canvas.text.text_item_properties import TextItemProperties
@@ -315,6 +316,9 @@ class _ToolbarFakeMain:
         self.word_spacing_dropdown.addItems(["-4", "-2", "0", "2", "4", "6", "8", "10", "12"])
         self.word_spacing_dropdown.setCurrentText("0")
         self.word_spacing_dropdown.setEditable(True)
+        self.curvature_slider = QSlider(Qt.Horizontal)
+        self.curvature_slider.setRange(-100, 100)
+        self.curvature_value_label = QLabel("0")
         self.outline_checkbox = QCheckBox()
         self.block_font_color_button = QPushButton()
         self.outline_font_color_button = QPushButton()
