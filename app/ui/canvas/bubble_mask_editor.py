@@ -32,8 +32,9 @@ logger = logging.getLogger(__name__)
 DRAW_CLAMP_MARGIN = 32
 
 # QPainter on Format_Grayscale8 ignores pen width (draws a ~1px line), so the
-# mask is kept as RGBA8888 and read out as any-nonzero. Display is a separate
-# RGBA buffer with the same geometry (identity coordinates, no translation).
+# mask is kept as RGBA8888 and read out on accept with a 50% alpha threshold
+# (strokes are anti-aliased; any-nonzero read-out would fold the soft fringe
+# into the mask and grow every stroke by ~0.5px).
 _MASK_ALPHA = 200
 _FRAGMENT_ALPHA = 220
 _DIM_ALPHA = 150
@@ -145,8 +146,9 @@ class BubbleMaskEditor(QObject):
         self.mode = "brush"
 
         # The editable mask lives in an RGBA buffer ( QPainter cannot draw
-        # pen-width strokes on Grayscale8). "set" = opaque white, read out as
-        # any channel > 0. Buffers are full-page: scene coords == pixel coords.
+        # pen-width strokes on Grayscale8). "set" = opaque white, read out on
+        # accept with a 50% alpha threshold (see _on_accept). Buffers are
+        # full-page: scene coords == pixel coords.
         base = (np.asarray(mask) > 0)
         self._mask_rgba = np.zeros(base.shape[:2] + (4,), dtype=np.uint8)
         self._mask_rgba[base] = (255, 255, 255, 255)
@@ -431,7 +433,13 @@ class BubbleMaskEditor(QObject):
         self._on_reject()
 
     def _on_accept(self):
-        mask = (self._mask_rgba[..., 3] > 0).astype(np.uint8) * 255
+        # 50% alpha threshold: strokes are painted with Antialiasing, so the
+        # buffer carries a soft fringe along every stroke edge. Reading any
+        # nonzero alpha would fold that fringe into the mask as full pixels,
+        # growing each stroke by ~0.5px; the threshold keeps the mask on the
+        # stroke's geometric boundary (binary recover_bubble() masks pass
+        # through unchanged).
+        mask = (self._mask_rgba[..., 3] > 127).astype(np.uint8) * 255
         self.stop()
         if not mask.any():
             from app.ui.dayu_widgets.message import MMessage
