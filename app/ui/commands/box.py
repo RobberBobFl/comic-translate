@@ -5,6 +5,7 @@ from PySide6.QtCore import QRectF, QPointF
 from .base import RectCommandBase
 from ..canvas.rectangle import MoveableRectItem
 from ..canvas.text_item import TextBlockItem
+from modules.detection.utils.geometry import geometry_change_invalidates_text
 from pipeline.webtoon_utils import get_first_visible_block
 
 
@@ -51,31 +52,68 @@ class BoxesChangeCommand(QUndoCommand, RectCommandBase):
         self.new_angle = new_state.rotation
         self.new_tr_origin = (new_state.transform_origin.x(), new_state.transform_origin.y())
 
+        # Text as it was before the geometry edit. An invalidating change
+        # (resize / rotation / drag to another region) wipes the block's
+        # recognized text, so undo must be able to put it back.
+        self._text_snapshot = {
+            id(blk): (
+                getattr(blk, 'text', ''),
+                list(blk.texts) if getattr(blk, 'texts', None) is not None else None,
+                getattr(blk, 'translation', ''),
+            )
+            for blk in blk_list
+        }
+        self._invalidates_text = geometry_change_invalidates_text(
+            self.old_xyxy, self.new_xyxy, self.old_angle, self.new_angle
+        )
+
+    @staticmethod
+    def _drop_recognition(blk):
+        blk.text = ''
+        if getattr(blk, 'texts', None) is not None:
+            blk.texts = []
+        blk.translation = ''
+
+    def _restore_recognition(self, blk):
+        snap = self._text_snapshot.get(id(blk))
+        if snap is None:
+            return
+        text, texts, translation = snap
+        blk.text = text
+        if texts is not None:
+            blk.texts = list(texts)
+        blk.translation = translation
+
     def redo(self):
         for blk in self.blk_list:
             if (np.array_equal(blk.xyxy, self.old_xyxy) and
                 blk.angle == self.old_angle):
-            
+
                 blk.xyxy[:] = self.new_xyxy
                 blk.angle = self.new_angle
                 blk.tr_origin_point = self.new_tr_origin
 
-                self.find_and_update_item(self.scene, self.old_xyxy, self.old_angle, 
+                self.find_and_update_item(self.scene, self.old_xyxy, self.old_angle,
                                                 self.new_xyxy, self.new_angle, self.new_tr_origin)
                 self.scene.update()
+
+                if self._invalidates_text:
+                    self._drop_recognition(blk)
 
     def undo(self):
         for blk in self.blk_list:
             if (np.array_equal(blk.xyxy, self.new_xyxy) and
                 blk.angle == self.new_angle ):
-                
+
                 blk.xyxy[:] = self.old_xyxy
                 blk.angle = self.old_angle
                 blk.tr_origin_point = self.old_tr_origin
 
-                self.find_and_update_item(self.scene, self.new_xyxy, self.new_angle, 
+                self.find_and_update_item(self.scene, self.new_xyxy, self.new_angle,
                                         self.old_xyxy, self.old_angle, self.old_tr_origin)
                 self.scene.update()
+
+                self._restore_recognition(blk)
 
     @staticmethod
     def find_and_update_item(scene, old_xyxy, old_angle, new_xyxy, new_angle, new_tr_origin):

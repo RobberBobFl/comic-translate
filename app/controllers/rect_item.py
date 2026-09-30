@@ -14,7 +14,7 @@ from app.ui.commands.box import (
     TextItemMoveCommand,
 )
 
-from modules.detection.utils.geometry import do_rectangles_overlap
+from modules.detection.utils.geometry import do_rectangles_overlap, geometry_change_invalidates_text
 from modules.utils.textblock import TextBlock, ensure_block_id
 from modules.utils.language_utils import get_language_code
 from modules.rendering.render import is_vertical_block
@@ -150,12 +150,13 @@ class RectItemController:
         self._sync_to_state()
 
     def handle_rectangle_change(
-            self, 
-            old_rect_coords: tuple, 
-            new_rect_coords: tuple, 
-            new_angle: float, 
-            new_tr_origin: QPointF
-        ):
+            self,
+            old_rect_coords: tuple,
+            new_rect_coords: tuple,
+            new_angle: float,
+            new_tr_origin: QPointF,
+            old_angle: float | None = None,
+    ):
         # Find the corresponding TextBlock in blk_list
         # Find the TextBlock whose region contains the center of the edited
         # rectangle. When a detection box is resized the signal carries the
@@ -179,6 +180,13 @@ class RectItemController:
                     break
 
         if target is not None:
+            # rect_change_undo pushes BoxesChangeCommand (whose redo already
+            # applied the new geometry) before calling this, so the pre-edit
+            # angle must be passed in -- reading it off the block would see
+            # the already-updated value.
+            if old_angle is None:
+                old_angle = float(getattr(target, 'angle', 0) or 0)
+            old_angle = float(old_angle or 0)
             # Update the TextBlock coordinates
             target.xyxy[:] = [int(new_rect_coords[0]),
                               int(new_rect_coords[1]),
@@ -197,16 +205,18 @@ class RectItemController:
             target.angle = new_angle if new_angle else 0
             target.tr_origin_point = (new_tr_origin.x(), new_tr_origin.y()) if new_tr_origin else ()
             target.manual = True
-            # The block was just reshaped, so any previously recognized
-            # text/translation no longer matches its (edited) region.
-            # Drop it so the side panel / canvas stop showing stale
-            # recognition and so an explicit per-block OCR does not skip
-            # this block (OCR_image returns early when a block already
-            # has text).
-            target.text = ''
-            if getattr(target, 'texts', None) is not None:
-                target.texts = []
-            target.translation = ''
+            # The block was reshaped: drop the recognized text/translation
+            # only when the recognition region actually changed -- a real
+            # resize, a rotation, or a drag onto another region. Tiny nudges
+            # and recentring drags keep the text: the crop content is
+            # unchanged, and an explicit per-block OCR always re-recognizes,
+            # so nothing can get stuck stale.
+            if geometry_change_invalidates_text(
+                    old_rect_coords, new_rect_coords, old_angle, target.angle):
+                target.text = ''
+                if getattr(target, 'texts', None) is not None:
+                    target.texts = []
+                target.translation = ''
         self._sync_to_state()
 
     def _sync_to_state(self) -> None:
@@ -231,10 +241,11 @@ class RectItemController:
                                          new_state, self.main.blk_list)
         self.main.undo_group.activeStack().push(command)
         self.handle_rectangle_change(
-            old_state.rect, 
+            old_state.rect,
             new_state.rect,
             new_state.rotation,
-            new_state.transform_origin
+            new_state.transform_origin,
+            old_angle=old_state.rotation,
         )
 
     def text_overlay_change_undo(self, old_state, new_state):

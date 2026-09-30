@@ -319,3 +319,38 @@ def shrink_bbox(
         return x1, y1, x2, y2
     
     return ix1, iy1, ix2, iy2
+
+
+def geometry_change_invalidates_text(
+    old_xyxy: Sequence[float],
+    new_xyxy: Sequence[float],
+    old_angle: float,
+    new_angle: float,
+) -> bool:
+    """
+    Decide whether a manual box edit changed the recognition region enough
+    that previously recognized text / translation no longer matches it.
+
+    Tiny nudges and small recentring drags keep the text; a real resize,
+    a rotation, or a drag onto another region drops it (the OCR crop follows
+    the box, so the old recognition would be stale).
+    """
+    ox1, oy1, ox2, oy2 = [float(v) for v in old_xyxy[:4]]
+    nx1, ny1, nx2, ny2 = [float(v) for v in new_xyxy[:4]]
+
+    old_w = max(1.0, ox2 - ox1)
+    old_h = max(1.0, oy2 - oy1)
+
+    size_delta = max(abs((nx2 - nx1) - old_w), abs((ny2 - ny1) - old_h))
+    size_tol = max(4.0, 0.1 * max(old_w, old_h))
+
+    center_shift = max(
+        abs((nx1 + nx2) / 2.0 - (ox1 + ox2) / 2.0),
+        abs((ny1 + ny2) / 2.0 - (oy1 + oy2) / 2.0),
+    )
+    shift_tol = max(8.0, 0.25 * min(old_w, old_h))
+
+    angle_delta = abs(float(new_angle or 0.0) - float(old_angle or 0.0))
+    angle_delta = min(angle_delta, 360.0 - angle_delta)
+
+    return size_delta > size_tol or center_shift > shift_tol or angle_delta > 1.0
