@@ -45,6 +45,23 @@ class ManualWorkflowController:
             return self.main.image_files[self.main.curr_img_idx]
         return None
 
+    def _still_displaying(self, file_path: str | None) -> bool:
+        """True when the user is still viewing the page a background run was
+        started from.
+
+        Async OCR / translation / detection results must never overwrite the
+        live ``main.blk_list`` of a different page: the scene keeps the
+        displayed page's rectangles while ``blk_list`` would hold another
+        page's blocks, so clicks resolve to nothing and the next state write
+        stores page A's blocks under page B (texts, translations and all).
+        """
+        if file_path is None:
+            return False
+        displayed = self._current_file_path()
+        if displayed is None:
+            return False
+        return os.path.normcase(displayed) == os.path.normcase(file_path)
+
     def _selected_page_paths(self) -> list[str]:
         return self.main.get_selected_page_paths()
 
@@ -243,7 +260,7 @@ class ManualWorkflowController:
                     if file_path == current_file:
                         current_blocks = blk_list
 
-                if current_blocks is not None:
+                if current_blocks is not None and self._still_displaying(current_file):
                     if self.main.webtoon_mode:
                         self._set_current_blocks_from_page_state(
                             current_blocks,
@@ -349,7 +366,7 @@ class ManualWorkflowController:
                     if state is None:
                         continue
                     state["blk_list"] = blk_list
-                    if file_path == current_file:
+                    if file_path == current_file and self._still_displaying(file_path):
                         self._set_current_blocks_from_page_state(
                             blk_list,
                             current_page_unloaded=context["current_page_unloaded"],
@@ -678,7 +695,7 @@ class ManualWorkflowController:
                     # Collect translation memory: capture each block's source +
                     # model output once (skips blanks; never touches final_output).
                     tm.capture_translated_blocks(file_path, blk_list)
-                    if file_path == current_file:
+                    if file_path == current_file and self._still_displaying(file_path):
                         self._set_current_blocks_from_page_state(
                             blk_list,
                             current_page_unloaded=context["current_page_unloaded"],
@@ -1015,19 +1032,19 @@ class ManualWorkflowController:
                         viewer_state = state.setdefault("viewer_state", {})
                         viewer_state["rectangles"] = []
                         state["brush_strokes"] = strokes
-                        if file_path == current_file:
+                        if file_path == current_file and self._still_displaying(file_path):
                             self._set_current_blocks_from_page_state(
                                 blk_list,
                                 current_page_unloaded=context["current_page_unloaded"],
                             )
 
-                    if (
-                        not self.main.webtoon_mode
-                        and current_file is not None
-                        and current_file in (results or {})
-                    ):
-                        for stroke in results[current_file][1]:
-                            self.main.image_viewer.draw_segmentation_lines(None, stroke=stroke)
+                if (
+                    not self.main.webtoon_mode
+                    and self._still_displaying(current_file)
+                    and current_file in (results or {})
+                ):
+                    for stroke in results[current_file][1]:
+                        self.main.image_viewer.draw_segmentation_lines(None, stroke=stroke)
 
                     if results:
                         self.main.mark_project_dirty()
