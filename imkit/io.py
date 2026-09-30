@@ -53,11 +53,11 @@ def encode_image(array: np.ndarray, ext: str = ".png", **kwargs) -> bytes:
 
     fmt = "JPEG" if fmt == "JPG" else fmt
     if fmt == "JPEG":
-        try:
-            im.save(buf, format=fmt, quality="keep", **save_kwargs)
-            return buf.getvalue()
-        except (ValueError, OSError):
-            pass
+        # Arrays have no original JPEG state, so Pillow's quality="keep"
+        # always raises; an explicit quality is the only thing that applies.
+        save_kwargs.setdefault("quality", kwargs.get("quality", 75))
+        im.save(buf, format=fmt, **save_kwargs)
+        return buf.getvalue()
     if fmt == "PNG":
         # Pillow uses 0 (no compression) to 9. Mirror cv2.IMWRITE_PNG_COMPRESSION default 3.
         save_kwargs.setdefault("compress_level", kwargs.get("compress_level", 3))

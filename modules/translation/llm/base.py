@@ -436,7 +436,7 @@ class BaseLLMTranslation(LLMTranslation):
             Tuple of (Base64 encoded string, mime_type)
         """
         # Direct encoding from numpy/cv2 format to bytes
-        buffer = imk.encode_image(image, ext.lstrip('.'))
+        buffer = imk.encode_image(image, ext.lstrip('.'), quality=85)
         
         # Convert to base64
         img_str = base64.b64encode(buffer).decode('utf-8')

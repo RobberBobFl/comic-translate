@@ -137,7 +137,7 @@ class UserTranslator(TranslationEngine):
          
         if should_send_image:
             # Use JPEG for significantly smaller payloads than PNG (faster over the wire).
-            buffer = imk.encode_image(image, "jpg")
+            buffer = imk.encode_image(image, "jpg", quality=85)
             image_base64_payload = base64.b64encode(buffer).decode('utf-8')
             logger.debug("UserTranslator: Encoded image for web API request.")
         after_encode_t = time.perf_counter()
