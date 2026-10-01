@@ -86,6 +86,7 @@ class ComicTranslateUI(
         self.settings_page = SettingsPage(self)
         self.settings_page.theme_changed.connect(self.apply_theme)
         self.settings_page.font_imported.connect(self.set_font)
+        self.settings_page.ui.text_rendering_page.favorites_only_changed.connect(self.apply_favorites_only)
         self.main_content_widget = None
         self._workspace_initialized = False
         self.tool_buttons = {}

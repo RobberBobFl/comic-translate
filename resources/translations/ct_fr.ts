@@ -1446,6 +1446,14 @@ Ouvrez ou créez un projet pour commencer.</translation>
         <source>Render Text in UpperCase</source>
         <translation>Afficher le texte en majuscules</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>Afficher uniquement les polices favorites</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>Limite la liste des polices à celles marquées comme favorites</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

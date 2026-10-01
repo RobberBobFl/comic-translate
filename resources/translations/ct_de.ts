@@ -1446,6 +1446,14 @@ Open or create a project to get started.</source>
         <source>Render Text in UpperCase</source>
         <translation>Text in Großbuchstaben darstellen</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>Nur favorisierte Schriftarten anzeigen</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>Schränkt die Schriftarten-Liste auf die als Favoriten markierten Schriftarten ein</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

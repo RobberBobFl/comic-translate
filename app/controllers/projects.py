@@ -1882,6 +1882,7 @@ class ProjectController:
         self.main.block_font_color_button.setStyleSheet(f"background-color: {color}; border: none; border-radius: 5px;")
         self.main.block_font_color_button.setProperty('selected_color', color)
         self.main.settings_page.ui.uppercase_checkbox.setChecked(settings.value('upper_case', False, type=bool))
+        self.main.settings_page.ui.favorites_only_checkbox.setChecked(settings.value('show_favorites_only', False, type=bool))
         self.main.outline_checkbox.setChecked(settings.value('outline', True, type=bool))
 
         self.main.line_spacing_dropdown.setCurrentText(settings.value('line_spacing', '1.0'))

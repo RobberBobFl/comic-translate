@@ -1446,6 +1446,14 @@ Open or create a project to get started.</source>
         <source>Render Text in UpperCase</source>
         <translation>テキストを大文字でレンダリングする</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>お気に入りのフォントのみ表示</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>フォントのドロップダウンをお気に入りに登録したフォントに制限します</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

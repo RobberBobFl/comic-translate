@@ -226,3 +226,8 @@ class ToolStateMixin:
         self.font_dropdown.setCurrentFont(QtGui.QFont(resolved_family))
         if self.font_dropdown.currentText() != resolved_family:
             self.font_dropdown.setCurrentText(resolved_family)
+
+    def apply_favorites_only(self, enabled: bool):
+        dropdown = getattr(self, "font_dropdown", None)
+        if dropdown is not None:
+            dropdown.set_favorites_only(enabled)

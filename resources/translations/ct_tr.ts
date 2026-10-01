@@ -1446,6 +1446,14 @@ Başlamak için bir proje açın veya oluşturun.</translation>
         <source>Render Text in UpperCase</source>
         <translation>Metni Büyük Harflerle Renderla</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>Yalnızca favori yazı tiplerini göster</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>Yazı tipi listesini favori olarak işaretlenen yazı tipleriyle sınırlar</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

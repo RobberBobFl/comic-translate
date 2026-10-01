@@ -7,6 +7,7 @@ from app.ui.dayu_widgets.browser import MDragFileButton
 from app.ui.dayu_widgets.button_group import MPushButtonGroup, MToolButtonGroup
 from app.ui.dayu_widgets.check_box import MCheckBox
 from app.ui.dayu_widgets.combo_box import MComboBox, MFontComboBox
+from app.ui.font_favorites import get_shared_font_favorites
 from app.ui.dayu_widgets.divider import MDivider
 from app.ui.dayu_widgets.line_edit import MLineEdit
 from app.ui.dayu_widgets.loading import MLoading
@@ -211,6 +212,7 @@ class WorkspaceMixin:
         font_settings_layout.setSpacing(3)
 
         self.font_dropdown = MFontComboBox().small()
+        self.font_dropdown.set_font_favorites(get_shared_font_favorites())
         self.font_dropdown.setToolTip(self.tr("Font"))
         _park_combo_cursor(self.font_dropdown)
         self.font_size_dropdown = MComboBox().small()

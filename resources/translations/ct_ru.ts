@@ -1436,7 +1436,15 @@ Open or create a project to get started.</source>
     </message>
     <message>
         <source>Render Text in UpperCase</source>
-        <translation>Отображать текст прописными буквами</translation>
+        <translation>Писать текст ЗАГЛАВНЫМИ БУКВАМИ</translation>
+    </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>Показывать только избранные шрифты</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>Ограничить список шрифтов шрифтами, отмеченными звёздочкой</translation>
     </message>
 </context>
 <context>

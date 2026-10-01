@@ -1,10 +1,13 @@
 from PySide6 import QtWidgets
+from PySide6.QtCore import QSettings, Signal
 from ..dayu_widgets.label import MLabel
 from ..dayu_widgets.spin_box import MSpinBox
 from ..dayu_widgets.browser import MClickBrowserFileToolButton
 from ..dayu_widgets.check_box import MCheckBox
 
 class TextRenderingPage(QtWidgets.QWidget):
+    favorites_only_changed = Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -55,8 +58,25 @@ class TextRenderingPage(QtWidgets.QWidget):
         # Uppercase
         self.uppercase_checkbox = MCheckBox(self.tr("Render Text in UpperCase"))
 
+        # Favorite fonts
+        self.favorites_only_checkbox = MCheckBox(self.tr("Show Favorite Fonts Only"))
+        self.favorites_only_checkbox.setToolTip(
+            self.tr("Limit the font dropdown to the fonts starred as favorites")
+        )
+        self.favorites_only_checkbox.toggled.connect(self._on_favorites_only_changed)
+
         layout.addWidget(self.uppercase_checkbox)
+        layout.addWidget(self.favorites_only_checkbox)
         layout.addSpacing(10)
         layout.addLayout(font_layout)
         layout.addSpacing(10)
         layout.addStretch(1)
+
+    def _on_favorites_only_changed(self, checked: bool):
+        # Persist immediately (same pattern as shortcut changes), the
+        # dropdown listens to favorites_only_changed.
+        settings = QSettings("ComicLabs", "ComicTranslate")
+        settings.beginGroup("text_rendering")
+        settings.setValue("show_favorites_only", bool(checked))
+        settings.endGroup()
+        self.favorites_only_changed.emit(bool(checked))

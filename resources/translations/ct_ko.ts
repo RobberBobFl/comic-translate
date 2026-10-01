@@ -1446,6 +1446,14 @@ Open or create a project to get started.</source>
         <source>Render Text in UpperCase</source>
         <translation>대문자로 텍스트 렌더링</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>즐겨찾는 글꼴만 표시</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>글꼴 드롭다운을 즐겨찾기로 표시된 글꼴로 제한합니다</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

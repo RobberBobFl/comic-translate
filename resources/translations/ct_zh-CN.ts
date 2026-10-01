@@ -1445,6 +1445,14 @@ Open or create a project to get started.</source>
         <source>Render Text in UpperCase</source>
         <translation>文本渲染为大写</translation>
     </message>
+    <message>
+        <source>Show Favorite Fonts Only</source>
+        <translation>仅显示收藏的字体</translation>
+    </message>
+    <message>
+        <source>Limit the font dropdown to the fonts starred as favorites</source>
+        <translation>将字体下拉列表限制为已标星收藏的字体</translation>
+    </message>
 </context>
 <context>
     <name>ToolsPage</name>

@@ -11,7 +11,10 @@ from __future__ import division
 from __future__ import print_function
 
 # Import third-party modules
+import math
+
 from PySide6 import QtCore
+from PySide6 import QtGui
 from PySide6 import QtWidgets
 
 # Import local modules
@@ -177,10 +180,89 @@ class MComboBox(MComboBoxSearchMixin, QtWidgets.QComboBox):
         return self
 
 
+def _make_star_pixmap(filled, size=16, dpr=2.0):
+    """Draw a five-point star: filled amber for favorites, gray outline otherwise."""
+    pm = QtGui.QPixmap(int(size * dpr), int(size * dpr))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(QtCore.Qt.GlobalColor.transparent)
+    painter = QtGui.QPainter(pm)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+    polygon = QtGui.QPolygonF()
+    center = size / 2.0
+    outer = size / 2.0 - 1.0
+    inner = outer * 0.45
+    for i in range(10):
+        angle = -math.pi / 2.0 + i * math.pi / 5.0
+        radius = outer if i % 2 == 0 else inner
+        polygon.append(QtCore.QPointF(center + radius * math.cos(angle),
+                                      center + radius * math.sin(angle)))
+    painter.setPen(QtGui.QPen(QtGui.QColor("#f5a623" if filled else "#8a8a8a"), 1.2))
+    if filled:
+        painter.setBrush(QtGui.QColor("#f5a623"))
+    painter.drawPolygon(polygon)
+    painter.end()
+    return pm
+
+
+class _StarItemDelegate(QtWidgets.QStyledItemDelegate):
+    """Paints the favorite star in the last popup column."""
+
+    def __init__(self, is_favorite_fn, parent=None):
+        super(_StarItemDelegate, self).__init__(parent)
+        self._is_favorite = is_favorite_fn
+        self._filled = _make_star_pixmap(True)
+        self._outline = _make_star_pixmap(False)
+
+    def paint(self, painter, option, index):
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        opt.icon = QtGui.QIcon()
+        widget = opt.widget
+        style = widget.style() if widget else QtWidgets.QApplication.style()
+        style.drawControl(QtWidgets.QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)
+
+        family = index.siblingAtColumn(0).data(QtCore.Qt.ItemDataRole.DisplayRole) or ""
+        pixmap = self._filled if self._is_favorite(family) else self._outline
+        rect = option.rect
+        size = QtCore.QSizeF(pixmap.size()) / pixmap.devicePixelRatio()
+        target = QtCore.QRectF(rect.x() + (rect.width() - size.width()) / 2.0,
+                               rect.y() + (rect.height() - size.height()) / 2.0,
+                               size.width(), size.height())
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+        painter.drawPixmap(target, pixmap, QtCore.QRectF(pixmap.rect()))
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        size = super(_StarItemDelegate, self).sizeHint(option, index)
+        star = max(self._filled.width(), self._outline.width())
+        size.setWidth(max(size.width(), star + 8))
+        return size
+
+
+class _FontPopupTreeView(QtWidgets.QTreeView):
+    """Popup view that turns clicks on the star column into toggle requests
+    instead of row selection."""
+
+    favorite_clicked = QtCore.Signal(str)
+
+    def mousePressEvent(self, event):
+        index = self.indexAt(event.position().toPoint())
+        if index.isValid() and index.column() == MFontComboBox.STAR_COLUMN:
+            family = index.siblingAtColumn(0).data(QtCore.Qt.ItemDataRole.DisplayRole)
+            if family:
+                self.favorite_clicked.emit(family)
+            event.accept()
+            return
+        super(_FontPopupTreeView, self).mousePressEvent(event)
+
+
 @cursor_mixin
 @focus_shadow_mixin
 class MFontComboBox(MComboBoxSearchMixin, QtWidgets.QFontComboBox):
     Separator = "/"
+    STAR_COLUMN = 1
     sig_value_changed = QtCore.Signal(object)
 
     def __init__(self, parent=None):
@@ -201,24 +283,58 @@ class MFontComboBox(MComboBoxSearchMixin, QtWidgets.QFontComboBox):
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self._dayu_size = dayu_theme.default_size
         self._font_preview_delegate = self.view().itemDelegate() if self.view() is not None else None
+        self._font_favorites = None
+        self._favorites_only = False
+        self._known_families = ()
+        self._font_model = QtGui.QStandardItemModel(0, 2, self)
+        line_edit = self.lineEdit()
+        if line_edit is not None:
+            self._default_line_edit_family = line_edit.font().family()
         self._configure_popup_view()
+        self._rebuild_font_model()
+        app_instance = QtGui.QGuiApplication.instance()
+        if app_instance is not None:
+            app_instance.fontDatabaseChanged.connect(self._ensure_font_model_fresh)
         self.currentTextChanged.connect(self._update_selected_font_tooltip)
+        self.currentIndexChanged.connect(self._update_line_edit_font)
         self._update_selected_font_tooltip(self.currentText())
+
+    def _update_line_edit_font(self, index):
+        line_edit = self.lineEdit()
+        if line_edit is None:
+            return
+        family = ""
+        if 0 <= index < self._font_model.rowCount():
+            font = self._font_model.item(index, 0).data(QtCore.Qt.ItemDataRole.FontRole)
+            if font is not None:
+                family = font.family()
+        if not family:
+            family = getattr(self, "_default_line_edit_family", "") or line_edit.font().family()
+        new_font = QtGui.QFont(line_edit.font())
+        new_font.setFamily(family)
+        if new_font != line_edit.font():
+            line_edit.setFont(new_font)
 
     def _configure_popup_view(self):
         view = self.view()
-        if not isinstance(view, QtWidgets.QTreeView):
-            tree_view = QtWidgets.QTreeView(self)
+        if not isinstance(view, _FontPopupTreeView):
+            tree_view = _FontPopupTreeView(self)
             tree_view.setRootIsDecorated(False)
             tree_view.setItemsExpandable(False)
             tree_view.setUniformRowHeights(True)
             tree_view.setHeaderHidden(True)
             if self._font_preview_delegate is not None:
-                tree_view.setItemDelegate(self._font_preview_delegate)
+                tree_view.setItemDelegateForColumn(0, self._font_preview_delegate)
+            tree_view.setItemDelegateForColumn(1, _StarItemDelegate(self._is_font_favorite, tree_view))
+            tree_view.favorite_clicked.connect(self._on_star_clicked)
             header = tree_view.header()
             header.setStretchLastSection(False)
             header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Fixed)
+            header.setSectionResizeMode(MFontComboBox.STAR_COLUMN, QtWidgets.QHeaderView.ResizeMode.Fixed)
             self._has_custom_view = True
+            # Mixin setModel(): swaps the combo model and re-binds the
+            # search completer to it.
+            self.setModel(self._font_model)
             super(MFontComboBox, self).setView(tree_view)
             view = tree_view
 
@@ -253,12 +369,17 @@ class MFontComboBox(MComboBoxSearchMixin, QtWidgets.QFontComboBox):
                 widest_text = max(widest_text, metrics.horizontalAdvance(self.itemText(idx)))
 
         extra_padding = 120
+        is_tree = isinstance(view, QtWidgets.QTreeView)
+        star_width = view.columnWidth(MFontComboBox.STAR_COLUMN) if is_tree else 0
         target_width = widest_text + extra_padding
         max_popup_width = max(self.width(), 420)
-        popup_width = min(max_popup_width, max(self.width(), target_width))
+        popup_width = min(max_popup_width, max(self.width(), target_width + star_width))
 
-        if isinstance(view, QtWidgets.QTreeView):
-            view.setColumnWidth(0, target_width)
+        if is_tree:
+            # The name column must leave room for the star column, otherwise
+            # the star gets clipped outside the popup. Long names stay
+            # reachable through the horizontal scrollbar.
+            view.setColumnWidth(0, max(120, popup_width - star_width))
 
         view.setMinimumWidth(popup_width)
         view.setMaximumWidth(popup_width)
@@ -266,6 +387,104 @@ class MFontComboBox(MComboBoxSearchMixin, QtWidgets.QFontComboBox):
     def _update_selected_font_tooltip(self, family_name: str):
         if self.lineEdit() is not None:
             self.lineEdit().setToolTip(family_name or self.tr("Font"))
+
+    def setCurrentFont(self, font):
+        """QFontComboBox's own implementation only updates its private state
+        (its model update no-ops for foreign models), so select the family in
+        our model ourselves."""
+        family = font.family() if isinstance(font, QtGui.QFont) else str(font)
+        if not self._select_family(family or ""):
+            self.setCurrentIndex(-1)
+
+    def set_font_favorites(self, font_favorites):
+        """Attach a FontFavorites instance; enables the star column."""
+        self._font_favorites = font_favorites
+        if font_favorites is not None:
+            font_favorites.changed.connect(self._rebuild_font_model)
+            self._rebuild_font_model()
+
+    def set_favorites_only(self, enabled):
+        """When True, the popup only lists favorites (plus the current font)."""
+        self._favorites_only = bool(enabled)
+
+    def _is_font_favorite(self, family: str) -> bool:
+        return (self._font_favorites is not None
+                and self._font_favorites.is_favorite(family))
+
+    def _on_star_clicked(self, family: str):
+        if self._font_favorites is not None:
+            self._font_favorites.toggle(family)
+
+    def _rebuild_font_model(self):
+        families = list(QtGui.QFontDatabase.families())
+        self._known_families = tuple(families)
+        current = self.currentText()
+
+        ordered = []
+        available = {family.casefold(): family for family in families}
+        if self._font_favorites is not None:
+            for stored in self._font_favorites.favorites():
+                family = available.get(stored.casefold())
+                if family is not None and family not in ordered:
+                    ordered.append(family)
+        favorite_set = {family.casefold() for family in ordered}
+        ordered.extend(family for family in families if family.casefold() not in favorite_set)
+
+        # QComboBox auto-selects row 0 as soon as the first row lands and
+        # clears the selection when rows go away — both emit currentTextChanged
+        # with transient values. Keep the whole repopulation signal-silent and
+        # restore the selection up front.
+        was_blocked = self.blockSignals(True)
+        try:
+            self._font_model.setRowCount(0)
+            for family in ordered:
+                name_item = QtGui.QStandardItem(family)
+                name_item.setData(QtGui.QFont(family), QtCore.Qt.ItemDataRole.FontRole)
+                star_item = QtGui.QStandardItem()
+                star_item.setEditable(False)
+                self._font_model.appendRow([name_item, star_item])
+
+            if current:
+                self._select_family(current)
+            else:
+                self.setCurrentIndex(-1)
+        finally:
+            self.blockSignals(was_blocked)
+        view = self.view()
+        if isinstance(view, QtWidgets.QTreeView):
+            # Column widths only stick once the model actually has columns.
+            view.setColumnWidth(MFontComboBox.STAR_COLUMN, 28)
+        if self._favorites_only:
+            self._apply_favorites_filter()
+        elif view is not None:
+            for row in range(self._font_model.rowCount()):
+                view.setRowHidden(row, QtCore.QModelIndex(), False)
+
+    def _select_family(self, family: str) -> bool:
+        folded = family.casefold()
+        for row in range(self._font_model.rowCount()):
+            name = self._font_model.item(row, 0).text()
+            if name.casefold() == folded:
+                self.setCurrentIndex(row)
+                return True
+        return False
+
+    def _ensure_font_model_fresh(self):
+        if self._known_families != tuple(QtGui.QFontDatabase.families()):
+            self._rebuild_font_model()
+
+    def _apply_favorites_filter(self):
+        view = self.view()
+        if view is None:
+            return
+        current = self.currentText().casefold()
+        for row in range(self._font_model.rowCount()):
+            family = self._font_model.item(row, 0).text()
+            hidden = (self._favorites_only
+                      and self._font_favorites is not None
+                      and not self._font_favorites.is_favorite(family)
+                      and family.casefold() != current)
+            view.setRowHidden(row, QtCore.QModelIndex(), hidden)
 
     def get_dayu_size(self):
         """
@@ -315,6 +534,8 @@ class MFontComboBox(MComboBoxSearchMixin, QtWidgets.QFontComboBox):
     def showPopup(self):
         """Override default showPopup. When set custom menu, show the menu instead."""
         if self._has_custom_view or self._root_menu is None:
+            self._ensure_font_model_fresh()
+            self._apply_favorites_filter()
             super(MFontComboBox, self).showPopup()
             self._sync_popup_width()
             if self.view() is not None:
