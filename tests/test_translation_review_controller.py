@@ -190,6 +190,33 @@ def test_review_window_is_lazy_and_reopenable(setup):
     assert ctrl._dialog.isVisible()
 
 
+def test_dismiss_removes_entry_from_stored_review(setup):
+    """A dismissed suggestion is processed: it must not reappear on reopen."""
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    ctrl.show_results(PAGE)
+
+    ctrl.dismiss_entry(0)
+
+    assert "translation_review" not in main.image_states[PAGE]
+    assert ctrl.panel.is_empty()
+    assert main.dirty
+
+
+def test_dismiss_keeps_remaining_entries(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    state = _review_state(blk)
+    state["blocks"]["1"] = dict(state["blocks"]["0"], block_index=1, recommended="Другой")
+    main, ctrl = setup(blk, state)
+    ctrl.show_results(PAGE)
+
+    ctrl.dismiss_entry(0)
+
+    assert set(main.image_states[PAGE]["translation_review"]["blocks"]) == {"1"}
+    assert set(ctrl.panel.entries()) == {1}
+    assert main.dirty
+
+
 def test_live_block_fallback_matches_by_source_text(setup):
     """Blocks re-sorted after the review: xyxy no longer matches, but the
     reviewed index still holds a block with the same source text."""

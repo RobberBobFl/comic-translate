@@ -55,6 +55,7 @@ class TranslationReviewController(QtCore.QObject):
             self._dialog = ReviewDialog(parent)
             panel = self._dialog.review_panel
             panel.apply_entries_requested.connect(self.apply_entries)
+            panel.dismiss_requested.connect(self.dismiss_entry)
             panel.block_focus_requested.connect(self.focus_block)
             self._dialog.rerun_requested.connect(self._rerun_review)
         return self._dialog
@@ -62,6 +63,29 @@ class TranslationReviewController(QtCore.QObject):
     def _rerun_review(self) -> None:
         """Re-run the review for the displayed page, overwriting the stored one."""
         self.main.manual_workflow_ctrl.review_translation(force=True)
+
+    def dismiss_entry(self, entry_id: int) -> None:
+        """Drop a suggestion from the window AND the stored page review.
+
+        A dismissed suggestion is treated as processed: it must not reappear
+        when the review window is reopened later.
+        """
+        panel = self._dialog.review_panel if self._dialog is not None else None
+        file_path = self._current_file_path()
+        if file_path is None:
+            return
+        state = self.main.image_states.get(file_path, {})
+        blocks = (state.get("translation_review") or {}).get("blocks") or {}
+        if str(entry_id) in blocks:
+            blocks.pop(str(entry_id), None)
+            if not blocks:
+                state.pop("translation_review", None)
+            try:
+                self.main.mark_project_dirty()
+            except Exception:
+                pass
+        if panel is not None:
+            panel.remove_entries([entry_id])
 
     # ------------------------------------------------------------------
     # Panel population

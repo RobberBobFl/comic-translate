@@ -248,6 +248,7 @@ class ReviewPanel(QtWidgets.QWidget):
     """
 
     apply_entries_requested = QtCore.Signal(list)   # [(entry_id, text), ...]
+    dismiss_requested = QtCore.Signal(int)          # entry_id (relayed to the controller)
     block_focus_requested = QtCore.Signal(int)      # entry_id
     close_requested = QtCore.Signal()
 
@@ -347,7 +348,7 @@ class ReviewPanel(QtWidgets.QWidget):
         for entry_id, entry in sorted(entries.items()):
             card = ReviewEntryWidget(entry_id, entry)
             card.apply_requested.connect(self._on_card_apply)
-            card.dismiss_requested.connect(self._on_card_dismiss)
+            card.dismiss_requested.connect(self.dismiss_requested)
             card.focus_requested.connect(self.block_focus_requested)
             card.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             card.set_stale(entry_id in stale_ids)
@@ -372,9 +373,6 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def _on_card_apply(self, entry_id: int, text: str):
         self.apply_entries_requested.emit([(entry_id, text)])
-
-    def _on_card_dismiss(self, entry_id: int):
-        self.remove_entries([entry_id])
 
     def _emit_apply_selected(self):
         selections = []
