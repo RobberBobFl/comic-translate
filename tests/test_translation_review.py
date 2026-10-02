@@ -225,6 +225,17 @@ def test_placeholders_empty_langs():
     assert "the source language" in text
 
 
+def test_default_review_prompt_contract():
+    """The default prompt keeps the placeholders and the no-case-pedantry rule."""
+    prompt = TranslationReviewer.DEFAULT_REVIEW_PROMPT
+    assert "{source_lang}" in prompt
+    assert "{target_lang}" in prompt
+    assert "capitalization" in prompt.lower()
+    filled = TranslationReviewer.apply_placeholders(prompt, "English", "Russian")
+    assert "{source_lang}" not in filled
+    assert "{target_lang}" not in filled
+
+
 # ---------------------------------------------------------------------------
 # review(): single request, no completion limit, diagnostic empty-response path
 # ---------------------------------------------------------------------------

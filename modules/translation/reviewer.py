@@ -65,13 +65,66 @@ Rules:
 
     DEFAULT_REVIEW_PROMPT = """\
 Review this comic page translation from {source_lang} to {target_lang}.
-For each block, compare the ORIGINAL text with its current TRANSLATION and
-judge:
-- meaning: does the translation say what the original says?
-- naturalness: does it sound like a native {target_lang} speaker wrote it?
-- tone: does it fit the scene (see the page image if provided)?
-Watch especially for calques - literal borrowings from {source_lang} that
-sound unnatural in {target_lang}."""
+You are reviewing an existing human-quality comic translation, not translating the page from scratch.
+
+For each block, compare the ORIGINAL text with its current TRANSLATION and determine whether there is a meaningful reason to change it.
+Consider:
+- meaning: does the translation accurately convey what the original says?
+- naturalness: does it sound like natural {target_lang} written by a native speaker?
+- tone: does it fit the scene and the character?
+- character voice: does the wording fit the character's personality and manner of speaking?
+- humor and wordplay: are jokes, puns, double meanings and comedic intent preserved when possible?
+- context: does the translation make sense together with the other dialogue and the visual information on the page?
+
+Use the page image as additional context when provided. Do not analyze blocks in isolation when the surrounding dialogue or visual scene changes their meaning.
+
+This is a comic book translation, not a formal or literary text:
+- Prefer natural spoken dialogue and concise phrasing.
+- Preserve each character's individual voice.
+- Do not make dialogue unnecessarily formal, technical, bookish or verbose.
+- A character should not sound like a professor, scientist, lawyer or official unless the character and context justify that style.
+- Do not replace natural conversational wording with more formal or sophisticated wording merely because it is more precise.
+- Keep dialogue concise and suitable for comic speech bubbles.
+- Do not base suggestions on capitalization, letter case or minor punctuation choices: comic lettering is almost always ALL CAPS, and case conventions differ between languages.
+
+Watch especially for calques - literal borrowings from {source_lang} that sound unnatural in {target_lang}.
+However, do not call something a calque merely because the {target_lang} wording resembles the {source_lang} wording. A phrase can legitimately have a similar structure in both languages. Common, natural expressions in {target_lang} should be accepted even when they closely correspond to the original.
+
+Be conservative.
+The goal is to identify meaningful translation problems, not to rewrite acceptable translations according to personal preference.
+
+Do NOT report a problem merely because:
+- another translation is possible;
+- another wording sounds slightly more elegant;
+- you personally would phrase it differently;
+- a synonym could be used;
+- the current wording is somewhat literal but still natural and accurate;
+- the current wording is concise or conversational;
+- a more formal or technically precise wording is possible;
+- the wording differs from the original only in capitalization or letter case (comic fonts are mostly ALL CAPS, and lowercase/uppercase differences are not errors).
+
+Only suggest a change when there is a clear and meaningful reason, such as:
+- a real meaning error;
+- a mistranslated or misunderstood phrase;
+- a contextual misunderstanding;
+- a misleading word choice;
+- a genuine calque or unnatural phrase;
+- loss of important tone or character voice;
+- loss of an important joke, pun or double meaning;
+- incorrect terminology when the terminology materially affects the meaning;
+- unnecessary verbosity that makes the dialogue noticeably worse;
+- a significant opportunity to make the line substantially more natural or effective in context.
+
+Do not automatically "correct" unusual terminology, technical language, metaphors, jokes, or authorial choices simply because they seem unusual or unrealistic. If the original deliberately uses an unusual term or expression and the current translation preserves its meaning and intent, it is acceptable.
+In particular, do not replace a specific technical term with a vague alternative merely because the specific term sounds unusual. Preserve the original distinction unless the translation actually misrepresents the meaning.
+
+When deciding between ERROR and IMPROVEMENT:
+- ERROR: the current translation has a real problem: incorrect meaning, wrong context, misleading wording, unnatural phrasing, lost character voice, or another issue that materially affects the translation.
+- IMPROVEMENT: the current translation is already acceptable, but there is a substantially better rendering that meaningfully improves naturalness, humor, tone, character voice, or contextual fit.
+Do not use IMPROVEMENT for minor stylistic preferences or equally valid alternatives.
+
+If the current translation is already natural, accurate, and appropriate for the scene, leave it unchanged.
+If you are uncertain whether a change is actually necessary, prefer leaving the current translation unchanged."""
 
     def __init__(self, api_key: str = "", api_url: str = DEFAULT_API_URL, model: str = ""):
         self.api_key = api_key or ""
