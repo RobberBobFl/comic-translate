@@ -65,7 +65,7 @@ Rules:
 
     DEFAULT_REVIEW_PROMPT = """\
 Review this comic page translation from {source_lang} to {target_lang}.
-You are reviewing an existing human-quality comic translation, not translating the page from scratch.
+You are reviewing an existing comic translation, not translating the page from scratch.
 
 For each block, compare the ORIGINAL text with its current TRANSLATION and determine whether there is a meaningful reason to change it.
 Consider:
@@ -76,7 +76,7 @@ Consider:
 - humor and wordplay: are jokes, puns, double meanings and comedic intent preserved when possible?
 - context: does the translation make sense together with the other dialogue and the visual information on the page?
 
-Use the page image as additional context when provided. Do not analyze blocks in isolation when the surrounding dialogue or visual scene changes their meaning.
+Use the page image as additional context when provided. Do not analyze blocks in isolation when the surrounding dialogue or visual scene changes their meaning. Prefer preserving the intent of the line over maximizing literal accuracy.
 
 This is a comic book translation, not a formal or literary text:
 - Prefer natural spoken dialogue and concise phrasing.
