@@ -23,12 +23,6 @@ class TranslationReviewer:
     """
 
     DEFAULT_API_URL = "http://localhost:11434/v1"
-    # Generous base budget: reasoning models spend completion tokens on
-    # thinking before emitting text, and a failed attempt is still billed -
-    # paying for one bigger request beats paying for a retry.
-    MAX_COMPLETION_TOKENS = 5000
-    MAX_COMPLETION_TOKENS_CEILING = 16000
-    REVIEW_ATTEMPTS = 2
     MAX_PAGE_SIDE = 650
     WEBTOON_MAX_WIDTH = 300
     CONNECT_TIMEOUT_SECONDS = 10
@@ -84,9 +78,6 @@ sound unnatural in {target_lang}."""
         self.model = model or ""
         base = (api_url or self.DEFAULT_API_URL).rstrip("/")
         self.api_url = base if base.endswith("/chat/completions") else f"{base}/chat/completions"
-        # Current completion budget; reasoning models can exhaust it with
-        # thinking before emitting any text, so retries grow it.
-        self._completion_budget = self.MAX_COMPLETION_TOKENS
 
     @classmethod
     def from_settings(cls, settings) -> "TranslationReviewer":
@@ -183,7 +174,11 @@ sound unnatural in {target_lang}."""
             return self._query_ollama(system_prompt, user_prompt, encoded_image)
         return self._query_openai(system_prompt, user_prompt, encoded_image)
 
-    def _query_openai(self, system_prompt: str, user_prompt: str, encoded_image: str) -> dict:
+    @staticmethod
+    def _build_openai_payload(model: str, system_prompt: str, user_prompt: str, encoded_image: str) -> dict:
+        """OpenAI-compatible chat payload. No completion limit on purpose:
+        reasoning models spend tokens thinking before emitting text, and a
+        capped answer that never arrives is still billed."""
         content: list | str
         if encoded_image:
             content = [
@@ -195,14 +190,18 @@ sound unnatural in {target_lang}."""
             ]
         else:
             content = user_prompt
-        payload = {
-            "model": self.model,
+        return {
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": content},
             ],
-            "max_completion_tokens": self._completion_budget,
         }
+
+    def _query_openai(self, system_prompt: str, user_prompt: str, encoded_image: str) -> dict:
+        payload = self._build_openai_payload(
+            self.model, system_prompt, user_prompt, encoded_image
+        )
         payload.update(
             get_reasoning_off_params(self.api_url, self.model, self._is_ollama())
         )
@@ -247,7 +246,6 @@ sound unnatural in {target_lang}."""
             # The OpenAI-compatible /v1 path ignores `think`, so reasoning
             # models exhaust the budget before emitting any answer.
             "think": False,
-            "num_predict": self._completion_budget,
             "stream": False,
         }
         request_started = time.perf_counter()
@@ -326,33 +324,24 @@ sound unnatural in {target_lang}."""
             logger.exception("Failed to prepare the page image for review.")
             return None
 
-        for attempt in range(1, self.REVIEW_ATTEMPTS + 1):
-            try:
-                result = self._query(self.SYSTEM_PROMPT, user_prompt, encoded_image)
-            except Exception:
-                logger.exception("Translation review request failed.")
-                return None
+        try:
+            result = self._query(self.SYSTEM_PROMPT, user_prompt, encoded_image)
+        except Exception:
+            logger.exception("Translation review request failed.")
+            return None
 
-            content = (result.get("content") or "").strip()
-            if content:
-                return content
+        content = (result.get("content") or "").strip()
+        if content:
+            return content
 
-            # The request "succeeded" from the provider's point of view (it is
-            # billed too), but produced no text. The usual culprit: a
-            # reasoning model spent the whole completion budget thinking
-            # (finish_reason="length"). Retry with a bigger budget.
-            finish_reason = result.get("finish_reason")
-            logger.warning(
-                "Review attempt %d/%d returned empty content (finish_reason=%s, completion_tokens=%s).",
-                attempt, self.REVIEW_ATTEMPTS, finish_reason,
-                result.get("completion_tokens"),
-            )
-            if attempt < self.REVIEW_ATTEMPTS:
-                if finish_reason == "length":
-                    self._completion_budget = min(
-                        self._completion_budget * 2, self.MAX_COMPLETION_TOKENS_CEILING
-                    )
-                    logger.info("Retrying the review with completion budget %d.", self._completion_budget)
+        # The provider returned HTTP 200 but no text. No retry: without a
+        # completion limit the same request would just be billed twice. Log
+        # everything needed to diagnose it (content filter, empty body, ...).
+        logger.warning(
+            "Review response contains no text (finish_reason=%s, completion_tokens=%s).",
+            result.get("finish_reason"),
+            result.get("completion_tokens"),
+        )
         return None
 
     # ------------------------------------------------------------------

@@ -226,14 +226,13 @@ def test_placeholders_empty_langs():
 
 
 # ---------------------------------------------------------------------------
-# review() retry on empty responses (reasoning models burning the budget)
+# review(): single request, no completion limit, diagnostic empty-response path
 # ---------------------------------------------------------------------------
 
 
 def _reviewer_with_queries(responses):
     reviewer = TranslationReviewer(api_url="http://localhost:9999/v1", model="m")
     reviewer._queries = []
-    reviewer.reviewed_blocks = True
 
     def fake_query(system_prompt, user_prompt, encoded_image):
         reviewer._queries.append(dict(system=system_prompt))
@@ -251,29 +250,16 @@ def test_review_returns_content_on_first_try():
     assert reviewer.review(blocks) == '{"blocks": []}'
 
 
-def test_review_retries_with_bigger_budget_on_length():
-    """Reasoning model spent the whole budget thinking (finish_reason=length):
-    the retry must use a doubled completion budget and return the content."""
+def test_review_empty_response_no_retry():
+    """Empty content is not retried (the same request would just be billed
+    twice); the failure is logged via finish_reason/completion_tokens."""
     reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
-        {"content": '{"blocks": [{"block": 0, "recommended": "x"}]}', "finish_reason": "stop"},
-    ])
-    blocks = [_make_blk("A", "А")]
-    result = reviewer.review(blocks)
-    assert result is not None
-    assert len(reviewer._queries) == 2
-    assert reviewer._completion_budget == 10000
-
-
-def test_review_gives_up_after_attempts():
-    reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
-        {"content": "", "finish_reason": "length", "completion_tokens": 10000},
+        {"content": "", "finish_reason": "length", "completion_tokens": 900},
+        {"content": "should never be reached", "finish_reason": "stop"},
     ])
     blocks = [_make_blk("A", "А")]
     assert reviewer.review(blocks) is None
-    assert len(reviewer._queries) == 2
-    assert reviewer._completion_budget == 10000
+    assert len(reviewer._queries) == 1
 
 
 def test_review_query_exception_returns_none():
@@ -283,13 +269,23 @@ def test_review_query_exception_returns_none():
     assert reviewer.review(blocks) is None
 
 
-def test_review_budget_never_exceeds_ceiling():
-    reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
-        {"content": "", "finish_reason": "length", "completion_tokens": 16000},
-        {"content": "", "finish_reason": "length", "completion_tokens": 16000},
-    ])
-    # REVIEW_ATTEMPTS caps the loop, but the budget growth must be bounded too.
-    blocks = [_make_blk("A", "А")]
-    assert reviewer.review(blocks) is None
-    assert reviewer._completion_budget <= TranslationReviewer.MAX_COMPLETION_TOKENS_CEILING
+def test_openai_payload_has_no_completion_limit():
+    """The request must not cap generation: reasoning models spend tokens
+    thinking before emitting text, and a capped answer is still billed."""
+    payload = TranslationReviewer._build_openai_payload(
+        "m", "system", "user", encoded_image="img"
+    )
+    assert "max_completion_tokens" not in payload
+    assert "max_tokens" not in payload
+    assert payload["model"] == "m"
+    assert payload["messages"][0]["role"] == "system"
+    # image goes into the multimodal content array
+    user_content = payload["messages"][1]["content"]
+    assert user_content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_openai_payload_text_only_when_no_image():
+    payload = TranslationReviewer._build_openai_payload(
+        "m", "system", "user", encoded_image=""
+    )
+    assert payload["messages"][1]["content"] == "user"
