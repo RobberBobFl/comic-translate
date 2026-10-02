@@ -31,18 +31,48 @@ SEVERITY_STYLES = {
 
 # A stylesheet with any background resets the inherited text color in Qt, so
 # the recommended variant must restate it explicitly or it becomes unreadable
-# in the dark theme.
-RECOMMENDED_RADIO_STYLE = (
-    "QRadioButton {"
+# in the dark theme. Applied to the variant *label* (the radio indicator
+# itself is drawn by the theme).
+RECOMMENDED_LABEL_STYLE = (
+    "VariantLabel {"
     " background: rgba(76, 175, 80, 0.22);"
     " border: 1px solid rgba(76, 175, 80, 0.45);"
-    " border-radius: 4px; padding: 3px;"
+    " border-radius: 4px; padding: 2px 6px;"
     " color: #d9f2dc; font-weight: bold; }"
 )
 
 
 def category_label(key: str) -> str:
     return CATEGORY_LABELS.get(key, CATEGORY_LABELS["other"])
+
+
+class VariantLabel(QtWidgets.QLabel):
+    """Selectable variant text that toggles its radio on a plain click.
+
+    A click without dragging (and without an existing selection) picks the
+    variant; dragging selects the text for copying instead.
+    """
+
+    clicked = QtCore.Signal()
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._press_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._press_pos is not None and event.button() == Qt.MouseButton.LeftButton:
+            moved = (event.position() - self._press_pos).manhattanLength() > 5
+            if not moved and not self.hasSelectedText():
+                self.clicked.emit()
+        self._press_pos = None
+        super().mouseReleaseEvent(event)
 
 
 class ReviewEntryWidget(QtWidgets.QFrame):
@@ -97,6 +127,7 @@ class ReviewEntryWidget(QtWidgets.QFrame):
         if reason:
             reason_label = QtWidgets.QLabel(reason)
             reason_label.setWordWrap(True)
+            reason_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             reason_label.setStyleSheet("color: #999999;")
             layout.addWidget(reason_label)
 
@@ -123,10 +154,11 @@ class ReviewEntryWidget(QtWidgets.QFrame):
         # selected by default - a card is only applied on explicit choice).
         self._radio_group = QtWidgets.QButtonGroup(self)
         self._radio_group.setExclusive(True)
+        self._variant_rows: list = []
         variants_box = QtWidgets.QVBoxLayout()
         variants_box.setSpacing(2)
         recommended = str(entry.get("recommended", "")).strip()
-        self._add_variant(variants_box, recommended, style=RECOMMENDED_RADIO_STYLE)
+        self._add_variant(variants_box, recommended, style=RECOMMENDED_LABEL_STYLE)
         for alt in entry.get("alternatives", []) or []:
             self._add_variant(variants_box, str(alt))
         layout.addLayout(variants_box)
@@ -150,12 +182,21 @@ class ReviewEntryWidget(QtWidgets.QFrame):
     # -- helpers --------------------------------------------------------
 
     def _add_variant(self, layout: QtWidgets.QVBoxLayout, text: str, style: str | None = None):
-        radio = QtWidgets.QRadioButton(text)
+        row = QtWidgets.QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        radio = QtWidgets.QRadioButton()
         radio.setCursor(Qt.CursorShape.PointingHandCursor)
+        radio.setProperty("variant_text", text)
+        label = VariantLabel(text)
         if style:
-            radio.setStyleSheet(style)
+            label.setStyleSheet(style)
+        label.clicked.connect(lambda: radio.setChecked(True))
         self._radio_group.addButton(radio)
-        layout.addWidget(radio)
+        self._variant_rows.append((radio, label))
+        row.addWidget(radio, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(label, 1)
+        layout.addLayout(row)
 
     def _update_replace_enabled(self, *_args):
         self.replace_btn.setEnabled(self.selected_variant() is not None)
@@ -167,7 +208,9 @@ class ReviewEntryWidget(QtWidgets.QFrame):
 
     def selected_variant(self) -> str | None:
         radio = self._radio_group.checkedButton()
-        return radio.text() if radio is not None else None
+        if radio is None:
+            return None
+        return str(radio.property("variant_text") or radio.text())
 
     def has_selection(self) -> str | None:
         return self.selected_variant()
@@ -188,8 +231,9 @@ class ReviewEntryWidget(QtWidgets.QFrame):
             self.replace_btn.setEnabled(False)
             self.replace_btn.setToolTip(self.tr("Translation changed after the review"))
             self.dismiss_btn.setToolTip(self.tr("Remove this outdated suggestion"))
-        for radio in self._radio_group.buttons():
+        for radio, label in self._variant_rows:
             radio.setEnabled(not stale)
+            label.setEnabled(not stale)
 
     @property
     def is_stale(self) -> bool:
@@ -408,6 +452,7 @@ class ReviewDialog(QtWidgets.QDialog):
         self.page_label = QtWidgets.QLabel("")
         self.page_label.setStyleSheet("color: #999999;")
         self.page_label.setContentsMargins(2, 0, 2, 0)
+        self.page_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         page_row.addWidget(self.page_label, 1)
         self.rerun_button = MPushButton(self.tr("Re-run Review")).small()
         self.rerun_button.setToolTip(
