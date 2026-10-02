@@ -7,11 +7,13 @@ from ..dayu_widgets.check_box import MCheckBox
 from ..dayu_widgets.collapse import MCollapse
 from ..dayu_widgets.spin_box import MSpinBox
 from ..dayu_widgets.push_button import MPushButton
+from modules.translation.reviewer import TranslationReviewer
 
 class LlmsPage(QtWidgets.QWidget):
     DEFAULT_EXTRA_CONTEXT_LIMIT = 1000
     DEFAULT_BATCH_SIZE = 5
     DEFAULT_CONTEXT_WINDOW = 8
+    DEFAULT_REVIEW_PROMPT = TranslationReviewer.DEFAULT_REVIEW_PROMPT
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -131,6 +133,52 @@ class LlmsPage(QtWidgets.QWidget):
         right_layout.addWidget(batch_hint)
 
         right_layout.addSpacing(10)
+
+        # Translation review (optional, runs on demand from the workspace)
+        review_label = MLabel(self.tr("Translation Review")).h4()
+        right_layout.addWidget(review_label)
+
+        self.use_translation_review_checkbox = MCheckBox(
+            self.tr("Use Translation Review")
+        )
+        self.use_translation_review_checkbox.setToolTip(
+            self.tr(
+                "Enables the Review action: a separate model checks the finished "
+                "translation and suggests better variants per bubble."
+            )
+        )
+        right_layout.addWidget(self.use_translation_review_checkbox)
+
+        self.review_send_image_checkbox = MCheckBox(
+            self.tr("Send Page Image to Reviewer")
+        )
+        self.review_send_image_checkbox.setChecked(True)
+        self.review_send_image_checkbox.setToolTip(
+            self.tr(
+                "Off = a cheaper text-only review (works with models without "
+                "vision input)."
+            )
+        )
+        right_layout.addWidget(self.review_send_image_checkbox)
+
+        review_prompt_label = MLabel(self.tr("Review Prompt:"))
+        right_layout.addWidget(review_prompt_label)
+        self.review_prompt = MTextEdit()
+        self.review_prompt.setMinimumHeight(120)
+        self.review_prompt.setPlaceholderText(self.DEFAULT_REVIEW_PROMPT)
+        right_layout.addWidget(self.review_prompt)
+
+        review_hint = MLabel(
+            self.tr(
+                "The reviewer receives the original and translated text of every "
+                "block and returns suggestions for blocks worth changing. "
+                "{source_lang} and {target_lang} are filled in automatically; "
+                "empty prompt resets to this default."
+            )
+        )
+        review_hint.setWordWrap(True)
+        right_layout.addWidget(review_hint)
+
         right_layout.addStretch(1)
 
         main_layout.addLayout(left_layout, 3)

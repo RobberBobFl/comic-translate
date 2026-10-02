@@ -11,6 +11,7 @@ class ToolsPage(QtWidgets.QWidget):
     # Emitted when the user wants to configure a custom vision provider.
     custom_ocr_requested = Signal()
     scene_analyzer_requested = Signal()
+    reviewer_requested = Signal()
 
     def __init__(
         self, 
@@ -45,6 +46,10 @@ class ToolsPage(QtWidgets.QWidget):
         self.scene_analyzer_button = MPushButton(self.tr("Scene Description Model")).small()
         self.scene_analyzer_button.clicked.connect(
             lambda: self.scene_analyzer_requested.emit()
+        )
+        self.reviewer_button = MPushButton(self.tr("Translation Review Model")).small()
+        self.reviewer_button.clicked.connect(
+            lambda: self.reviewer_requested.emit()
         )
 
         self.stitch_webtoon_cb = QtWidgets.QCheckBox(
@@ -141,6 +146,7 @@ class ToolsPage(QtWidgets.QWidget):
         button_row.addSpacing(8)
         button_row.addWidget(self.custom_ocr_button)
         button_row.addWidget(self.scene_analyzer_button)
+        button_row.addWidget(self.reviewer_button)
         button_row.addStretch()
         layout.addLayout(button_row)
         layout.addWidget(self.stitch_webtoon_cb)

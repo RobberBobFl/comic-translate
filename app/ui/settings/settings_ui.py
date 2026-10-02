@@ -232,6 +232,9 @@ class SettingsPageUI(QtWidgets.QWidget):
         self.use_scene_description_checkbox = self.llms_page.use_scene_description_checkbox
         self.batch_size_spinbox = self.llms_page.batch_size_spinbox
         self.context_window_spinbox = self.llms_page.context_window_spinbox
+        self.use_translation_review_checkbox = self.llms_page.use_translation_review_checkbox
+        self.review_send_image_checkbox = self.llms_page.review_send_image_checkbox
+        self.review_prompt = self.llms_page.review_prompt
 
         # Text rendering
         self.min_font_spinbox = self.text_rendering_page.min_font_spinbox
