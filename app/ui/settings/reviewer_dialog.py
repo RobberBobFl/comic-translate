@@ -36,7 +36,9 @@ class ReviewerDialog(QtWidgets.QDialog):
         set_label_width(model_label)
         model_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.model_combo = MComboBox().small()
-        self.model_combo.setEditable(True)
+        # MComboBox's line edit is read-only by default; set_editable() (not the
+        # Qt setEditable()) is what actually allows typing a custom model name.
+        self.model_combo.set_editable(True)
         self.model_combo.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
         self.model_combo.setFixedWidth(300)
         self.load_models_button = MPushButton(self.tr("Load Models"))
