@@ -223,3 +223,73 @@ def test_placeholders_keep_other_braces():
 def test_placeholders_empty_langs():
     text = TranslationReviewer.apply_placeholders("from {source_lang}", "", "")
     assert "the source language" in text
+
+
+# ---------------------------------------------------------------------------
+# review() retry on empty responses (reasoning models burning the budget)
+# ---------------------------------------------------------------------------
+
+
+def _reviewer_with_queries(responses):
+    reviewer = TranslationReviewer(api_url="http://localhost:9999/v1", model="m")
+    reviewer._queries = []
+    reviewer.reviewed_blocks = True
+
+    def fake_query(system_prompt, user_prompt, encoded_image):
+        reviewer._queries.append(dict(system=system_prompt))
+        return responses[len(reviewer._queries) - 1]
+
+    reviewer._query = fake_query
+    return reviewer
+
+
+def test_review_returns_content_on_first_try():
+    reviewer = _reviewer_with_queries(
+        [{"content": '{"blocks": []}', "finish_reason": "stop", "completion_tokens": 100}]
+    )
+    blocks = [_make_blk("A", "А")]
+    assert reviewer.review(blocks) == '{"blocks": []}'
+
+
+def test_review_retries_with_bigger_budget_on_length():
+    """Reasoning model spent the whole budget thinking (finish_reason=length):
+    the retry must use a doubled completion budget and return the content."""
+    reviewer = _reviewer_with_queries([
+        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
+        {"content": '{"blocks": [{"block": 0, "recommended": "x"}]}', "finish_reason": "stop"},
+    ])
+    blocks = [_make_blk("A", "А")]
+    result = reviewer.review(blocks)
+    assert result is not None
+    assert len(reviewer._queries) == 2
+    assert reviewer._completion_budget == 5000
+
+
+def test_review_gives_up_after_attempts():
+    reviewer = _reviewer_with_queries([
+        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
+        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
+    ])
+    blocks = [_make_blk("A", "А")]
+    assert reviewer.review(blocks) is None
+    assert len(reviewer._queries) == 2
+    assert reviewer._completion_budget == 5000
+
+
+def test_review_query_exception_returns_none():
+    reviewer = _reviewer_with_queries([])
+    reviewer._query = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    blocks = [_make_blk("A", "А")]
+    assert reviewer.review(blocks) is None
+
+
+def test_review_budget_never_exceeds_ceiling():
+    reviewer = _reviewer_with_queries([
+        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
+        {"content": "", "finish_reason": "length", "completion_tokens": 16000},
+        {"content": "", "finish_reason": "length", "completion_tokens": 16000},
+    ])
+    # REVIEW_ATTEMPTS caps the loop, but the budget growth must be bounded too.
+    blocks = [_make_blk("A", "А")]
+    assert reviewer.review(blocks) is None
+    assert reviewer._completion_budget <= TranslationReviewer.MAX_COMPLETION_TOKENS_CEILING

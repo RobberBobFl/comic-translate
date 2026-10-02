@@ -24,6 +24,8 @@ class TranslationReviewer:
 
     DEFAULT_API_URL = "http://localhost:11434/v1"
     MAX_COMPLETION_TOKENS = 2500
+    MAX_COMPLETION_TOKENS_CEILING = 16000
+    REVIEW_ATTEMPTS = 2
     MAX_PAGE_SIDE = 650
     WEBTOON_MAX_WIDTH = 300
     CONNECT_TIMEOUT_SECONDS = 10
@@ -79,6 +81,9 @@ sound unnatural in {target_lang}."""
         self.model = model or ""
         base = (api_url or self.DEFAULT_API_URL).rstrip("/")
         self.api_url = base if base.endswith("/chat/completions") else f"{base}/chat/completions"
+        # Current completion budget; reasoning models can exhaust it with
+        # thinking before emitting any text, so retries grow it.
+        self._completion_budget = self.MAX_COMPLETION_TOKENS
 
     @classmethod
     def from_settings(cls, settings) -> "TranslationReviewer":
@@ -193,7 +198,7 @@ sound unnatural in {target_lang}."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": content},
             ],
-            "max_completion_tokens": self.MAX_COMPLETION_TOKENS,
+            "max_completion_tokens": self._completion_budget,
         }
         payload.update(
             get_reasoning_off_params(self.api_url, self.model, self._is_ollama())
@@ -206,6 +211,14 @@ sound unnatural in {target_lang}."""
             timeout=(self.CONNECT_TIMEOUT_SECONDS, self.READ_TIMEOUT_SECONDS),
         )
         logger.debug("Review request took %.1fs", time.perf_counter() - request_started)
+        if not response.ok:
+            # Log the provider's error body - it usually explains the failure
+            # (wrong model name, context limit, billing, ...).
+            logger.warning(
+                "Review endpoint returned HTTP %s: %s",
+                response.status_code,
+                response.text[:400],
+            )
         response.raise_for_status()
         data = response.json()
         choice = data["choices"][0]
@@ -231,7 +244,7 @@ sound unnatural in {target_lang}."""
             # The OpenAI-compatible /v1 path ignores `think`, so reasoning
             # models exhaust the budget before emitting any answer.
             "think": False,
-            "num_predict": self.MAX_COMPLETION_TOKENS,
+            "num_predict": self._completion_budget,
             "stream": False,
         }
         request_started = time.perf_counter()
@@ -242,6 +255,12 @@ sound unnatural in {target_lang}."""
             timeout=(self.CONNECT_TIMEOUT_SECONDS, self.READ_TIMEOUT_SECONDS),
         )
         logger.debug("Review request took %.1fs", time.perf_counter() - request_started)
+        if not response.ok:
+            logger.warning(
+                "Review endpoint returned HTTP %s: %s",
+                response.status_code,
+                response.text[:400],
+            )
         response.raise_for_status()
         data = response.json()
         reply = data.get("message", {})
@@ -300,11 +319,38 @@ sound unnatural in {target_lang}."""
             if image is not None:
                 prepared = self._prepare_image(image, is_webtoon)
                 encoded_image = self._encode_image(prepared)
-            result = self._query(self.SYSTEM_PROMPT, user_prompt, encoded_image)
-            return result["content"] or None
         except Exception:
-            logger.exception("Translation review request failed.")
+            logger.exception("Failed to prepare the page image for review.")
             return None
+
+        for attempt in range(1, self.REVIEW_ATTEMPTS + 1):
+            try:
+                result = self._query(self.SYSTEM_PROMPT, user_prompt, encoded_image)
+            except Exception:
+                logger.exception("Translation review request failed.")
+                return None
+
+            content = (result.get("content") or "").strip()
+            if content:
+                return content
+
+            # The request "succeeded" from the provider's point of view (it is
+            # billed too), but produced no text. The usual culprit: a
+            # reasoning model spent the whole completion budget thinking
+            # (finish_reason="length"). Retry with a bigger budget.
+            finish_reason = result.get("finish_reason")
+            logger.warning(
+                "Review attempt %d/%d returned empty content (finish_reason=%s, completion_tokens=%s).",
+                attempt, self.REVIEW_ATTEMPTS, finish_reason,
+                result.get("completion_tokens"),
+            )
+            if attempt < self.REVIEW_ATTEMPTS:
+                if finish_reason == "length":
+                    self._completion_budget = min(
+                        self._completion_budget * 2, self.MAX_COMPLETION_TOKENS_CEILING
+                    )
+                    logger.info("Retrying the review with completion budget %d.", self._completion_budget)
+        return None
 
     # ------------------------------------------------------------------
     # Response parsing
