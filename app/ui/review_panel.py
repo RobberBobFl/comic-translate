@@ -186,23 +186,33 @@ class ReviewEntryWidget(QtWidgets.QFrame):
 
 
 class ReviewPanel(QtWidgets.QWidget):
-    """Sidebar listing the reviewer's suggestions for the displayed page."""
+    """Widget listing the reviewer's suggestions for the displayed page.
+
+    Used inside :class:`ReviewDialog`; also embeddable standalone (the header
+    with the title/close button can be hidden via :meth:`set_header_visible`).
+    """
 
     apply_entries_requested = QtCore.Signal(list)   # [(entry_id, text), ...]
     block_focus_requested = QtCore.Signal(int)      # entry_id
     close_requested = QtCore.Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_header: bool = True):
         super().__init__(parent)
         self._entries: dict[int, ReviewEntryWidget] = {}
         self._build_ui()
+        self.set_header_visible(show_header)
+
+    def set_header_visible(self, visible: bool):
+        """Hide the title/close row when the panel lives in its own window."""
+        self.header_container.setVisible(visible)
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
-        header_row = QtWidgets.QHBoxLayout()
+        header_container = QtWidgets.QWidget()
+        header_row = QtWidgets.QHBoxLayout(header_container)
         header_row.setContentsMargins(6, 6, 6, 0)
         title_lbl = QtWidgets.QLabel(self.tr("Translation Review"))
         title_lbl.setStyleSheet("font-weight: bold; color: #BBBBBB;")
@@ -212,7 +222,8 @@ class ReviewPanel(QtWidgets.QWidget):
         self.clear_btn.setToolTip(self.tr("Close"))
         self.clear_btn.clicked.connect(self.close_requested)
         header_row.addWidget(self.clear_btn)
-        layout.addLayout(header_row)
+        layout.addWidget(header_container)
+        self.header_container = header_container
 
         filter_row = QtWidgets.QHBoxLayout()
         filter_row.setContentsMargins(6, 0, 6, 0)
@@ -356,3 +367,34 @@ class ReviewPanel(QtWidgets.QWidget):
                 for card in self._entries.values()
             )
         )
+
+
+class ReviewDialog(QtWidgets.QDialog):
+    """Modeless window hosting the review panel.
+
+    A separate window (with the normal system frame) gives the suggestion
+    cards room to breathe: it can be resized, moved to a second monitor or
+    parked next to the main window. Non-modal by design - the user keeps
+    scrolling the comic while applying suggestions.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Translation Review"))
+        # A plain top-level window (title bar, resize, min/max buttons) even
+        # though the parent main window is frameless.
+        self.setWindowFlag(QtCore.Qt.WindowType.Window, True)
+        self.setModal(False)
+        self.setMinimumSize(420, 380)
+        self.resize(880, 620)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        self.page_label = QtWidgets.QLabel("")
+        self.page_label.setStyleSheet("color: #999999;")
+        self.page_label.setContentsMargins(2, 0, 2, 4)
+        layout.addWidget(self.page_label)
+
+        self.review_panel = ReviewPanel(self, show_header=False)
+        layout.addWidget(self.review_panel, 1)

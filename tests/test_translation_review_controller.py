@@ -15,7 +15,6 @@ import pytest
 from PySide6 import QtCore, QtWidgets
 
 from app.controllers.translation_review import TranslationReviewController
-from app.ui.review_panel import ReviewPanel
 from modules.utils.textblock import TextBlock
 
 PAGE = "/comic/page.png"
@@ -48,7 +47,6 @@ class FakeMain(QtCore.QObject):
         self.image_states = image_states
         self.webtoon_mode = False
         self.curr_tblock = None
-        self.review_panel = ReviewPanel()
         self.page_list = FakePageList()
         self.dirty = False
         self.applied_to_canvas = []
@@ -111,21 +109,19 @@ def setup(app):
 def test_refresh_populates_panel(setup):
     blk = _make_blk("Semantics!", "Придирки к словам!")
     main, ctrl = setup(blk, _review_state(blk))
-    ctrl.refresh_from_state()
-    assert not main.review_panel.is_empty()
-    cards = main.review_panel.entries()
+    ctrl.show_results(PAGE)
+    assert not ctrl.panel.is_empty()
+    cards = ctrl.panel.entries()
     assert 0 in cards
     assert not cards[0].is_stale
-    main.review_panel.hide()
 
 
 def test_refresh_marks_drifted_translation_stale(setup):
     blk = _make_blk("Semantics!", "Придирки к словам!")
     main, ctrl = setup(blk, _review_state(blk), live_translation="Пользователь правил")
-    ctrl.refresh_from_state()
-    card = main.review_panel.entries()[0]
+    ctrl.show_results(PAGE)
+    card = ctrl.panel.entries()[0]
     assert card.is_stale
-    main.review_panel.hide()
 
 
 def test_apply_replaces_translation_and_clears_entry(setup):
@@ -137,7 +133,7 @@ def test_apply_replaces_translation_and_clears_entry(setup):
     state = main.image_states[PAGE]
     assert "translation_review" not in state
     assert main.dirty
-    assert main.review_panel.is_empty()
+    assert ctrl.panel.is_empty()
 
 
 def test_apply_syncs_state_blk_list_copy(setup):
@@ -154,14 +150,14 @@ def test_apply_syncs_state_blk_list_copy(setup):
 def test_apply_skips_stale_and_marks_card(setup):
     blk = _make_blk("Semantics!", "Придирки к словам!")
     main, ctrl = setup(blk, _review_state(blk), live_translation="Пользователь правил")
-    ctrl.refresh_from_state()
+    ctrl.show_results(PAGE)
     ctrl.apply_entries([(0, "Это сейчас не важно!")])
 
     # Nothing was applied and the entry stays in state.
     assert blk.translation == "Пользователь правил"
     assert "translation_review" in main.image_states[PAGE]
     assert not main.dirty
-    card = main.review_panel.entries().get(0)
+    card = ctrl.panel.entries().get(0)
     assert card is not None and card.is_stale
 
 
@@ -171,6 +167,27 @@ def test_apply_skips_missing_entry(setup):
     ctrl.apply_entries([(42, "Что-то")])
     assert blk.translation == "Придирки к словам!"
     assert "translation_review" in main.image_states[PAGE]
+
+
+def test_review_window_is_lazy_and_reopenable(setup):
+    """The review window is created on demand and reopens after being closed."""
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    assert ctrl._dialog is None
+    ctrl.refresh_from_state()
+    assert ctrl._dialog is None  # no window is created just by switching pages
+
+    ctrl.show_results(PAGE)
+    assert ctrl._dialog is not None and ctrl._dialog.isVisible()
+    assert 0 in ctrl.panel.entries()
+    # In its own window the panel hides its duplicate title row.
+    assert not ctrl.panel.header_container.isVisible()
+    assert ctrl._dialog.page_label.text()
+
+    ctrl._dialog.close()
+    assert not ctrl._dialog.isVisible()
+    ctrl.show_results(PAGE)
+    assert ctrl._dialog.isVisible()
 
 
 def test_live_block_fallback_matches_by_source_text(setup):
@@ -312,7 +329,7 @@ def test_manual_workflow_review_translation(app, monkeypatch):
     assert entry["xyxy"] == [10, 10, 100, 40]
     assert main.dirty
     # The panel shows the results for the displayed page.
-    assert 0 in main.review_panel.entries()
+    assert 0 in main.review_ctrl.panel.entries()
 
 
 def test_manual_workflow_review_requires_translations(app, monkeypatch):

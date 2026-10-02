@@ -20,28 +20,43 @@ def _norm(text: str) -> str:
 
 
 class TranslationReviewController(QtCore.QObject):
-    """Populates the review panel from page state and applies replacements.
+    """Populates the review window from page state and applies replacements.
 
-    Suggestions live in ``image_states[path]['translation_review']``; the panel
-    shows the displayed page's entries and lets the user push a chosen variant
-    into the block's translation (canvas, edits and persisted state included).
+    Suggestions live in ``image_states[path]['translation_review']``; the
+    review window shows the displayed page's entries and lets the user push a
+    chosen variant into the block's translation (canvas, edits and persisted
+    state included). The window is created lazily and shown non-modally.
     """
 
     def __init__(self, main: ComicTranslate):
         super().__init__(main)
         self.main = main
-
-        panel = getattr(self.main, "review_panel", None)
-        if panel is None:
-            return
-        panel.apply_entries_requested.connect(self.apply_entries)
-        panel.block_focus_requested.connect(self.focus_block)
-        panel.close_requested.connect(panel.hide)
-
+        self._dialog = None
         # The stored review belongs to a page; repopulate when the page changes.
         self.main.page_list.currentRowChanged.connect(
             lambda _row: QtCore.QTimer.singleShot(250, self.refresh_from_state)
         )
+
+    # ------------------------------------------------------------------
+    # Window handling
+    # ------------------------------------------------------------------
+
+    @property
+    def panel(self):
+        return self._ensure_dialog().review_panel
+
+    def _ensure_dialog(self):
+        if self._dialog is None:
+            from PySide6 import QtWidgets
+
+            from app.ui.review_panel import ReviewDialog
+
+            parent = self.main if isinstance(self.main, QtWidgets.QWidget) else None
+            self._dialog = ReviewDialog(parent)
+            panel = self._dialog.review_panel
+            panel.apply_entries_requested.connect(self.apply_entries)
+            panel.block_focus_requested.connect(self.focus_block)
+        return self._dialog
 
     # ------------------------------------------------------------------
     # Panel population
@@ -54,9 +69,9 @@ class TranslationReviewController(QtCore.QObject):
 
     def refresh_from_state(self) -> None:
         """Show the current page's stored review, marking drifted entries stale."""
-        panel = getattr(self.main, "review_panel", None)
-        if panel is None:
+        if self._dialog is None:
             return
+        panel = self._dialog.review_panel
         file_path = self._current_file_path()
         state = self.main.image_states.get(file_path, {}) if file_path else {}
         review_state = state.get("translation_review") or {}
@@ -72,8 +87,17 @@ class TranslationReviewController(QtCore.QObject):
             if not self._is_current(file_path, entry):
                 stale_ids.add(entry_id)
         panel.set_entries(entries, stale_ids)
-        if entries and not panel.isVisible():
-            panel.show()
+        self._dialog.page_label.setText(self._page_caption(file_path))
+
+    def _page_caption(self, file_path: Optional[str]) -> str:
+        if not file_path or not self.main.image_files:
+            return ""
+        try:
+            index = self.main.image_files.index(file_path) + 1
+        except ValueError:
+            index = self.main.curr_img_idx + 1
+        name = os.path.basename(file_path)
+        return self.main.tr("Page {0} - {1}").format(index, name)
 
     def show_results(self, file_path: Optional[str]) -> None:
         """Called after a review run: show results if the reviewed page is displayed."""
@@ -82,7 +106,18 @@ class TranslationReviewController(QtCore.QObject):
             return
         if os.path.normcase(current) != os.path.normcase(file_path):
             return
+        # Create the window first so refresh_from_state has something to fill.
+        self._ensure_dialog()
         self.refresh_from_state()
+        state = self.main.image_states.get(current, {})
+        if state.get("translation_review"):
+            self._show_window()
+
+    def _show_window(self) -> None:
+        dialog = self._ensure_dialog()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _is_current(self, file_path: Optional[str], entry: dict) -> bool:
         """False when the block's translation drifted since the review ran."""
@@ -152,9 +187,9 @@ class TranslationReviewController(QtCore.QObject):
 
     def apply_entries(self, selections: list) -> None:
         """Replace translations with the chosen variants: [(entry_id, text), ...]."""
-        panel = getattr(self.main, "review_panel", None)
         if not selections:
             return
+        panel = self._dialog.review_panel if self._dialog is not None else None
         file_path = self._current_file_path()
         if file_path is None:
             return
@@ -254,9 +289,8 @@ class TranslationReviewController(QtCore.QObject):
                 return
 
     def _mark_stale(self, entry_ids: list[int]) -> None:
-        panel = getattr(self.main, "review_panel", None)
-        if panel is None or not entry_ids:
+        if self._dialog is None or not entry_ids:
             return
-        for entry_id, card in panel.entries().items():
+        for entry_id, card in self._dialog.review_panel.entries().items():
             if entry_id in entry_ids:
                 card.set_stale(True)
