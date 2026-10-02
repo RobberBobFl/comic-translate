@@ -189,3 +189,159 @@ def test_live_block_fallback_matches_by_source_text(setup):
 
     blk_found = ctrl._live_block(PAGE, state["blocks"]["0"])
     assert blk_found is moved
+
+
+# ---------------------------------------------------------------------------
+# manual_workflow.review_translation end-to-end (fake reviewer, no network)
+# ---------------------------------------------------------------------------
+
+import numpy as np
+from modules.translation import reviewer as reviewer_module
+from modules.translation.reviewer import TranslationReviewer
+from app.controllers.manual_workflow import ManualWorkflowController
+
+
+FAKE_REVIEW_JSON = """Here is my review:
+{"blocks": [{"block": 0, "severity": "improvement", "category": "calque",
+"reason": "sounds like a calque", "recommended": "Это сейчас не важно!",
+"alternatives": ["Не важно"]}]}"""
+
+
+class FakeSettingsPage:
+    def __init__(self):
+        self.llm = {
+            "use_translation_review": True,
+            "review_send_image": False,
+            "review_prompt": "",
+        }
+        self.creds = {"api_url": "http://localhost:11434/v1", "model": "fake", "api_key": ""}
+
+    def get_llm_settings(self):
+        return dict(self.llm)
+
+    def get_reviewer_credentials(self):
+        return dict(self.creds)
+
+
+class FakeReviewer:
+    calls = []
+
+    def __init__(self):
+        self.response = FAKE_REVIEW_JSON
+
+    @classmethod
+    def from_settings(cls, settings):
+        return cls()
+
+    def review(self, blk_list, image=None, source_lang="", target_lang="",
+               instructions="", scene_description="", is_webtoon=False):
+        FakeReviewer.calls.append(
+            {"target_lang": target_lang, "image": image, "blocks": len(blk_list)}
+        )
+        return self.response
+
+    parse_review_response = staticmethod(TranslationReviewer.parse_review_response)
+    apply_placeholders = staticmethod(TranslationReviewer.apply_placeholders)
+
+
+class FakeCombo(QtCore.QObject):
+    def __init__(self, text):
+        super().__init__()
+        self._text = text
+
+    def currentText(self):
+        return self._text
+
+
+def _make_review_main(blk):
+    main = FakeMain([blk], {PAGE: {"blk_list": [blk.deep_copy()]}})
+    main.settings_page = FakeSettingsPage()
+    main.lang_mapping = {}
+    main.s_combo = FakeCombo("English")
+    main.t_combo = FakeCombo("Russian")
+    main.semi_auto_mode = False
+    main.review_ctrl = TranslationReviewController(main)
+
+    class _Loading:
+        def setVisible(self, visible):
+            pass
+
+    main.loading = _Loading()
+    main.hbutton_group = None
+
+    def _noop(*_args, **_kwargs):
+        pass
+
+    main.disable_hbutton_group = _noop
+    main.default_error_handler = lambda error_tuple: None
+    main.on_manual_finished = lambda: None
+
+    def _sync_run_threaded(callback, result_callback=None, error_callback=None,
+                           finished_callback=None, *args, **kwargs):
+        result = callback()
+        if result_callback is not None:
+            result_callback(result)
+        if finished_callback is not None:
+            finished_callback()
+
+    main.run_threaded = _sync_run_threaded
+    return main
+
+
+def test_manual_workflow_review_translation(app, monkeypatch):
+    FakeReviewer.calls = []
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main = _make_review_main(blk)
+    ctrl = ManualWorkflowController(main)
+
+    ctrl.review_translation()
+
+    assert len(FakeReviewer.calls) == 1
+    assert FakeReviewer.calls[0]["target_lang"] == "Russian"
+    assert FakeReviewer.calls[0]["image"] is None  # send_image off
+    state = main.image_states[PAGE]
+    assert "translation_review" in state
+    entry = state["translation_review"]["blocks"]["0"]
+    assert entry["recommended"] == "Это сейчас не важно!"
+    assert entry["translation_snapshot"] == "Придирки к словам!"
+    assert entry["xyxy"] == [10, 10, 100, 40]
+    assert main.dirty
+    # The panel shows the results for the displayed page.
+    assert 0 in main.review_panel.entries()
+
+
+def test_manual_workflow_review_requires_translations(app, monkeypatch):
+    FakeReviewer.calls = []
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "")  # not translated yet
+    main = _make_review_main(blk)
+    ctrl = ManualWorkflowController(main)
+
+    ctrl.review_translation()
+
+    assert FakeReviewer.calls == []
+    assert "translation_review" not in main.image_states[PAGE]
+
+
+def test_manual_workflow_review_gate_by_checkbox(app, monkeypatch):
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main = _make_review_main(blk)
+    main.settings_page.llm["use_translation_review"] = False
+    ctrl = ManualWorkflowController(main)
+
+    ctrl.review_translation()
+    assert FakeReviewer.calls == []

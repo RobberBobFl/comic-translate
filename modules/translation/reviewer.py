@@ -372,6 +372,13 @@ sound unnatural in {target_lang}."""
         value = _extract_json_value(cleaned)
         if value is None:
             value = _parse_lenient(cleaned)
+        if value is None:
+            # Models sometimes chat before the JSON ("Sure! Here is my
+            # review: {...}") - try again from the first brace/bracket.
+            offsets = [cleaned.find(ch) for ch in "{["]
+            offsets = [off for off in offsets if off > 0]
+            if offsets:
+                value = _extract_json_value(cleaned[min(offsets):])
         return value
 
     @staticmethod

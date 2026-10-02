@@ -106,6 +106,12 @@ def test_parse_strips_code_fences():
     assert result[4]["recommended"] == "вариант"
 
 
+def test_parse_tolerates_preamble_before_json():
+    inner = json.dumps({"blocks": [_entry(block=1, recommended="ok")]})
+    result = TranslationReviewer.parse_review_response(f"Sure! Here is my review:\n{inner}")
+    assert result[1]["recommended"] == "ok"
+
+
 def test_parse_garbage_returns_empty():
     assert TranslationReviewer.parse_review_response("not json at all") == {}
     assert TranslationReviewer.parse_review_response("") == {}
