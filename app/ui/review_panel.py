@@ -29,6 +29,17 @@ SEVERITY_STYLES = {
     ),
 }
 
+# A stylesheet with any background resets the inherited text color in Qt, so
+# the recommended variant must restate it explicitly or it becomes unreadable
+# in the dark theme.
+RECOMMENDED_RADIO_STYLE = (
+    "QRadioButton {"
+    " background: rgba(76, 175, 80, 0.22);"
+    " border: 1px solid rgba(76, 175, 80, 0.45);"
+    " border-radius: 4px; padding: 3px;"
+    " color: #d9f2dc; font-weight: bold; }"
+)
+
 
 def category_label(key: str) -> str:
     return CATEGORY_LABELS.get(key, CATEGORY_LABELS["other"])
@@ -115,7 +126,7 @@ class ReviewEntryWidget(QtWidgets.QFrame):
         variants_box = QtWidgets.QVBoxLayout()
         variants_box.setSpacing(2)
         recommended = str(entry.get("recommended", "")).strip()
-        self._add_variant(variants_box, recommended, bg="#e6f4ea")
+        self._add_variant(variants_box, recommended, style=RECOMMENDED_RADIO_STYLE)
         for alt in entry.get("alternatives", []) or []:
             self._add_variant(variants_box, str(alt))
         layout.addLayout(variants_box)
@@ -138,11 +149,11 @@ class ReviewEntryWidget(QtWidgets.QFrame):
 
     # -- helpers --------------------------------------------------------
 
-    def _add_variant(self, layout: QtWidgets.QVBoxLayout, text: str, bg: str | None = None):
+    def _add_variant(self, layout: QtWidgets.QVBoxLayout, text: str, style: str | None = None):
         radio = QtWidgets.QRadioButton(text)
         radio.setCursor(Qt.CursorShape.PointingHandCursor)
-        if bg:
-            radio.setStyleSheet(f"QRadioButton {{ background: {bg}; border-radius: 4px; padding: 2px; }}")
+        if style:
+            radio.setStyleSheet(style)
         self._radio_group.addButton(radio)
         layout.addWidget(radio)
 
