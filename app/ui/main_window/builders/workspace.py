@@ -17,6 +17,7 @@ from app.ui.dayu_widgets.radio_button import MRadioButton
 from app.ui.dayu_widgets.slider import MSlider
 from app.ui.dayu_widgets.text_edit import MTextEdit
 from app.ui.dayu_widgets.tool_button import MToolButton
+from app.ui.review_panel import ReviewPanel
 from app.ui.search_replace_panel import SearchReplacePanel
 from app.ui.webtoon_seam_dialog import SeamAdjustDialog
 from app.ui.main_window.constants import supported_source_languages, supported_target_languages
@@ -62,6 +63,7 @@ class WorkspaceMixin:
             {"text": self.tr("Recognize"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Visual"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Translate"), "dayu_type": MPushButton.DefaultType, "enabled": False},
+            {"text": self.tr("Review"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Segment"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Clean"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Render"), "dayu_type": MPushButton.DefaultType, "enabled": False},
@@ -569,6 +571,11 @@ class WorkspaceMixin:
 
         right_layout.addLayout(input_layout)
         right_layout.addLayout(text_render_layout)
+
+        self.review_panel = ReviewPanel()
+        self.review_panel.setVisible(False)
+        right_layout.addWidget(self.review_panel)
+
         right_layout.addWidget(tools_scroll, 1)
 
         right_widget = QtWidgets.QWidget()

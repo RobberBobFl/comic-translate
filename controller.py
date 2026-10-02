@@ -29,6 +29,7 @@ from app.controllers.projects import ProjectController
 from app.controllers.text import TextController
 from app.controllers.webtoons import WebtoonController
 from app.controllers.search_replace import SearchReplaceController
+from app.controllers.translation_review import TranslationReviewController
 from app.controllers.shortcuts import ShortcutController
 from app.controllers.task_runner import TaskRunnerController
 from app.controllers.batch_report import BatchReportController
@@ -122,6 +123,7 @@ class ComicTranslate(ComicTranslateUI):
         self.text_ctrl = TextController(self)
         self.webtoon_ctrl = WebtoonController(self)
         self.search_ctrl = SearchReplaceController(self)
+        self.review_ctrl = TranslationReviewController(self)
         self.shortcut_ctrl = ShortcutController(self)
         self.task_runner_ctrl = TaskRunnerController(self)
         self.batch_report_ctrl = BatchReportController(self)
@@ -153,7 +155,11 @@ class ComicTranslate(ComicTranslateUI):
         self.settings_page.ui.use_scene_description_checkbox.toggled.connect(
             self.update_visual_button_state
         )
+        self.settings_page.ui.use_translation_review_checkbox.toggled.connect(
+            self.update_review_button_state
+        )
         self.update_visual_button_state()
+        self.update_review_button_state()
         self.project_ctrl.initialize_autosave()
 
         # Populate the home screen with any previously-saved recent projects
@@ -202,9 +208,10 @@ class ComicTranslate(ComicTranslateUI):
         buttons[1].clicked.connect(self.ocr)
         buttons[2].clicked.connect(self.describe_scene)
         buttons[3].clicked.connect(self.translate_image)
-        buttons[4].clicked.connect(self.load_segmentation_points)
-        buttons[5].clicked.connect(self.inpaint_and_set)
-        buttons[6].clicked.connect(self.text_ctrl.render_text)
+        buttons[4].clicked.connect(self.review_translation)
+        buttons[5].clicked.connect(self.load_segmentation_points)
+        buttons[6].clicked.connect(self.inpaint_and_set)
+        buttons[7].clicked.connect(self.text_ctrl.render_text)
 
         self.undo_tool_group.get_button_group().buttons()[0].clicked.connect(self.undo_group.undo)
         self.undo_tool_group.get_button_group().buttons()[1].clicked.connect(self.undo_group.redo)
@@ -523,6 +530,7 @@ class ComicTranslate(ComicTranslateUI):
         self.translate_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
         self.update_visual_button_state()
+        self.update_review_button_state()
 
     def manual_mode_selected(self):
         self.semi_auto_mode = False
@@ -804,6 +812,44 @@ class ComicTranslate(ComicTranslateUI):
         for button in self.hbutton_group.get_button_group().buttons():
             button.setEnabled(True)
         self.update_visual_button_state()
+        self.update_review_button_state()
+
+    def update_review_button_state(self):
+        buttons = self.hbutton_group.get_button_group().buttons()
+        if len(buttons) < 5:
+            return
+        button = buttons[4]
+        credentials = self.settings_page.get_reviewer_credentials()
+        configured = bool(
+            credentials.get("api_url", "").strip()
+            and credentials.get("model", "").strip()
+        )
+        use_review = self.settings_page.get_llm_settings().get(
+            "use_translation_review", False
+        )
+        has_pages = bool(self.image_files)
+        automatic = self.automatic_radio.isChecked()
+        button.setEnabled(configured and use_review and has_pages and not automatic)
+        if automatic:
+            tooltip = self.tr(
+                "Translation review runs on demand and is not available in Automatic mode."
+            )
+        elif not configured:
+            tooltip = self.tr(
+                "Configure a Translation Review Model in Settings > Tools to enable this action."
+            )
+        elif not use_review:
+            tooltip = self.tr(
+                "Enable 'Use Translation Review' in the LLM settings to enable this action."
+            )
+        else:
+            tooltip = self.tr(
+                "Check the page's translations with the review model and collect suggestions."
+            )
+        button.setToolTip(tooltip)
+
+    def review_translation(self):
+        self.manual_workflow_ctrl.review_translation()
 
     def update_visual_button_state(self):
         buttons = self.hbutton_group.get_button_group().buttons()

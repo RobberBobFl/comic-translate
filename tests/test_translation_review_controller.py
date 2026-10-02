@@ -1,0 +1,191 @@
+"""Tests for TranslationReviewController apply/staleness logic.
+
+Headless (offscreen Qt): a fake main window with one page, one block and a
+stored translation_review state. Covers the apply path (translation replaced,
+entry removed from state, canvas updated) and the staleness guard (the block's
+translation changed after the review ran).
+"""
+
+import os
+
+if os.environ.get("QT_QPA_PLATFORM", "") == "":
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+import pytest
+from PySide6 import QtCore, QtWidgets
+
+from app.controllers.translation_review import TranslationReviewController
+from app.ui.review_panel import ReviewPanel
+from modules.utils.textblock import TextBlock
+
+PAGE = "/comic/page.png"
+
+
+class FakePageList(QtCore.QObject):
+    currentRowChanged = QtCore.Signal(int)
+
+
+class FakeTextCtrl:
+    """Records apply calls instead of touching a real canvas."""
+
+    def __init__(self, main):
+        self.main = main
+        self.applied = []
+
+    def apply_text_from_command(self, text_item, text, html=None, blk=None):
+        self.applied.append((blk, text))
+
+    def _refit_text_item_to_block(self, text_item, blk):
+        pass
+
+
+class FakeMain(QtCore.QObject):
+    def __init__(self, blk_list, image_states):
+        super().__init__()
+        self.image_files = [PAGE]
+        self.curr_img_idx = 0
+        self.blk_list = blk_list
+        self.image_states = image_states
+        self.webtoon_mode = False
+        self.curr_tblock = None
+        self.review_panel = ReviewPanel()
+        self.page_list = FakePageList()
+        self.dirty = False
+        self.applied_to_canvas = []
+        self.text_ctrl = FakeTextCtrl(self)
+
+    def mark_project_dirty(self):
+        self.dirty = True
+
+
+def _make_blk(text, translation, xyxy=(10, 10, 100, 40), angle=0.0):
+    blk = TextBlock()
+    blk.text = text
+    blk.translation = translation
+    blk.xyxy = list(xyxy)
+    blk.angle = angle
+    return blk
+
+
+def _review_state(blk, **overrides):
+    entry = {
+        "block_index": 0,
+        "source_text": blk.text,
+        "translation_snapshot": blk.translation,
+        "xyxy": [int(v) for v in blk.xyxy],
+        "angle": float(blk.angle),
+        "severity": "improvement",
+        "category": "calque",
+        "reason": "sounds like a calque",
+        "recommended": "Естественный вариант",
+        "alternatives": ["Другой вариант"],
+    }
+    entry.update(overrides)
+    return {"target_lang": "Russian", "blocks": {"0": entry}}
+
+
+@pytest.fixture(scope="module")
+def app():
+    return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+
+@pytest.fixture()
+def setup(app):
+    def _setup(blk, review_state=None, live_translation=None):
+        if live_translation is not None:
+            blk.translation = live_translation
+        # The persisted page state holds its own copy of the block, exactly
+        # like a saved project does.
+        state_blk = blk.deep_copy()
+        if live_translation is not None:
+            state_blk.translation = blk.translation
+        state = {"blk_list": [state_blk]}
+        if review_state is not None:
+            state["translation_review"] = review_state
+        main = FakeMain([blk], {PAGE: state})
+        ctrl = TranslationReviewController(main)
+        return main, ctrl
+    return _setup
+
+
+def test_refresh_populates_panel(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    ctrl.refresh_from_state()
+    assert not main.review_panel.is_empty()
+    cards = main.review_panel.entries()
+    assert 0 in cards
+    assert not cards[0].is_stale
+    main.review_panel.hide()
+
+
+def test_refresh_marks_drifted_translation_stale(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk), live_translation="Пользователь правил")
+    ctrl.refresh_from_state()
+    card = main.review_panel.entries()[0]
+    assert card.is_stale
+    main.review_panel.hide()
+
+
+def test_apply_replaces_translation_and_clears_entry(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    ctrl.apply_entries([(0, "Это сейчас не важно!")])
+
+    assert blk.translation == "Это сейчас не важно!"
+    state = main.image_states[PAGE]
+    assert "translation_review" not in state
+    assert main.dirty
+    assert main.review_panel.is_empty()
+
+
+def test_apply_syncs_state_blk_list_copy(setup):
+    """The persisted state holds a *different* TextBlock object; it must be updated too."""
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    state_blk = main.image_states[PAGE]["blk_list"][0]
+    assert state_blk is not blk
+    ctrl.apply_entries([(0, "Это сейчас не важно!")])
+    assert blk.translation == "Это сейчас не важно!"
+    assert state_blk.translation == "Это сейчас не важно!"
+
+
+def test_apply_skips_stale_and_marks_card(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk), live_translation="Пользователь правил")
+    ctrl.refresh_from_state()
+    ctrl.apply_entries([(0, "Это сейчас не важно!")])
+
+    # Nothing was applied and the entry stays in state.
+    assert blk.translation == "Пользователь правил"
+    assert "translation_review" in main.image_states[PAGE]
+    assert not main.dirty
+    card = main.review_panel.entries().get(0)
+    assert card is not None and card.is_stale
+
+
+def test_apply_skips_missing_entry(setup):
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main, ctrl = setup(blk, _review_state(blk))
+    ctrl.apply_entries([(42, "Что-то")])
+    assert blk.translation == "Придирки к словам!"
+    assert "translation_review" in main.image_states[PAGE]
+
+
+def test_live_block_fallback_matches_by_source_text(setup):
+    """Blocks re-sorted after the review: xyxy no longer matches, but the
+    reviewed index still holds a block with the same source text."""
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    state = _review_state(blk)
+    # Move the block elsewhere; entry xyxy now points at a different block.
+    other = _make_blk("Other", "Другое", xyxy=(200, 10, 260, 40))
+    moved = _make_blk(blk.text, blk.translation, xyxy=(500, 10, 560, 40))
+    main = FakeMain([other, moved], {PAGE: {"blk_list": [other, moved]}})
+    # Patch entry to point at index 1 where the same source text now lives.
+    state["blocks"]["0"]["block_index"] = 1
+    main.image_states[PAGE]["translation_review"] = state
+    ctrl = TranslationReviewController(main)
+
+    blk_found = ctrl._live_block(PAGE, state["blocks"]["0"])
+    assert blk_found is moved
