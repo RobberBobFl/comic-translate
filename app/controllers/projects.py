@@ -1714,6 +1714,11 @@ class ProjectController:
             self.main.undo_stacks[file] = stack
             self.main.undo_group.addStack(stack)
 
+        # Pages just became available: re-evaluate the toolbar actions whose
+        # enablement depends on image_files (Visual scene description, Review).
+        self.main.update_visual_button_state()
+        self.main.update_review_button_state()
+
         self.main.run_threaded(
             lambda: self.main.load_image(self.main.image_files[index]),
             lambda result: self._display_image_and_set_mode(result, index),

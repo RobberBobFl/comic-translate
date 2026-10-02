@@ -539,9 +539,15 @@ class ManualWorkflowController:
             self.main.on_manual_finished,
         )
 
-    def review_translation(self) -> None:
+    def review_translation(self, force: bool = False) -> None:
         """Check the finished translations of the target page(s) with the
-        dedicated review model and store per-block suggestions in page state."""
+        dedicated review model and store per-block suggestions in page state.
+
+        Without *force*, pages that already carry a stored review are not
+        re-sent to the model: in manual mode clicking Review simply reopens
+        the review window for the current page; in semi-auto only pages
+        without a stored review are run.
+        """
         from modules.translation.reviewer import TranslationReviewer
 
         if not getattr(self.main, "semi_auto_mode", False):
@@ -551,6 +557,25 @@ class ManualWorkflowController:
             selected_paths = self._filter_skipped(self._selected_page_paths())
         if not selected_paths:
             return
+
+        def has_stored_review(file_path: str) -> bool:
+            blocks = self.main.image_states.get(file_path, {}).get(
+                "translation_review", {}
+            ).get("blocks", {})
+            return bool(blocks)
+
+        if not force:
+            if not getattr(self.main, "semi_auto_mode", False):
+                if current and has_stored_review(current):
+                    # Stored review exists for the displayed page: just show it.
+                    self.main.review_ctrl.show_results(current)
+                    return
+            else:
+                pending = [p for p in selected_paths if not has_stored_review(p)]
+                if selected_paths and not pending:
+                    self.main.review_ctrl.show_results(self._current_file_path())
+                    return
+                selected_paths = pending
 
         settings_page = self.main.settings_page
         llm_settings = settings_page.get_llm_settings()

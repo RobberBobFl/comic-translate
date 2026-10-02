@@ -378,6 +378,8 @@ class ReviewDialog(QtWidgets.QDialog):
     scrolling the comic while applying suggestions.
     """
 
+    rerun_requested = QtCore.Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Translation Review"))
@@ -391,10 +393,18 @@ class ReviewDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
 
+        page_row = QtWidgets.QHBoxLayout()
         self.page_label = QtWidgets.QLabel("")
         self.page_label.setStyleSheet("color: #999999;")
-        self.page_label.setContentsMargins(2, 0, 2, 4)
-        layout.addWidget(self.page_label)
+        self.page_label.setContentsMargins(2, 0, 2, 0)
+        page_row.addWidget(self.page_label, 1)
+        self.rerun_button = MPushButton(self.tr("Re-run Review")).small()
+        self.rerun_button.setToolTip(
+            self.tr("Check the displayed page again (overwrites these suggestions).")
+        )
+        self.rerun_button.clicked.connect(self.rerun_requested)
+        page_row.addWidget(self.rerun_button)
+        layout.addLayout(page_row)
 
         self.review_panel = ReviewPanel(self, show_header=False)
         layout.addWidget(self.review_panel, 1)

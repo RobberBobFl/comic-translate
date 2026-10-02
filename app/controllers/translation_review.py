@@ -56,7 +56,12 @@ class TranslationReviewController(QtCore.QObject):
             panel = self._dialog.review_panel
             panel.apply_entries_requested.connect(self.apply_entries)
             panel.block_focus_requested.connect(self.focus_block)
+            self._dialog.rerun_requested.connect(self._rerun_review)
         return self._dialog
+
+    def _rerun_review(self) -> None:
+        """Re-run the review for the displayed page, overwriting the stored one."""
+        self.main.manual_workflow_ctrl.review_translation(force=True)
 
     # ------------------------------------------------------------------
     # Panel population

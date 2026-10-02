@@ -362,3 +362,60 @@ def test_manual_workflow_review_gate_by_checkbox(app, monkeypatch):
 
     ctrl.review_translation()
     assert FakeReviewer.calls == []
+
+
+def test_click_with_stored_review_reopens_window_without_model(app, monkeypatch):
+    """Clicking Review with a stored review just reopens the window: no model call."""
+    FakeReviewer.calls = []
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main = _make_review_main(blk)
+    main.image_states[PAGE]["translation_review"] = _review_state(blk)
+    ctrl = ManualWorkflowController(main)
+
+    ctrl.review_translation()
+
+    assert FakeReviewer.calls == []  # stored review shown, model untouched
+    assert main.review_ctrl._dialog is not None
+    assert main.review_ctrl._dialog.isVisible()
+    assert 0 in main.review_ctrl.panel.entries()
+
+
+def test_force_rerun_overwrites_stored_review(app, monkeypatch):
+    FakeReviewer.calls = []
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main = _make_review_main(blk)
+    main.image_states[PAGE]["translation_review"] = _review_state(blk)
+    ctrl = ManualWorkflowController(main)
+
+    ctrl.review_translation(force=True)
+
+    assert len(FakeReviewer.calls) == 1
+    assert main.dirty
+
+
+def test_rerun_button_triggers_force_review(app, monkeypatch):
+    FakeReviewer.calls = []
+    monkeypatch.setattr(reviewer_module, "TranslationReviewer", FakeReviewer)
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+
+    blk = _make_blk("Semantics!", "Придирки к словам!")
+    main = _make_review_main(blk)
+    main.image_states[PAGE]["translation_review"] = _review_state(blk)
+    review_ctrl = TranslationReviewController(main)
+    main.manual_workflow_ctrl = ManualWorkflowController(main)
+
+    review_ctrl._rerun_review()
+
+    assert len(FakeReviewer.calls) == 1
