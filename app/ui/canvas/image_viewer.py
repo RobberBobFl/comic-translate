@@ -532,8 +532,16 @@ class ImageViewer(QGraphicsView):
             self.paint_layer.setPixmap(QtGui.QPixmap.fromImage(self.paint_qimage))
 
     def sample_color_at(self, scene_pos: QPointF):
-        """Sample the pixel color under scene_pos from the base image."""
-        arr = self.get_image_array(include_patches=False)
+        """Sample the displayed color under scene_pos: the retouch paint overlay
+        on top of inpaint patches on top of the base image — i.e. what the user
+        sees, minus text items."""
+        if self.paint_overlay is not None:
+            color = self._overlay_color_at(scene_pos)
+            if color is not None:
+                self.paint_manager.set_paint_color(color)
+                self.paint_color_changed.emit(color)
+                return
+        arr = self.get_image_array(include_patches=True)
         if arr is None:
             return
         h, w = arr.shape[:2]
@@ -543,6 +551,30 @@ class ImageViewer(QGraphicsView):
         color = QtGui.QColor(int(r), int(g), int(b), 255)
         self.paint_manager.set_paint_color(color)
         self.paint_color_changed.emit(color)
+
+    def _overlay_color_at(self, scene_pos: QPointF):
+        """Paint-overlay color under scene_pos, or None where it is transparent."""
+        oh, ow = self.paint_overlay.shape[:2]
+        x = max(0, min(int(round(scene_pos.x())), ow - 1))
+        y = max(0, min(int(round(scene_pos.y())), oh - 1))
+        r, g, b, a = (int(v) for v in self.paint_overlay[y, x])
+        if a == 0:
+            return None
+        if a == 255:
+            return QtGui.QColor(r, g, b, 255)
+        # Strokes always paint at full opacity; blend with the composed pixel
+        # (base + patches) so a partial-alpha overlay would still match what
+        # is displayed.
+        arr = self.get_image_array(include_patches=True)
+        if arr is None:
+            return QtGui.QColor(r, g, b, 255)
+        br, bg, bb = (int(v) for v in arr[y, x])
+        return QtGui.QColor(
+            (r * a + br * (255 - a)) // 255,
+            (g * a + bg * (255 - a)) // 255,
+            (b * a + bb * (255 - a)) // 255,
+            255,
+        )
 
     def get_mask_for_inpainting(self):
         mask = self.drawing_manager.generate_mask_from_strokes()
