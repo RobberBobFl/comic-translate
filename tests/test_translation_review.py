@@ -255,25 +255,25 @@ def test_review_retries_with_bigger_budget_on_length():
     """Reasoning model spent the whole budget thinking (finish_reason=length):
     the retry must use a doubled completion budget and return the content."""
     reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
+        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
         {"content": '{"blocks": [{"block": 0, "recommended": "x"}]}', "finish_reason": "stop"},
     ])
     blocks = [_make_blk("A", "А")]
     result = reviewer.review(blocks)
     assert result is not None
     assert len(reviewer._queries) == 2
-    assert reviewer._completion_budget == 5000
+    assert reviewer._completion_budget == 10000
 
 
 def test_review_gives_up_after_attempts():
     reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
         {"content": "", "finish_reason": "length", "completion_tokens": 5000},
+        {"content": "", "finish_reason": "length", "completion_tokens": 10000},
     ])
     blocks = [_make_blk("A", "А")]
     assert reviewer.review(blocks) is None
     assert len(reviewer._queries) == 2
-    assert reviewer._completion_budget == 5000
+    assert reviewer._completion_budget == 10000
 
 
 def test_review_query_exception_returns_none():
@@ -285,7 +285,7 @@ def test_review_query_exception_returns_none():
 
 def test_review_budget_never_exceeds_ceiling():
     reviewer = _reviewer_with_queries([
-        {"content": "", "finish_reason": "length", "completion_tokens": 2500},
+        {"content": "", "finish_reason": "length", "completion_tokens": 5000},
         {"content": "", "finish_reason": "length", "completion_tokens": 16000},
         {"content": "", "finish_reason": "length", "completion_tokens": 16000},
     ])

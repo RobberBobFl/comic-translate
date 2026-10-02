@@ -23,7 +23,10 @@ class TranslationReviewer:
     """
 
     DEFAULT_API_URL = "http://localhost:11434/v1"
-    MAX_COMPLETION_TOKENS = 2500
+    # Generous base budget: reasoning models spend completion tokens on
+    # thinking before emitting text, and a failed attempt is still billed -
+    # paying for one bigger request beats paying for a retry.
+    MAX_COMPLETION_TOKENS = 5000
     MAX_COMPLETION_TOKENS_CEILING = 16000
     REVIEW_ATTEMPTS = 2
     MAX_PAGE_SIDE = 650
