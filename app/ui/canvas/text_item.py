@@ -15,8 +15,8 @@ from .text.vertical_layout import VerticalTextDocumentLayout
 # font size and is re-derived whenever size/color change (see
 # _sync_faux_bold_outlines), otherwise the stroke would stay baked at its old
 # width while the glyph rescales.
-FAUX_BOLD_WIDTH_FACTOR = 0.04
-FAUX_BOLD_MIN_PX = 0.6
+FAUX_BOLD_WIDTH_FACTOR = 0.015
+FAUX_BOLD_MIN_PX = 0.3
 
 
 @dataclass

@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (QApplication, QTextEdit, QToolButton, QComboBox,
                                QLabel, QPushButton, QCheckBox, QGraphicsScene,
                                QSlider)
 
-from app.ui.canvas.text_item import TextBlockItem
+from app.ui.canvas.text_item import TextBlockItem, FAUX_BOLD_WIDTH_FACTOR
 from app.ui.canvas.text.text_item_properties import TextItemProperties
 
 
@@ -421,7 +421,7 @@ def test_faux_bold_width_proportional_to_font_size(app):
 
     has_pen, width, _ = _per_char_outline(item)
     assert has_pen == [True] * 5 + [False] * 6
-    assert width[:5] == [pytest.approx(20 * 0.04)] * 5
+    assert width[:5] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 5
 
 
 def test_faux_bold_width_tracks_span_font_size_change(app):
@@ -435,7 +435,7 @@ def test_faux_bold_width_tracks_span_font_size_change(app):
 
     has_pen, width, _ = _per_char_outline(item)
     assert has_pen[:5] == [True] * 5
-    assert width[:5] == [pytest.approx(40 * 0.04)] * 5
+    assert width[:5] == [pytest.approx(40 * FAUX_BOLD_WIDTH_FACTOR)] * 5
     # The rest was never bolded: no outline property at all.
     assert has_pen[5:] == [False] * 6
 
@@ -452,8 +452,8 @@ def test_faux_bold_width_uses_each_spans_own_size(app):
 
     _, width, _ = _per_char_outline(item)
     # "aa" and the separator keep the block size; only "bb" was resized.
-    assert width[:3] == [pytest.approx(20 * 0.04)] * 3
-    assert width[3:5] == [pytest.approx(48 * 0.04)] * 2
+    assert width[:3] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 3
+    assert width[3:5] == [pytest.approx(48 * FAUX_BOLD_WIDTH_FACTOR)] * 2
 
 
 def test_faux_bold_color_tracks_span_color(app):
@@ -498,7 +498,7 @@ def test_faux_bold_survives_html_roundtrip(app):
 
     has_pen, width, _ = _per_char_outline(reloaded)
     assert has_pen == [True] * 5 + [False] * 6
-    assert width[:5] == [pytest.approx(20 * 0.04)] * 5
+    assert width[:5] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 5
 
 
 def test_faux_bold_does_not_leak_onto_plain_text(app):
@@ -544,4 +544,4 @@ def test_faux_bold_retro_applied_to_legacy_html(app):
 
     has_pen, width, _ = _per_char_outline(item)
     assert has_pen == [False] * 6 + [True] * 4
-    assert width[6:] == [pytest.approx(20 * 0.04)] * 4
+    assert width[6:] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 4
