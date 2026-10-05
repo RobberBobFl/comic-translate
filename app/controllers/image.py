@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import imkit as imk
 import numpy as np
 from typing import TYPE_CHECKING, List
@@ -1019,11 +1020,40 @@ class ImageStateController:
         if self.main.webtoon_mode:
             # In webtoon mode, get the visible area image which combines all visible pages
             final_rgb, _ = self.main.image_viewer.get_visible_area_image(paint_all=True)
-        else:
-            # In regular mode, get the current single image
-            final_rgb = self.main.image_viewer.get_image_array(paint_all=True)
+            imk.write_image(file_path, final_rgb)
+            return
 
-        imk.write_image(file_path, final_rgb)
+        source_path = (self.main.image_files[self.main.curr_img_idx]
+                       if 0 <= self.main.curr_img_idx < len(self.main.image_files) else None)
+        target_ext = os.path.splitext(file_path)[1].lower()
+        source_ext = os.path.splitext(source_path)[1].lower() if source_path else ""
+        overlay = self.main.image_viewer.get_paint_overlay()
+        has_paint_overlay = (isinstance(overlay, np.ndarray) and overlay.ndim == 3
+                             and overlay.shape[2] == 4 and np.any(overlay[:, :, 3] > 0))
+
+        # Unedited page saved back in its own format: copy the source bytes so
+        # the file is bit-identical instead of re-rendered and re-encoded.
+        if (source_path and target_ext == source_ext
+                and not self.main.blk_list
+                and not self.main.image_patches.get(source_path)
+                and not has_paint_overlay):
+            try:
+                ensure_path_materialized(source_path)
+                shutil.copyfile(source_path, file_path)
+                return
+            except Exception:
+                pass  # fall through to the normal render
+
+        # In regular mode, get the current single image
+        final_rgb = self.main.image_viewer.get_image_array(paint_all=True)
+
+        # JPEG output keeps the source's quantization tables and subsampling
+        # instead of Pillow's default q75.
+        jpeg_options = None
+        if target_ext in {".jpg", ".jpeg"} and source_path:
+            ensure_path_materialized(source_path)
+            jpeg_options = imk.read_jpeg_encode_options(source_path)
+        imk.write_image(file_path, final_rgb, jpeg_options=jpeg_options)
 
     def save_image_state(self, file: str):
         # For regular mode only

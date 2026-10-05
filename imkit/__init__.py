@@ -11,6 +11,7 @@ from .io import (
     write_image,
     encode_image,
     decode_image,
+    read_jpeg_encode_options,
 )
 
 from .transforms import (
@@ -72,9 +73,10 @@ from .analysis import (
 __all__ = [
     # I/O operations
     'read_image',
-    'write_image', 
+    'write_image',
     'encode_image',
     'decode_image',
+    'read_jpeg_encode_options',
     
     # Transformations
     'to_gray',

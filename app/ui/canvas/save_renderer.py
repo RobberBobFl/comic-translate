@@ -244,9 +244,9 @@ class ImageSaveRenderer:
 
         return arr
 
-    def save_image(self, output_path: str):
+    def save_image(self, output_path: str, jpeg_options: dict | None = None):
         final_rgb = self.render_to_image()
-        imk.write_image(output_path, final_rgb)
+        imk.write_image(output_path, final_rgb, jpeg_options=jpeg_options)
 
     def apply_patches(self, patches: list[dict]):
         """Apply inpainting/retouch patches to the image."""
