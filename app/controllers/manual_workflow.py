@@ -539,6 +539,192 @@ class ManualWorkflowController:
             self.main.on_manual_finished,
         )
 
+    def review_translation(self, force: bool = False) -> None:
+        """Check the finished translations of the target page(s) with the
+        dedicated review model and store per-block suggestions in page state.
+
+        Without *force*, pages that already carry a stored review are not
+        re-sent to the model: in manual mode clicking Review simply reopens
+        the review window for the current page; in semi-auto only pages
+        without a stored review are run.
+        """
+        from modules.translation.reviewer import TranslationReviewer
+
+        if not getattr(self.main, "semi_auto_mode", False):
+            current = self._current_file_path()
+            selected_paths = [current] if current else []
+        else:
+            selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            return
+
+        def has_stored_review(file_path: str) -> bool:
+            blocks = self.main.image_states.get(file_path, {}).get(
+                "translation_review", {}
+            ).get("blocks", {})
+            return bool(blocks)
+
+        if not force:
+            if not getattr(self.main, "semi_auto_mode", False):
+                if current and has_stored_review(current):
+                    # Stored review exists for the displayed page: just show it.
+                    self.main.review_ctrl.show_results(current)
+                    return
+            else:
+                pending = [p for p in selected_paths if not has_stored_review(p)]
+                if selected_paths and not pending:
+                    self.main.review_ctrl.show_results(self._current_file_path())
+                    return
+                selected_paths = pending
+
+        settings_page = self.main.settings_page
+        llm_settings = settings_page.get_llm_settings()
+        if not llm_settings.get("use_translation_review", False):
+            return
+        credentials = settings_page.get_reviewer_credentials()
+        if not (
+            credentials.get("api_url", "").strip()
+            and credentials.get("model", "").strip()
+        ):
+            QtWidgets.QMessageBox.information(
+                self.main,
+                self.main.tr("Translation Review"),
+                self.main.tr(
+                    "Configure a Translation Review Model in Settings > Tools first."
+                ),
+            )
+            return
+
+        reviewer = TranslationReviewer.from_settings(settings_page)
+        send_image = bool(llm_settings.get("review_send_image", True))
+        instructions_template = llm_settings.get("review_prompt", "")
+        source_lang_fallback = to_canonical_language_name(
+            self.main.s_combo.currentText(),
+            self.main.lang_mapping,
+        )
+        target_lang_fallback = to_canonical_language_name(
+            self.main.t_combo.currentText(),
+            self.main.lang_mapping,
+        )
+
+        def get_blocks(file_path: str) -> list:
+            if file_path == self._current_file_path():
+                return self.main.blk_list or []
+            return self.main.image_states.get(file_path, {}).get("blk_list", []) or []
+
+        def has_translations(blocks: list) -> bool:
+            return any(
+                (getattr(blk, "translation", "") or "").strip()
+                and (getattr(blk, "text", "") or "").strip()
+                for blk in blocks
+            )
+
+        # A page without any finished translation has nothing to review.
+        reviewable: list[tuple[str, list]] = []
+        for file_path in selected_paths:
+            blocks = get_blocks(file_path)
+            if has_translations(blocks):
+                reviewable.append((file_path, blocks))
+        if not reviewable:
+            QtWidgets.QMessageBox.information(
+                self.main,
+                self.main.tr("Translation Review"),
+                self.main.tr(
+                    "No translations found. Run Translate before reviewing."
+                ),
+            )
+            return
+
+        total = len(reviewable)
+        self.main.loading.setVisible(True)
+        self.main.disable_hbutton_group()
+
+        def review_pages() -> tuple[dict[str, dict], int]:
+            results: dict[str, dict] = {}
+            failed = 0
+            for file_path, blocks in reviewable:
+                state = self.main.image_states.get(file_path, {})
+                target_lang = state.get("target_lang", target_lang_fallback)
+                try:
+                    image = self._load_page_image(file_path) if send_image else None
+                    instructions = TranslationReviewer.apply_placeholders(
+                        instructions_template, source_lang_fallback, target_lang
+                    )
+                    raw = reviewer.review(
+                        blocks,
+                        image=image,
+                        source_lang=source_lang_fallback,
+                        target_lang=target_lang,
+                        instructions=instructions,
+                        scene_description=state.get("scene_description", "") or "",
+                        is_webtoon=self.main.webtoon_mode,
+                    )
+                except Exception:
+                    logger.exception("Translation review failed for %s", file_path)
+                    failed += 1
+                    continue
+                if not raw:
+                    failed += 1
+                    continue
+                parsed = TranslationReviewer.parse_review_response(raw)
+                entries = {}
+                for idx, suggestion in parsed.items():
+                    if not (0 <= idx < len(blocks)):
+                        continue
+                    blk = blocks[idx]
+                    xyxy = getattr(blk, "xyxy", None)
+                    entries[str(idx)] = {
+                        "block_index": idx,
+                        "source_text": str(getattr(blk, "text", "") or ""),
+                        "translation_snapshot": str(
+                            getattr(blk, "translation", "") or ""
+                        ),
+                        "xyxy": (
+                            [int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])]
+                            if xyxy is not None
+                            else []
+                        ),
+                        "angle": float(getattr(blk, "angle", 0.0) or 0.0),
+                        **suggestion,
+                    }
+                if entries:
+                    results[file_path] = {
+                        "target_lang": target_lang,
+                        "blocks": entries,
+                    }
+            return results, failed
+
+        def on_ready(payload: tuple[dict[str, dict], int]) -> None:
+            results, failed = payload or ({}, 0)
+            suggestions = 0
+            for file_path, review_data in (results or {}).items():
+                self.main.image_states.setdefault(file_path, {})[
+                    "translation_review"
+                ] = review_data
+                suggestions += len(review_data.get("blocks", {}))
+            if suggestions:
+                self.main.mark_project_dirty()
+                self.main.review_ctrl.show_results(self._current_file_path())
+            QtWidgets.QMessageBox.information(
+                self.main,
+                self.main.tr("Translation Review"),
+                self.main.tr(
+                    "{done}/{total} pages reviewed, {suggestions} suggestion(s).\n{failed} failed"
+                ).format(
+                    done=len(results or {}),
+                    total=total,
+                    suggestions=suggestions,
+                    failed=failed,
+                ),
+            )
+
+        self.main.run_threaded(
+            review_pages,
+            on_ready,
+            self.main.default_error_handler,
+            self.main.on_manual_finished,
+        )
+
     def translate_image(self, single_block: bool = False) -> None:
         selected_paths = self._filter_skipped(self._selected_page_paths())
         if not selected_paths:

@@ -23,13 +23,25 @@ def read_image(path: str) -> np.ndarray:
     return arr
 
 
-def write_image(path: str, array: np.ndarray, quality: int | None = None) -> None:
-    """Write a numpy array as an image file."""
+def write_image(path: str, array: np.ndarray, quality: int | None = None,
+                jpeg_options: dict | None = None) -> None:
+    """Write a numpy array as an image file.
+
+    ``jpeg_options`` carries source-faithful JPEG encoding parameters
+    (qtables/subsampling) captured by read_jpeg_encode_options; when supplied
+    for a .jpg/.jpeg target they replace Pillow's defaults.
+    """
     im = Image.fromarray(ensure_uint8(array))
     save_kwargs: dict[str, object] = {}
 
     ext = os.path.splitext(path)[1].lower()
     if ext in {".jpg", ".jpeg"}:
+        if jpeg_options:
+            try:
+                im.save(path, **jpeg_options)
+                return
+            except (ValueError, OSError):
+                pass
         try:
             im.save(path, quality="keep", **save_kwargs)
             return
@@ -39,6 +51,33 @@ def write_image(path: str, array: np.ndarray, quality: int | None = None) -> Non
         save_kwargs["quality"] = quality
 
     im.save(path, **save_kwargs)
+
+
+def read_jpeg_encode_options(path: str) -> dict | None:
+    """Capture a source JPEG's quantization tables and chroma subsampling so a
+    re-encode can match the original quality instead of Pillow's default q75.
+
+    Returns None for non-JPEG sources or when nothing usable was captured.
+    """
+    try:
+        with Image.open(path) as im:
+            if im.format != "JPEG":
+                return None
+            options: dict[str, object] = {}
+            qtables = getattr(im, "quantization", None)
+            if qtables:
+                options["qtables"] = qtables
+            try:
+                from PIL import JpegImagePlugin
+
+                sampling = JpegImagePlugin.get_sampling(im)
+                if sampling in (0, 1, 2):
+                    options["subsampling"] = sampling
+            except Exception:
+                pass
+            return options or None
+    except Exception:
+        return None
 
 
 def encode_image(array: np.ndarray, ext: str = ".png", **kwargs) -> bytes:

@@ -19,6 +19,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QUndoStack, QTextDocument
 
 from app.thread_worker import GenericWorker
+from app.path_materialization import ensure_path_materialized
 from app.ui.dayu_widgets.message import MMessage
 from app.ui.canvas.text_item import TextBlockItem
 from app.ui.canvas.text.text_item_properties import TextItemProperties
@@ -1153,7 +1154,28 @@ class ProjectController:
                 else:
                     for page_number, page_idx in enumerate(group["page_indices"], start=1):
                         file_path = self.main.image_files[page_idx]
-                        
+                        viewer_state = all_pages_current_state[file_path]['viewer_state']
+
+                        patches = list(self.main.image_patches.get(file_path, []))
+                        paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
+                        has_paint_overlay = (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
+                                and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0))
+
+                        # A page with nothing baked in is copied verbatim: no
+                        # re-render, no JPEG re-encode -- the exported file is
+                        # bit-identical to the one that was loaded.
+                        if (not self.main.webtoon_mode and not patches and not has_paint_overlay
+                                and not viewer_state.get('text_items_state')
+                                and os.path.splitext(file_path)[1]):
+                            try:
+                                ensure_path_materialized(file_path)
+                                shutil.copyfile(file_path, os.path.join(
+                                    group_dir, self._build_export_page_name(page_number, file_path)))
+                                continue
+                            except Exception as e:
+                                print(f"Warning: could not copy original bytes for page {page_idx} ({file_path}): {e}")
+                                print("  Falling back to rendering the page")
+
                         # Try to load the image with error handling
                         try:
                             rgb_img = self.main.load_image(file_path)
@@ -1161,14 +1183,9 @@ class ProjectController:
                             print(f"Warning: Could not load image for page {page_idx} ({file_path}): {e}")
                             print(f"  Skipping this page in export")
                             continue
-                        
-                        renderer = ImageSaveRenderer(rgb_img)
-                        viewer_state = all_pages_current_state[file_path]['viewer_state']
 
-                        patches = list(self.main.image_patches.get(file_path, []))
-                        paint_overlay = all_pages_current_state[file_path].get('paint_overlay')
-                        if (isinstance(paint_overlay, np.ndarray) and paint_overlay.ndim == 3
-                                and paint_overlay.shape[2] == 4 and np.any(paint_overlay[:, :, 3] > 0)):
+                        renderer = ImageSaveRenderer(rgb_img)
+                        if has_paint_overlay:
                             h, w = paint_overlay.shape[:2]
                             patches.append({'bbox': (0, 0, w, h), 'image': paint_overlay})
                         renderer.apply_patches(patches)
@@ -1178,7 +1195,13 @@ class ProjectController:
                             renderer.add_state_to_image(viewer_state)
 
                         sv_pth = os.path.join(group_dir, self._build_export_page_name(page_number, file_path))
-                        renderer.save_image(sv_pth)
+                        # Re-encoded JPEG pages keep the source's quantization
+                        # tables and subsampling instead of Pillow's default q75.
+                        jpeg_options = None
+                        if sv_pth.lower().endswith((".jpg", ".jpeg")):
+                            ensure_path_materialized(file_path)
+                            jpeg_options = imk.read_jpeg_encode_options(file_path)
+                        renderer.save_image(sv_pth, jpeg_options=jpeg_options)
 
                 os.makedirs(os.path.dirname(group["output_path"]) or ".", exist_ok=True)
                 make(group_dir, group["output_path"])
@@ -1713,6 +1736,11 @@ class ProjectController:
             stack.indexChanged.connect(self.main._bump_dirty_revision)
             self.main.undo_stacks[file] = stack
             self.main.undo_group.addStack(stack)
+
+        # Pages just became available: re-evaluate the toolbar actions whose
+        # enablement depends on image_files (Visual scene description, Review).
+        self.main.update_visual_button_state()
+        self.main.update_review_button_state()
 
         self.main.run_threaded(
             lambda: self.main.load_image(self.main.image_files[index]),

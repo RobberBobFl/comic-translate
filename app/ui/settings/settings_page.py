@@ -13,7 +13,9 @@ from app.shortcuts import get_default_shortcuts
 from .settings_ui import SettingsPageUI
 from .custom_ocr_dialog import CustomOCRDialog, DEFAULT_API_URL
 from .scene_analyzer_dialog import SceneAnalyzerDialog
+from .reviewer_dialog import ReviewerDialog
 from modules.translation.scene_analyzer import SceneAnalyzer
+from modules.translation.reviewer import TranslationReviewer
 from modules.utils.device import is_gpu_available
 from app.account.auth.auth_client import AuthClient, USER_INFO_GROUP, \
     EMAIL_KEY, TIER_KEY, CREDITS_KEY, MONTHLY_CREDITS_KEY
@@ -101,6 +103,7 @@ class SettingsPage(QtWidgets.QWidget):
         self.ui.check_update_button.clicked.connect(self.check_for_updates)
         self.ui.tools_page.custom_ocr_requested.connect(self._open_custom_ocr_dialog)
         self.ui.tools_page.scene_analyzer_requested.connect(self._open_scene_analyzer_dialog)
+        self.ui.tools_page.reviewer_requested.connect(self._open_reviewer_dialog)
         self._sync_extra_context_limit(self.ui.translator_combo.currentText())
 
     def _sync_extra_context_limit(self, translator: str) -> None:
@@ -139,6 +142,9 @@ class SettingsPage(QtWidgets.QWidget):
             'batch_size': self.ui.batch_size_spinbox.value(),
             'context_window': self.ui.context_window_spinbox.value(),
             'use_scene_description': self.ui.use_scene_description_checkbox.isChecked(),
+            'use_translation_review': self.ui.use_translation_review_checkbox.isChecked(),
+            'review_send_image': self.ui.review_send_image_checkbox.isChecked(),
+            'review_prompt': self.ui.review_prompt.toPlainText(),
         }
 
     def get_export_settings(self):
@@ -253,6 +259,40 @@ class SettingsPage(QtWidgets.QWidget):
 
     def _open_scene_analyzer_dialog(self) -> None:
         SceneAnalyzerDialog(self, parent=self).exec()
+
+    def get_reviewer_credentials(self) -> dict:
+        """Return translation reviewer credentials from their isolated settings group."""
+        settings = QSettings("ComicLabs", "ComicTranslate")
+        settings.beginGroup("reviewer")
+        save_key = settings.value("save_key", False, type=bool)
+        credentials = {
+            "api_url": settings.value("api_url", TranslationReviewer.DEFAULT_API_URL, type=str),
+            "api_key": settings.value("api_key", "", type=str) if save_key else "",
+            "model": settings.value("model", "", type=str),
+            "save_key": save_key,
+        }
+        settings.endGroup()
+        return credentials
+
+    def set_reviewer_credentials(self, data: dict) -> None:
+        """Persist translation reviewer credentials separately from other providers."""
+        settings = QSettings("ComicLabs", "ComicTranslate")
+        settings.beginGroup("reviewer")
+        settings.setValue("api_url", data.get("api_url", TranslationReviewer.DEFAULT_API_URL))
+        settings.setValue("model", data.get("model", ""))
+        save_key = bool(data.get("save_key", False))
+        settings.setValue("save_key", save_key)
+        if save_key:
+            settings.setValue("api_key", data.get("api_key", ""))
+        else:
+            settings.remove("api_key")
+        settings.endGroup()
+        owner = self.window()
+        if owner is not None and hasattr(owner, "update_review_button_state"):
+            owner.update_review_button_state()
+
+    def _open_reviewer_dialog(self) -> None:
+        ReviewerDialog(self, parent=self).exec()
 
     def get_hd_strategy_settings(self):
         strategy = self.ui.inpaint_strategy_combo.currentText()
@@ -479,6 +519,16 @@ class SettingsPage(QtWidgets.QWidget):
         )
         self.ui.use_scene_description_checkbox.setChecked(
             settings.value('use_scene_description', False, type=bool)
+        )
+        self.ui.use_translation_review_checkbox.setChecked(
+            settings.value('use_translation_review', False, type=bool)
+        )
+        self.ui.review_send_image_checkbox.setChecked(
+            settings.value('review_send_image', True, type=bool)
+        )
+        review_prompt = settings.value('review_prompt', '', type=str)
+        self.ui.review_prompt.setPlainText(
+            review_prompt or self.ui.llms_page.DEFAULT_REVIEW_PROMPT
         )
         settings.endGroup()
 

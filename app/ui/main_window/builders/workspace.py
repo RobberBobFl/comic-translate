@@ -62,6 +62,7 @@ class WorkspaceMixin:
             {"text": self.tr("Recognize"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Visual"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Translate"), "dayu_type": MPushButton.DefaultType, "enabled": False},
+            {"text": self.tr("Review"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Segment"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Clean"), "dayu_type": MPushButton.DefaultType, "enabled": False},
             {"text": self.tr("Render"), "dayu_type": MPushButton.DefaultType, "enabled": False},
