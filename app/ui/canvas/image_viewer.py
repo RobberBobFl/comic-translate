@@ -669,7 +669,14 @@ class ImageViewer(QGraphicsView):
             
         # Set selection outlines
         item.selection_outlines = properties.selection_outlines.copy()
-        
+
+        # Spacing must be applied *after* everything above: set_text() (inside
+        # the width block) calls apply_spacing() before letter_spacing/
+        # word_spacing are seeded from the saved state, so without this call a
+        # reloaded page renders at the default spacing while the item (and the
+        # toolbar dropdown) still reports the saved value.
+        item.apply_spacing()
+
         # Update the item
         item.update()
 

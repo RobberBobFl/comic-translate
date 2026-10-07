@@ -72,6 +72,10 @@ class ImageSaveRenderer:
             # Letter/word spacing are applied to the document font by the item.
             text_item.letter_spacing = float(text_props.letter_spacing or 0.0)
             text_item.word_spacing = float(text_props.word_spacing or 0.0)
+            # set_text() above ran with the default (0) spacing; re-apply now
+            # that the saved values are seeded, otherwise the export renders
+            # at default spacing while the item attributes hold the saved ones.
+            text_item.apply_spacing()
             # Export must match the on-canvas render, arcs included.
             text_item.set_curvature(float(text_props.curvature or 0.0))
             text_item.selection_outlines = text_props.selection_outlines.copy()
@@ -189,6 +193,12 @@ class ImageSaveRenderer:
             text_item.set_text(text_props.text, text_props.width)
             if text_props.direction:
                 text_item.set_direction(text_props.direction)
+            # Height depends on wrapping, which spacing changes: seed the saved
+            # values (set_text ran with 0) so the fallback measurement matches
+            # the on-canvas render.
+            text_item.letter_spacing = float(text_props.letter_spacing or 0.0)
+            text_item.word_spacing = float(text_props.word_spacing or 0.0)
+            text_item.apply_spacing()
             text_item.set_vertical(bool(text_props.vertical))
             text_item.set_color(text_props.text_color)
             return float(text_item.boundingRect().height())

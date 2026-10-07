@@ -750,3 +750,50 @@ def test_on_spacing_change_undo_restores_value(app, viewer_parent):
 
     stack.redo()
     assert item.letter_spacing == 4.0
+
+
+def test_spacing_reapplied_after_load_state_roundtrip(app, viewer_parent):
+    """Page switch: save_state -> clear -> load_state must restore the spacing
+    to the document font, not only to the item attributes.
+
+    Regression: add_text_item seeded letter_spacing/word_spacing *after*
+    set_text() (which calls apply_spacing()) and never re-applied, so a
+    revisited page rendered at default spacing while the toolbar dropdown
+    still showed the saved value.
+    """
+    viewer = ImageViewer(viewer_parent)
+    image = QImage(400, 400, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    viewer.setPhoto(QPixmap.fromImage(image))
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+
+    item = _render_one(controller, [50, 50, 350, 350], "word " * 8)
+    main.curr_tblock_item = item
+    controller.on_letter_spacing_change("3")
+    controller.on_word_spacing_change("6")
+    assert item.letter_spacing == 3.0
+    assert item.word_spacing == 6.0
+
+    state = viewer.save_state()
+    viewer.clear_scene()
+    viewer.load_state(state)
+
+    restored = viewer.text_items[0]
+    # The attributes survive (this part always worked)...
+    assert restored.letter_spacing == 3.0
+    assert restored.word_spacing == 6.0
+    # ...and the document font must carry them, otherwise the canvas shows
+    # default spacing while the dropdown reports the saved value.
+    font = restored.document().defaultFont()
+    assert font.letterSpacing() == 3.0
+    assert font.wordSpacing() == 6.0
+    # Every explicit fragment font must carry the spacing too (Qt layout
+    # prefers fragment fonts over the default font).
+    cursor = QTextCursor(restored.document())
+    cursor.movePosition(QTextCursor.MoveOperation.Start)
+    fmt = cursor.charFormat()
+    frag_font = fmt.font()
+    if fmt.fontFamilies():
+        assert frag_font.letterSpacing() == 3.0
+        assert frag_font.wordSpacing() == 6.0
