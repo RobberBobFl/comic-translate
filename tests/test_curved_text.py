@@ -447,6 +447,44 @@ def test_slider_drag_without_change_pushes_nothing(app, viewer_parent):
     assert item.curvature == 0.0
 
 
+def test_slider_without_selection_touches_no_block(app, viewer_parent):
+    """Regression: moving the slider with no selection must not arc every
+    block on the page — only selected items (same rule as the dropdowns).
+    Previously the press handler snapshotted all items and the change
+    handler passed include_all=True."""
+    viewer, first = _viewer_with_item(viewer_parent)
+    props = TextItemProperties(text="Second block", font_family="DejaVu Sans",
+                               font_size=24, text_color=QColor(0, 0, 0),
+                               width=300, position=(10, 150))
+    second = viewer.add_text_item(props)
+    main = _FakeMain(viewer)
+    controller = _make_controller(main)
+    main.curr_tblock_item = None
+    first.selected = False
+    second.selected = False
+    blocks = (first, second)
+
+    # Keyboard/programmatic change with no selection: nothing to apply to.
+    main.curvature_slider.setValue(35)
+    assert [b.curvature for b in blocks] == [0.0, 0.0]
+    assert main._stack.count() == 0
+
+    # Drag with no selection: the press snapshot is empty, release pushes
+    # nothing and leaves every block straight.
+    main.curvature_slider.sliderPressed.emit()
+    main.curvature_slider.setValue(70)
+    main.curvature_slider.sliderReleased.emit()
+    assert [b.curvature for b in blocks] == [0.0, 0.0]
+    assert main._stack.count() == 0
+
+    # With a selection only that block moves.
+    first.selected = True
+    main.curvature_slider.setValue(45)
+    assert first.curvature == 45.0
+    assert second.curvature == 0.0
+    assert main._stack.count() == 1
+
+
 def test_refresh_curvature_syncs_slider(app, viewer_parent):
     viewer, item = _viewer_with_item(viewer_parent)
     main = _FakeMain(viewer)

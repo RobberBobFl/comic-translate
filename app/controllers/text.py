@@ -342,13 +342,10 @@ class TextController:
         item.setTextCursor(cursor)
         return True
 
-    def _apply_format_to_selected(self, macro_name: str, apply_fn, include_all: bool = False):
-        # include_all: when nothing is selected, fall back to every block on the
-        # page so a toolbar control also works without clicking a block first.
+    def _apply_format_to_selected(self, macro_name: str, apply_fn):
+        # Selected blocks only: with nothing selected there is no target, so
+        # the control must not fall back to every block on the page.
         items = self._selected_text_items()
-        if not items and include_all:
-            items = [ti for ti in self.main.image_viewer.text_items
-                     if isinstance(ti, TextBlockItem)]
         if not items:
             return
 
@@ -704,12 +701,13 @@ class TextController:
                                      item.alignment, max_font)
             item.update()
 
-        # Selected blocks if any (multi-select), otherwise every block on the
-        # page, so the control also works without clicking a block first.
+        # Selected blocks only (multi-select included). With no selection the
+        # dropdown just records the value as the default for the next rendered
+        # block (on_blk_rendered reads it) — it must NOT rewrite every block
+        # on the page, matching the other formatting dropdowns.
         self._apply_format_to_selected(
             f"change_text_{kind}_spacing",
             _apply,
-            include_all=True,
         )
 
     def on_letter_spacing_change(self, spacing: str):
@@ -720,11 +718,11 @@ class TextController:
 
     def on_curvature_slider_pressed(self):
         """Snapshot undo state at the start of a drag so the whole slide is
-        one undo step (valueChanged fires on every pixel of movement)."""
+        one undo step (valueChanged fires on every pixel of movement).
+
+        With no selection the snapshot is empty: the drag must not grab every
+        block on the page (same rule as the other toolbar controls)."""
         items = self._selected_text_items()
-        if not items:
-            items = [ti for ti in self.main.image_viewer.text_items
-                     if isinstance(ti, TextBlockItem)]
         if len(items) == 1:
             self._transfer_panel_selection_to_item(items[0])
         self._curvature_drag = [
@@ -750,7 +748,6 @@ class TextController:
         self._apply_format_to_selected(
             "change_text_curvature",
             lambda item: item.set_curvature(value),
-            include_all=True,
         )
 
     def on_curvature_slider_released(self):

@@ -688,7 +688,11 @@ def test_on_spacing_change_ignores_partial_input(app, viewer_parent):
     assert item.letter_spacing == 3.0
 
 
-def test_on_spacing_change_applies_to_all_when_nothing_selected(app, viewer_parent):
+def test_on_spacing_change_noop_when_nothing_selected(app, viewer_parent):
+    """Regression: with no selection the spacing dropdown must not touch any
+    block — only the selected ones. Previously include_all=True rewrote every
+    block on the page, so resetting the dropdown to 0 after deselecting
+    changed spacing on blocks the user never edited."""
     viewer = ImageViewer(viewer_parent)
     image = QImage(400, 400, QImage.Format.Format_RGB32)
     image.fill(Qt.GlobalColor.white)
@@ -701,16 +705,25 @@ def test_on_spacing_change_applies_to_all_when_nothing_selected(app, viewer_pare
         _render_one(controller, [200, 50, 300, 150], "word " * 5),
         _render_one(controller, [50, 200, 150, 300], "word " * 6),
     ]
+    # The user sets -2 on one selected block, then deselects (empty click).
+    main.curr_tblock_item = items[0]
+    items[0].selected = True
+    controller.on_word_spacing_change("-2")
+    assert items[0].word_spacing == -2.0
+
     main.curr_tblock_item = None
     for item in items:
         item.selected = False
 
-    controller.on_word_spacing_change("6")
+    # Resetting the dropdown with nothing selected must not rewrite the page.
+    controller.on_word_spacing_change("0")
 
-    assert [item.word_spacing for item in items] == [6.0, 6.0, 6.0]
+    assert [item.word_spacing for item in items] == [-2.0, 0.0, 0.0]
+    # ...and the untouched blocks keep their rendered metrics too.
+    assert items[1].document().defaultFont().wordSpacing() == 0.0
 
 
-def test_on_spacing_change_prefers_selection_over_all(app, viewer_parent):
+def test_on_spacing_change_applies_to_selected_only_when_others_exist(app, viewer_parent):
     viewer = ImageViewer(viewer_parent)
     image = QImage(400, 400, QImage.Format.Format_RGB32)
     image.fill(Qt.GlobalColor.white)
