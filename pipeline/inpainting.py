@@ -69,7 +69,7 @@ class InpaintingHandler:
     def manual_inpaint(self, respect_manual_mask: bool = True):
         image_viewer = self.main_page.image_viewer
         settings_page = self.main_page.settings_page
-        mask = image_viewer.get_mask_for_inpainting()
+        mask, human_mask = image_viewer.get_mask_for_inpainting(return_human_mask=True)
         
         # Handle webtoon mode vs regular mode differently
         mappings = None
@@ -91,6 +91,7 @@ class InpaintingHandler:
             config,
             blk_list=inpaint_blocks or None,
             respect_manual_mask=respect_manual_mask,
+            human_mask=human_mask,
         )
         inpaint_input_img = imk.convert_scale_abs(inpaint_input_img) 
 
@@ -103,12 +104,12 @@ class InpaintingHandler:
         arr = np.array(ptr).reshape(qimg.height(), qimg.bytesPerLine())
         return arr[:, :qimg.width()]
 
-    def _generate_mask_from_saved_strokes(self, strokes: list[dict], image: np.ndarray):
+    def _generate_mask_from_saved_strokes(self, strokes: list[dict], image: np.ndarray, return_human_mask: bool = False):
         if image is None or not strokes:
-            return None
+            return (None, None) if return_human_mask else None
         height, width = image.shape[:2]
         if width <= 0 or height <= 0:
-            return None
+            return (None, None) if return_human_mask else None
 
         human_qimg = QImage(width, height, QImage.Format_Grayscale8)
         gen_qimg = QImage(width, height, QImage.Format_Grayscale8)
@@ -144,7 +145,7 @@ class InpaintingHandler:
         gen_painter.end()
 
         if not has_any:
-            return None
+            return (None, None) if return_human_mask else None
 
         human_mask = self._qimage_to_np(human_qimg)
         gen_mask = self._qimage_to_np(gen_qimg)
@@ -153,7 +154,9 @@ class InpaintingHandler:
         gen_mask = imk.dilate(gen_mask, kernel, iterations=1)
         mask = np.where((human_mask > 0) | (gen_mask > 0), 255, 0).astype(np.uint8)
         if np.count_nonzero(mask) == 0:
-            return None
+            return (None, None) if return_human_mask else None
+        if return_human_mask:
+            return mask, (human_mask > 0).astype(np.uint8) * 255
         return mask
 
     def _get_manual_fast_fill_blocks(self, mappings: list[dict] | None = None) -> list:
@@ -430,6 +433,7 @@ class InpaintingHandler:
         mask: np.ndarray,
         blk_list: list | None,
         respect_manual_mask: bool = False,
+        human_mask: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray, int]:
         if image is None or mask is None or not np.any(mask) or not blk_list:
             return image.copy(), mask.copy(), 0
@@ -654,6 +658,9 @@ class InpaintingHandler:
         # Clip residual mask to union of bubble boundaries so that
         # dilation artifacts or imperfect eraser strokes outside bubbles
         # do not leak into the NN inpainting stage.
+        # The free-hand human layer is exempt: a user-painted mask
+        # (e.g. SFX over artwork, outside every bubble) is explicit
+        # intent and must always reach the NN inpainting stage.
         if blk_list:
             bubble_union = np.zeros(residual_mask.shape, dtype=bool)
             for b in blk_list:
@@ -668,8 +675,17 @@ class InpaintingHandler:
                 if by2 > by1 and bx2 > bx1:
                     bubble_union[by1:by2, bx1:bx2] = True
             if np.any(bubble_union):
-                residual_mask[~bubble_union] = 0
-
+                clip_out = ~bubble_union
+                if human_mask is not None and human_mask.shape == residual_mask.shape:
+                    clip_out &= ~(human_mask > 0)
+                clipped_px = int(np.count_nonzero(residual_mask[clip_out]))
+                residual_mask[clip_out] = 0
+                if clipped_px:
+                    logger.debug(
+                        "Inpaint fast-fill: clipped %d residual px outside bubble union "
+                        "(human layer kept=%s)",
+                        clipped_px, human_mask is not None,
+                    )
         return cleaned_image, residual_mask, cleaned_blocks
 
     def _fast_fill_block(
@@ -937,7 +953,19 @@ class InpaintingHandler:
 
         return np.isin(labels, overlap_labels)
 
-    def _drop_tiny_residual_components(self, mask: np.ndarray, max_component_area: int = 256) -> tuple[np.ndarray, int]:
+    def _drop_tiny_residual_components(
+        self,
+        mask: np.ndarray,
+        max_component_area: int = 256,
+        keep_mask: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, int]:
+        """
+        Drop residual components <= max_component_area.
+
+        keep_mask (usually the free-hand human layer): components touching it
+        are kept regardless of size — a small user-painted SFX mark is intent,
+        not noise.
+        """
         if mask is None or not np.any(mask):
             return mask, 0
 
@@ -949,12 +977,18 @@ class InpaintingHandler:
         if num_labels <= 1:
             return mask, 0
 
+        keep = None
+        if keep_mask is not None and keep_mask.shape == mask.shape:
+            keep = keep_mask > 0
+
         pruned = mask.copy()
         dropped_pixels = 0
         for label in range(1, num_labels):
             area = int(stats[label, imk.CC_STAT_AREA])
             if area <= max_component_area:
                 component = labels == label
+                if keep is not None and np.any(component & keep):
+                    continue
                 dropped_pixels += int(np.count_nonzero(pruned[component]))
                 pruned[component] = 0
 
@@ -989,6 +1023,7 @@ class InpaintingHandler:
         blk_list: list | None = None,
         *,
         respect_manual_mask: bool = False,
+        human_mask: np.ndarray | None = None,
     ) -> np.ndarray:
         """
         Intelligently chooses between full-image and patch-based inpainting
@@ -1000,18 +1035,32 @@ class InpaintingHandler:
             config: Inpainting configuration
             blk_list: List of TextBlocks
             respect_manual_mask: If True, don't fallback on manual mask failures
+            human_mask: Free-hand brush layer of `mask`. Pixels here are user
+                intent and are never clipped away from the NN inpainting stage,
+                even when they lie outside every detected bubble (e.g. SFX).
         """
         if image is None:
             return None
         if mask is None or not np.any(mask):
             return image.copy()
 
+        if human_mask is not None and human_mask.shape != mask.shape:
+            logger.warning(
+                "Inpaint hybrid: human_mask shape %s != mask shape %s; ignoring human layer",
+                getattr(human_mask, "shape", None), mask.shape,
+            )
+            human_mask = None
+
         working_image, working_mask, cleaned_blocks = self._apply_fast_bubble_cleanup(
-            image, mask, blk_list, respect_manual_mask=respect_manual_mask,
+            image, mask, blk_list,
+            respect_manual_mask=respect_manual_mask,
+            human_mask=human_mask,
         )
         if cleaned_blocks:
             logger.info("Inpaint hybrid: fast-cleaned %d bubble blocks", cleaned_blocks)
-            working_mask, dropped_pixels = self._drop_tiny_residual_components(working_mask)
+            working_mask, dropped_pixels = self._drop_tiny_residual_components(
+                working_mask, keep_mask=human_mask,
+            )
             if dropped_pixels:
                 logger.info("Inpaint hybrid: discarded %d tiny residual mask pixels after fast cleanup", dropped_pixels)
         if working_mask is None or not np.any(working_mask):
@@ -1101,7 +1150,9 @@ class InpaintingHandler:
         blk_list: list | None = None,
         respect_manual_mask: bool = False,
     ):
-        mask = self._generate_mask_from_saved_strokes(strokes, image)
+        mask, human_mask = self._generate_mask_from_saved_strokes(
+            strokes, image, return_human_mask=True,
+        )
         if mask is None:
             return []
         config = get_config(self.main_page.settings_page)
@@ -1111,6 +1162,7 @@ class InpaintingHandler:
             config,
             blk_list=blk_list or None,
             respect_manual_mask=respect_manual_mask,
+            human_mask=human_mask,
         )
         inpainted = imk.convert_scale_abs(inpainted)
         return self._get_regular_patches(mask, inpainted)

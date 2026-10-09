@@ -576,8 +576,8 @@ class ImageViewer(QGraphicsView):
             255,
         )
 
-    def get_mask_for_inpainting(self):
-        mask = self.drawing_manager.generate_mask_from_strokes()
+    def get_mask_for_inpainting(self, return_human_mask: bool = False):
+        mask = self.drawing_manager.generate_mask_from_strokes(return_human_mask=return_human_mask)
         return mask
     
     def create_rect_item(self, rect: QRectF, scene_pos: QPointF = None) -> MoveableRectItem:

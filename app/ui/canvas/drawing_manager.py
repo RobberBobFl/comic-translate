@@ -251,13 +251,24 @@ class DrawingManager:
                 return True
         return False
         
-    def generate_mask_from_strokes(self):
+    def generate_mask_from_strokes(self, return_human_mask: bool = False):
+        """
+        Build the cleaning mask from saved strokes.
+
+        Strokes are split into two layers:
+          - human: free-hand brush strokes drawn by the user
+          - gen:   auto segmentation strokes (brush #b4ff0000)
+        The combined mask drives inpainting; the human layer is returned
+        separately (return_human_mask=True) so callers can exempt
+        user-painted regions (e.g. SFX outside bubbles) from
+        bubble-union clipping.
+        """
         if not self.viewer.hasPhoto(): 
-            return None
+            return (None, None) if return_human_mask else None
         
         # Check if there are any brush strokes to process
         if not self.has_drawn_elements():
-            return None
+            return (None, None) if return_human_mask else None
 
         # Handle webtoon mode vs regular mode for getting dimensions
         is_webtoon_mode = self.viewer.webtoon_mode
@@ -265,7 +276,7 @@ class DrawingManager:
             # In webtoon mode, use visible area dimensions
             visible_image, mappings = self.viewer.get_visible_area_image()
             if visible_image is None:
-                return None
+                return (None, None) if return_human_mask else None
             height, width = visible_image.shape[:2]
         else:
             # Regular mode - use photo dimensions
@@ -274,7 +285,7 @@ class DrawingManager:
         
         # Ensure we have valid dimensions
         if width <= 0 or height <= 0:
-            return None
+            return (None, None) if return_human_mask else None
         
         human_qimg = QImage(width, height, QImage.Format_Grayscale8)
         gen_qimg = QImage(width, height, QImage.Format_Grayscale8)
@@ -347,6 +358,8 @@ class DrawingManager:
 
         # Combine masks (bitwise_or equivalent)
         final_mask = np.where((human_mask > 0) | (gen_mask > 0), 255, 0).astype(np.uint8)
+        if return_human_mask:
+            return final_mask, (human_mask > 0).astype(np.uint8) * 255
         return final_mask
     
     def draw_segmentation_lines(self, text_bbox, image=None, stroke=None):
