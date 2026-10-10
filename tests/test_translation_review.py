@@ -300,3 +300,91 @@ def test_openai_payload_text_only_when_no_image():
         "m", "system", "user", encoded_image=""
     )
     assert payload["messages"][1]["content"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# _parse_openai_response — provider body normalization
+# ---------------------------------------------------------------------------
+
+
+def test_parse_openai_response_full_body():
+    result = TranslationReviewer._parse_openai_response({
+        "choices": [{"message": {"content": '{"blocks": []}'}, "finish_reason": "stop"}],
+        "usage": {"completion_tokens": 42, "prompt_tokens": 10},
+    })
+    assert result["content"] == '{"blocks": []}'
+    assert result["finish_reason"] == "stop"
+    assert result["completion_tokens"] == 42
+
+
+def test_parse_openai_response_missing_choices_does_not_raise():
+    """A provider can answer HTTP 200 with an error body and no choices; the
+    caller needs a diagnosable empty result, not a KeyError."""
+    result = TranslationReviewer._parse_openai_response({"error": {"message": "nope"}})
+    assert result["content"] == ""
+    assert result["finish_reason"] is None
+    assert result["completion_tokens"] is None
+
+
+def test_parse_openai_response_content_parts_joined():
+    data = {"choices": [{"message": {"content": [
+        {"type": "text", "text": "part1"},
+        {"type": "text", "text": "part2"},
+    ]}, "finish_reason": "stop"}]}
+    assert TranslationReviewer._parse_openai_response(data)["content"] == "part1 part2"
+
+
+def test_parse_openai_response_completion_style_text():
+    data = {"choices": [{"text": "plain", "finish_reason": "length"}]}
+    result = TranslationReviewer._parse_openai_response(data)
+    assert result["content"] == "plain"
+    assert result["finish_reason"] == "length"
+
+
+def test_parse_openai_response_without_usage():
+    data = {"choices": [{"message": {"content": "hi"}}]}
+    result = TranslationReviewer._parse_openai_response(data)
+    assert result["completion_tokens"] is None
+    assert result["finish_reason"] is None
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics: a billed response must always leave a trace in the log
+# ---------------------------------------------------------------------------
+
+
+def test_parse_logs_summary_and_no_issues_verdict(caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="modules.translation.reviewer"):
+        result = TranslationReviewer.parse_review_response('{"blocks": []}')
+    assert result == {}
+    assert any("0 suggestion(s) kept" in r.message for r in caplog.records)
+    assert any("reported no issues" in r.message for r in caplog.records)
+
+
+def test_parse_logs_dropped_entries(caplog):
+    import logging
+
+    text = json.dumps({"blocks": [
+        _entry(block=None, recommended="no number"),
+        _entry(block=3, recommended="  "),
+    ]})
+    with caplog.at_level(logging.INFO, logger="modules.translation.reviewer"):
+        result = TranslationReviewer.parse_review_response(text)
+    assert result == {}
+    assert any(
+        "1 without a block number" in r.message and "1 without a replacement" in r.message
+        for r in caplog.records
+    )
+
+
+def test_parse_invalid_json_logs_the_body(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="modules.translation.reviewer"):
+        TranslationReviewer.parse_review_response("not json at all")
+    assert any(
+        "not valid JSON" in r.message and "not json at all" in r.getMessage()
+        for r in caplog.records
+    )

@@ -251,6 +251,37 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
             ],
         }
 
+    @staticmethod
+    def _parse_openai_response(data: dict) -> dict:
+        """Normalize an OpenAI-compatible chat completion body.
+
+        Providers differ: some answer with a bare ``{"error": ...}`` and HTTP
+        200, others use completion-style ``text`` or a list of content parts.
+        Anything missing degrades to an empty completion so the caller can log
+        the diagnostics instead of dying on a KeyError.
+        """
+        choices = data.get("choices") or []
+        if not choices:
+            logger.warning(
+                "Review response has no choices (keys=%s): %s",
+                sorted(data) if isinstance(data, dict) else type(data).__name__,
+                str(data)[:400],
+            )
+            return {"content": "", "finish_reason": None, "completion_tokens": None}
+        choice = choices[0] or {}
+        message = choice.get("message") or {}
+        content = message.get("content") or choice.get("text") or ""
+        if isinstance(content, list):
+            content = " ".join(
+                item.get("text", "") for item in content if isinstance(item, dict)
+            )
+        usage = data.get("usage") or {}
+        return {
+            "content": str(content),
+            "finish_reason": choice.get("finish_reason") or data.get("finish_reason"),
+            "completion_tokens": usage.get("completion_tokens"),
+        }
+
     def _query_openai(self, system_prompt: str, user_prompt: str, encoded_image: str) -> dict:
         payload = self._build_openai_payload(
             self.model, system_prompt, user_prompt, encoded_image
@@ -275,15 +306,27 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
                 response.text[:400],
             )
         response.raise_for_status()
-        data = response.json()
-        choice = data["choices"][0]
-        message = choice["message"]
-        content = message.get("content") or ""
-        if isinstance(content, list):
-            content = " ".join(
-                item.get("text", "") for item in content if isinstance(item, dict)
-            )
-        return {"content": str(content)}
+        # Raw body first: a billed HTTP 200 with an empty or off-spec answer is
+        # the failure mode that needs the provider's own words to diagnose.
+        logger.debug(
+            "Review raw response (%d chars): %s",
+            len(response.text),
+            response.text[:600],
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            logger.warning("Review response is not JSON: %s", response.text[:400])
+            raise
+        result = self._parse_openai_response(data)
+        logger.debug(
+            "Review content (%d chars, finish_reason=%s, completion_tokens=%s): %s",
+            len(result["content"]),
+            result["finish_reason"],
+            result["completion_tokens"],
+            result["content"][:600],
+        )
+        return result
 
     def _query_ollama(self, system_prompt: str, user_prompt: str, encoded_image: str) -> dict:
         message: dict = {"role": "user", "content": user_prompt}
@@ -316,6 +359,7 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
                 response.text[:400],
             )
         response.raise_for_status()
+        logger.debug("Review raw ollama response: %s", response.text[:600])
         data = response.json()
         reply = data.get("message", {})
         content = reply.get("content") or ""
@@ -323,7 +367,11 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
             content = " ".join(
                 item.get("text", "") for item in content if isinstance(item, dict)
             )
-        return {"content": str(content)}
+        return {
+            "content": str(content),
+            "finish_reason": data.get("done_reason"),
+            "completion_tokens": data.get("eval_count"),
+        }
 
     # ------------------------------------------------------------------
     # Review entry point
@@ -412,7 +460,10 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
         """
         parsed = cls._extract_json(text)
         if parsed is None:
-            logger.warning("Review response is not valid JSON.")
+            logger.warning(
+                "Review response is not valid JSON (first 400 chars): %s",
+                str(text)[:400],
+            )
             return {}
 
         entries: list[tuple[int | None, dict]] = []
@@ -429,15 +480,19 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
                     )
 
         result: dict[int, dict] = {}
+        dropped_number = 0
+        dropped_recommended = 0
         for fallback_idx, item in entries:
             block_idx = cls._coerce_block_index(item.get("block"))
             if block_idx is None:
                 block_idx = fallback_idx
             if block_idx is None or block_idx < 0:
+                dropped_number += 1
                 logger.debug("Dropping review entry without a valid block number: %r", item)
                 continue
             recommended = str(item.get("recommended", "") or "").strip()
             if not recommended:
+                dropped_recommended += 1
                 logger.debug("Dropping review entry without a replacement (block %d).", block_idx)
                 continue
             result[block_idx] = {
@@ -447,6 +502,19 @@ If you are uncertain whether a change is actually necessary, prefer leaving the 
                 "recommended": recommended,
                 "alternatives": cls._normalize_alternatives(item.get("alternatives")),
             }
+        logger.info(
+            "Review parsed: %d suggestion(s) kept, %d without a block number, "
+            "%d without a replacement (of %d entries).",
+            len(result),
+            dropped_number,
+            dropped_recommended,
+            len(entries),
+        )
+        if not result:
+            logger.info(
+                "Review model reported no issues for this page - "
+                "this is a verdict, not a failure."
+            )
         return result
 
     @staticmethod

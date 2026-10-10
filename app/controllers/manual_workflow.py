@@ -668,8 +668,17 @@ class ManualWorkflowController:
                     continue
                 parsed = TranslationReviewer.parse_review_response(raw)
                 entries = {}
+                out_of_range = 0
                 for idx, suggestion in parsed.items():
                     if not (0 <= idx < len(blocks)):
+                        out_of_range += 1
+                        logger.warning(
+                            "Review suggestion for block %d dropped: the page "
+                            "has %d block(s) (0..%d).",
+                            idx,
+                            len(blocks),
+                            len(blocks) - 1,
+                        )
                         continue
                     blk = blocks[idx]
                     xyxy = getattr(blk, "xyxy", None)
@@ -687,11 +696,27 @@ class ManualWorkflowController:
                         "angle": float(getattr(blk, "angle", 0.0) or 0.0),
                         **suggestion,
                     }
+                if parsed and not entries and out_of_range == len(parsed):
+                    logger.warning(
+                        "Review for %s: every suggestion was out of range - "
+                        "the model numbered the blocks differently than we did.",
+                        file_path,
+                    )
                 if entries:
                     results[file_path] = {
                         "target_lang": target_lang,
                         "blocks": entries,
                     }
+            suggestions = sum(
+                len(data.get("blocks", {})) for data in results.values()
+            )
+            logger.info(
+                "Review finished: %d suggestion(s) on %d of %d page(s), %d failed.",
+                suggestions,
+                len(results),
+                len(reviewable),
+                failed,
+            )
             return results, failed
 
         def on_ready(payload: tuple[dict[str, dict], int]) -> None:
@@ -705,17 +730,28 @@ class ManualWorkflowController:
             if suggestions:
                 self.main.mark_project_dirty()
                 self.main.review_ctrl.show_results(self._current_file_path())
-            QtWidgets.QMessageBox.information(
-                self.main,
-                self.main.tr("Translation Review"),
-                self.main.tr(
+            if suggestions or failed:
+                message = self.main.tr(
                     "{done}/{total} pages reviewed, {suggestions} suggestion(s).\n{failed} failed"
                 ).format(
                     done=len(results or {}),
                     total=total,
                     suggestions=suggestions,
                     failed=failed,
-                ),
+                )
+            else:
+                # Nothing was kept and nothing errored: either the model signed
+                # off on the translation or its answer could not be used. Both
+                # are invisible in the UI without this note.
+                message = self.main.tr(
+                    "{total} page(s) reviewed - no suggestions.\n"
+                    "The model found no issues, or its response could not be "
+                    "used (see the log for details)."
+                ).format(total=total)
+            QtWidgets.QMessageBox.information(
+                self.main,
+                self.main.tr("Translation Review"),
+                message,
             )
 
         self.main.run_threaded(
