@@ -15,6 +15,8 @@ from PySide6.QtGui import QColor, QPen, QPainter, QCursor, QPixmap
 
 import numpy as np
 
+from .drawing_manager import draw_size_ring
+
 
 def _same_overlay(a: np.ndarray | None, b: np.ndarray | None) -> bool:
     if a is None and b is None:
@@ -39,24 +41,41 @@ class PaintManager:
         self._rect_item = None
 
     # ------------------------------------------------------------------ cursor
+    def _cursor_px(self) -> int:
+        """Screen-pixel diameter of a paint stroke at the current zoom."""
+        try:
+            scale = abs(float(self.viewer.transform().m11()))
+        except Exception:
+            scale = 0.0
+        if not scale:
+            scale = 1.0
+        return max(1, int(round(self.paint_size * scale)))
+
     def _make_cursor(self, size, color):
         size = max(1, int(size))
         pix = QPixmap(size, size)
         pix.fill(Qt.transparent)
         p = QPainter(pix)
-        p.setPen(QPen(color, max(1, max(1, size // 12))))
-        p.drawEllipse(0, 0, size - 1, size - 1)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        draw_size_ring(p, size, accent=color)
         p.end()
         return QCursor(pix, size // 2, size // 2)
 
-    def set_paint_color(self, color: QColor):
-        self.paint_color = QColor(color)
+    def _refresh_cursor(self):
+        self._cursor_scaled_size = self._cursor_px()
         self.paint_cursor = self._make_cursor(self._cursor_scaled_size, self.paint_color)
 
-    def set_paint_size(self, size, scaled_size):
+    def refresh_cursor(self):
+        """Rebuild the cursor after a zoom change (ring must match stroke size)."""
+        self._refresh_cursor()
+
+    def set_paint_color(self, color: QColor):
+        self.paint_color = QColor(color)
+        self._refresh_cursor()
+
+    def set_paint_size(self, size, scaled_size=None):
         self.paint_size = size
-        self._cursor_scaled_size = scaled_size
-        self.paint_cursor = self._make_cursor(scaled_size, self.paint_color)
+        self._refresh_cursor()
 
     # ------------------------------------------------------------------ strokes
     def start_stroke(self, scene_pos: QPointF, erase: bool = False):

@@ -8,7 +8,7 @@ brush (fill 255) / eraser (clear), keeping every edited pixel inside
 
 Scope note: this is a purpose-built editor for one bubble mask at a time.
 It deliberately reuses only ``constrain_point``/``create_inpaint_cursor``/
-``scale_size`` and the standard stroke geometry; it is not meant to grow
+the cursor helpers and the standard stroke geometry; it is not meant to grow
 into a generic mask-editing framework.
 """
 from __future__ import annotations
@@ -282,15 +282,14 @@ class BubbleMaskEditor(QObject):
         self._apply_cursor()
 
     # -------------------------------------------------------------- internals
-    def _scaled_size(self) -> float:
-        h, w = self._mask_rgba.shape[:2]
-        return self.main.scale_size(self.brush_size, w, h)
-
     def _apply_cursor(self):
         cursor = self.viewer.drawing_manager.create_inpaint_cursor(
-            "brush" if self.mode == "brush" else "eraser", int(self._scaled_size())
+            "brush" if self.mode == "brush" else "eraser",
+            # Live screen size: strokes use a pen of ``brush_size`` scene units,
+            # so the ring must be brush_size * zoom pixels wide.
+            self.viewer.drawing_manager.cursor_px(self.brush_size),
         )
-        self.viewer.setCursor(cursor)
+        self.viewer.apply_tool_cursor(cursor)
 
     def _contains(self, pos: QPointF, box) -> bool:
         x1, y1, x2, y2 = box

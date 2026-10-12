@@ -22,6 +22,9 @@ class _FakeDrawingManager:
     def create_inpaint_cursor(self, tool, size):
         return QtGui.QCursor(QtCore.Qt.CursorShape.CrossCursor)
 
+    def cursor_px(self, scene_size):
+        return max(1, int(round(scene_size)))
+
 
 class FakeViewer(QtWidgets.QGraphicsView):
     """ImageViewer stand-in: identity scene mapping, no real photo."""
@@ -51,6 +54,9 @@ class FakeViewer(QtWidgets.QGraphicsView):
 
     def setCursor(self, cursor):
         pass
+
+    def apply_tool_cursor(self, override=None):
+        self.setCursor(override)
 
     def set_tool(self, tool):
         self.current_tool = tool

@@ -218,7 +218,9 @@ class InteractionManager:
         for txt_item in self.viewer.text_items:
             txt_item.handleDeselection()
         self.viewer.selected_rect = None
-        self.viewer.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        # Restore the tool cursor (was a hardcoded PointingHand written to the
+        # view only, which a viewport-level cursor silently shadows).
+        self.viewer.apply_tool_cursor()
         
     def clear_rectangles(self, page_switch=False):
         if page_switch:

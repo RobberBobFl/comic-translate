@@ -18,6 +18,12 @@ class EventHandler:
     # Main Event Handlers
 
     def handle_mouse_press(self, event: QtGui.QMouseEvent):
+        # Hold-Space pan: everything is delegated to QGraphicsView's
+        # ScrollHandDrag so no tool (brush/box/eyedropper/...) fires.
+        if self.viewer.space_pan_active:
+            QtWidgets.QGraphicsView.mousePressEvent(self.viewer, event)
+            return
+
         scene_pos = self.viewer.mapToScene(event.position().toPoint())
         clicked_item = self._resolve_top_level_item(self.viewer.itemAt(event.pos()))
         ctrl_pressed = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
@@ -156,6 +162,10 @@ class EventHandler:
             QtWidgets.QGraphicsView.mousePressEvent(self.viewer, event)
     
     def handle_mouse_move(self, event: QtGui.QMouseEvent):
+        if self.viewer.space_pan_active:
+            QtWidgets.QGraphicsView.mouseMoveEvent(self.viewer, event)
+            return
+
         scene_pos = self.viewer.mapToScene(event.position().toPoint())
 
         # Retouch painting takes precedence over item dragging.
@@ -200,6 +210,10 @@ class EventHandler:
         self.last_scene_pos = scene_pos
 
     def handle_mouse_release(self, event: QtGui.QMouseEvent):
+        if self.viewer.space_pan_active:
+            QtWidgets.QGraphicsView.mouseReleaseEvent(self.viewer, event)
+            return
+
         interaction_finished = False  # Flag to track if we handled the event.
 
         if event.button() == Qt.LeftButton:
@@ -221,7 +235,7 @@ class EventHandler:
             # If a custom drag, resize, or rotate was just finished, stop the event here
             # to prevent the base QGraphicsView from deselecting the item.
             if interaction_finished:
-                self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+                self.viewer.apply_tool_cursor()
                 # If we handled the interaction, also check selection changes on TextBlockItem
                 blk_item, rect_item = self.viewer.sel_rot_item()
                 sel_item = blk_item or rect_item
@@ -503,7 +517,7 @@ class EventHandler:
             self.viewer.viewport().setCursor(Qt.CursorShape.SizeAllCursor)
             return True
 
-        self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        self.viewer.apply_tool_cursor()
         return False
 
     def _move_handle_pan(self, event):
@@ -554,15 +568,15 @@ class EventHandler:
                     sel_item.signals.change_undo.emit(sel_item.old_state, new_state)
 
             # Reset cursor after resize/rotate operation
-            self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+            self.viewer.apply_tool_cursor()
             return True 
 
-        self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        self.viewer.apply_tool_cursor()
         return False 
 
     def _release_handle_pan(self):
         self.viewer.panning = False
-        self.viewer.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        self.viewer.apply_tool_cursor()
 
     def _release_handle_box_creation(self):
         if self.viewer.current_rect and self.viewer.current_rect.rect().width() > 0 and self.viewer.current_rect.rect().height() > 0:

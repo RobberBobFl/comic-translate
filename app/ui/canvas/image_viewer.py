@@ -79,6 +79,11 @@ class ImageViewer(QGraphicsView):
         self.webtoon_view_state = {}
         self.main_page = None  # Set by controller for blk_list access
 
+        # Hold-Space panning (temporary ScrollHandDrag layered over the
+        # active tool; restored on key release).
+        self._space_pan_active = False
+        self._space_pan_prev_drag_mode = None
+
         # Page detection state (used by webtoon and event handlers)
         self._programmatic_scroll = False
         
@@ -170,24 +175,146 @@ class ImageViewer(QGraphicsView):
         self.current_tool = tool
         if tool == 'pan':
             self.setDragMode(QGraphicsView.ScrollHandDrag)
-        elif tool in ['brush', 'eraser']:
-            self.setDragMode(QGraphicsView.NoDrag)
-            if tool == 'brush':
-                cursor = self.drawing_manager.brush_cursor
-            else:
-                cursor =  self.drawing_manager.eraser_cursor
-            self.setCursor(cursor)
-        elif tool in ['paint', 'paint_eraser']:
-            self.setDragMode(QGraphicsView.NoDrag)
-            self.setCursor(self.paint_manager.paint_cursor)
-        elif tool == 'eyedropper':
-            self.setDragMode(QGraphicsView.NoDrag)
-            self.setCursor(self._eyedropper_cursor)
-        elif tool in ('manual_text', 'paint_fill_rect'):
-            self.setDragMode(QGraphicsView.NoDrag)
-            self.setCursor(Qt.CursorShape.CrossCursor)
         else:
             self.setDragMode(QGraphicsView.NoDrag)
+        self.apply_tool_cursor()
+
+    # ------------------------------------------------------------------ cursor
+    def _resolve_tool_cursor(self) -> QtGui.QCursor:
+        tool = self.current_tool
+        if tool == 'pan':
+            return QtGui.QCursor(Qt.CursorShape.OpenHandCursor)
+        if tool == 'brush':
+            return self.drawing_manager.brush_cursor
+        if tool == 'eraser':
+            return self.drawing_manager.eraser_cursor
+        if tool in ('paint', 'paint_eraser'):
+            return self.paint_manager.paint_cursor
+        if tool == 'eyedropper':
+            return self._eyedropper_cursor
+        if tool in ('manual_text', 'paint_fill_rect'):
+            return QtGui.QCursor(Qt.CursorShape.CrossCursor)
+        return QtGui.QCursor(Qt.CursorShape.ArrowCursor)
+
+    def apply_tool_cursor(self, override: QtGui.QCursor = None):
+        """Single source of truth for the viewport cursor.
+
+        The cursor is set on the viewport explicitly: event_handler hover
+        states also write to the viewport, and a viewport-level cursor would
+        otherwise shadow a view-level one set via setCursor().
+        """
+        if override is not None:
+            cursor = override
+        elif self._space_pan_active:
+            cursor = QtGui.QCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            cursor = self._resolve_tool_cursor()
+        self.setCursor(cursor)
+        self.viewport().setCursor(cursor)
+        return cursor
+
+    def _refresh_cursors_after_zoom(self):
+        """Keep the size rings in sync with the stroke footprint on screen."""
+        self.drawing_manager.refresh_cursors()
+        self.paint_manager.refresh_cursor()
+        self.apply_tool_cursor()
+
+    # Zoom hooks: the wheel/pinch/fit paths below all end up calling these
+    # Python-level methods, so cursors can be rebuilt exactly when zoom changes.
+    def scale(self, xfactor, yfactor):
+        super().scale(xfactor, yfactor)
+        self._refresh_cursors_after_zoom()
+
+    def setTransform(self, matrix, combine: bool = False):
+        super().setTransform(matrix, combine)
+        self._refresh_cursors_after_zoom()
+
+    def resetTransform(self):
+        super().resetTransform()
+        self._refresh_cursors_after_zoom()
+
+    # ------------------------------------------------------- hold-Space pan
+    @property
+    def space_pan_active(self) -> bool:
+        return self._space_pan_active
+
+    def _text_editing_active(self) -> bool:
+        item = self._scene.focusItem()
+        if isinstance(item, TextBlockItem) and item.editing_mode:
+            return True
+        return any(getattr(t, 'editing_mode', False) for t in self.text_items)
+
+    def _space_pan_allowed(self) -> bool:
+        # Text entry wins: no panning while a text block is being edited.
+        if self._text_editing_active():
+            return False
+        focus = QtWidgets.QApplication.focusWidget()
+        if isinstance(focus, (QtWidgets.QLineEdit, QtWidgets.QTextEdit,
+                              QtWidgets.QPlainTextEdit, QtWidgets.QAbstractSpinBox,
+                              QtWidgets.QKeySequenceEdit)):
+            return False
+        # Don't hijack Space in the middle of a stroke / box drag / item
+        # drag-resize: the mouse guards below would skip their release
+        # handling and leave stale interaction state behind.
+        if (self.drawing_manager.current_path is not None
+                or self.paint_manager.painting
+                or self.start_point is not None):
+            return False
+        if self.event_handler.dragged_item is not None:
+            return False
+        blk_item, rect_item = self.sel_rot_item()
+        sel_item = blk_item or rect_item
+        if sel_item is not None and (getattr(sel_item, 'resizing', False)
+                                     or getattr(sel_item, 'rotating', False)):
+            return False
+        return True
+
+    def _start_space_pan(self):
+        if self._space_pan_active or not self._space_pan_allowed():
+            return
+        self._space_pan_active = True
+        self._space_pan_prev_drag_mode = self.dragMode()
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.apply_tool_cursor()
+
+    def _stop_space_pan(self):
+        if not self._space_pan_active:
+            return
+        self._space_pan_active = False
+        if self._space_pan_prev_drag_mode is not None:
+            self.setDragMode(self._space_pan_prev_drag_mode)
+        self._space_pan_prev_drag_mode = None
+        self.apply_tool_cursor()
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent):
+        if (event.key() == Qt.Key.Key_Space and not event.isAutoRepeat()
+                and event.modifiers() in (Qt.KeyboardModifier.NoModifier,
+                                          Qt.KeyboardModifier.KeypadModifier)):
+            if self._space_pan_active:
+                event.accept()
+                return
+            self._start_space_pan()
+            if self._space_pan_active:
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QtGui.QKeyEvent):
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat() \
+                and self._space_pan_active:
+            self._stop_space_pan()
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self._stop_space_pan()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QtCore.QEvent.Type.ActivationChange, QtCore.QEvent.Type.Show):
+            self._stop_space_pan()
 
     # Reading order mode
 
@@ -221,6 +348,7 @@ class ImageViewer(QGraphicsView):
             self.drawing_manager.set_brush_size(size, size)
         except Exception:
             self.drawing_manager.brush_size = size
+        self.apply_tool_cursor()
 
     @property
     def eraser_size(self):
@@ -232,6 +360,7 @@ class ImageViewer(QGraphicsView):
             self.drawing_manager.set_eraser_size(size, size)
         except Exception:
             self.drawing_manager.eraser_size = size
+        self.apply_tool_cursor()
 
     @property
     def paint_size(self):
@@ -243,11 +372,11 @@ class ImageViewer(QGraphicsView):
             self.paint_manager.set_paint_size(size, size)
         except Exception:
             self.paint_manager.paint_size = size
+        self.apply_tool_cursor()
 
     def set_paint_size(self, size: int, scaled_size: int):
         self.paint_manager.set_paint_size(size, scaled_size)
-        if self.current_tool in ('paint', 'paint_eraser'):
-            self.setCursor(self.paint_manager.paint_cursor)
+        self.apply_tool_cursor()
 
     # Event Handler Methods (Delegated to EventHandler)
     def mousePressEvent(self, event):
@@ -268,10 +397,9 @@ class ImageViewer(QGraphicsView):
     def set_br_er_size(self, size, scaled_size):
         if self.current_tool == 'brush':
             self.drawing_manager.set_brush_size(size, scaled_size)
-            self.setCursor(self.drawing_manager.brush_cursor)
         elif self.current_tool == 'eraser':
             self.drawing_manager.set_eraser_size(size, scaled_size)
-            self.setCursor(self.drawing_manager.eraser_cursor)
+        self.apply_tool_cursor()
 
     def constrain_point(self, point: QPointF) -> QPointF:
         if self.webtoon_mode:

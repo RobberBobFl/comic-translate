@@ -13,6 +13,30 @@ import imkit as imk
 from modules.utils.image_utils import build_block_mask_data, clip_mask_to_bubble, clip_mask_components_to_bubble
 
 
+def draw_size_ring(painter: QPainter, size: int, accent: QColor = None):
+    """Draw a Photoshop-style brush-size indicator: a dark ring over a light
+    ring so it stays visible on both dark and light image content.
+
+    ``accent`` optionally adds a thin inner ring in a custom color (used by
+    the retouch paint cursor to show the active paint color).
+    """
+    size = max(1, int(size))
+    rect = QtCore.QRectF(0.5, 0.5, max(1.0, size - 1.0), max(1.0, size - 1.0))
+    line_w = max(1.0, round(size / 14.0, 1))
+    painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(QColor(0, 0, 0, 190), line_w))
+    painter.drawEllipse(rect)
+    painter.setPen(QPen(QColor(255, 255, 255, 210), max(1.0, line_w * 0.7)))
+    painter.drawEllipse(rect.adjusted(line_w * 0.5, line_w * 0.5,
+                                      -line_w * 0.5, -line_w * 0.5))
+    if accent is not None:
+        c = QColor(accent)
+        c.setAlpha(255)
+        painter.setPen(QPen(c, max(1.0, line_w * 0.6)))
+        painter.drawEllipse(rect.adjusted(line_w * 1.5, line_w * 1.5,
+                                          -line_w * 1.5, -line_w * 1.5))
+
+
 class DrawingManager:
     """Manages all drawing-related tools and state."""
 
@@ -23,9 +47,10 @@ class DrawingManager:
         self.brush_color = QColor(255, 0, 0, 100)
         self.brush_size = 25
         self.eraser_size = 25
-        
-        self.brush_cursor = self.create_inpaint_cursor('brush', self.brush_size)
-        self.eraser_cursor = self.create_inpaint_cursor('eraser', self.eraser_size)
+
+        self._cursor_cache: dict[tuple, QCursor] = {}
+        self.brush_cursor = self.create_inpaint_cursor('brush', self.cursor_px(self.brush_size))
+        self.eraser_cursor = self.create_inpaint_cursor('eraser', self.cursor_px(self.eraser_size))
 
         self.current_path = None
         self.current_path_item = None
@@ -119,7 +144,10 @@ class DrawingManager:
 
     def erase_at(self, pos: QPointF):
         erase_path = QPainterPath()
-        erase_path.addEllipse(pos, self.eraser_size, self.eraser_size)
+        # Eraser diameter must equal the slider value, i.e. match the brush
+        # stroke width (pen width = diameter), hence radius = size / 2.
+        radius = self.eraser_size / 2
+        erase_path.addEllipse(pos, radius, radius)
 
         for item in self._scene.items(erase_path):
             if isinstance(item, QGraphicsPathItem) and item != self.viewer.photo:
@@ -179,29 +207,62 @@ class DrawingManager:
         else:
             item.setPath(new_path)
 
-    def set_brush_size(self, size, scaled_size):
+    def set_brush_size(self, size, scaled_size=None):
         self.brush_size = size
-        self.brush_cursor = self.create_inpaint_cursor("brush", scaled_size)
+        self.brush_cursor = self._build_cursor('brush', size)
 
-    def set_eraser_size(self, size, scaled_size):
+    def set_eraser_size(self, size, scaled_size=None):
         self.eraser_size = size
-        self.eraser_cursor = self.create_inpaint_cursor("eraser", scaled_size)
+        self.eraser_cursor = self._build_cursor('eraser', size)
+
+    # ---------------------------------------------------------------- cursors
+    def cursor_px(self, scene_size) -> int:
+        """Screen-pixel diameter of a stroke drawn at ``scene_size`` scene units.
+
+        A stroke is painted with a pen of ``size`` scene units, so on screen it
+        occupies ``size * zoom`` pixels; the cursor must match that footprint.
+        """
+        try:
+            scale = abs(float(self.viewer.transform().m11()))
+        except Exception:
+            scale = 0.0
+        if not scale:
+            scale = 1.0
+        return max(1, int(round(scene_size * scale)))
+
+    def _build_cursor(self, cursor_type: str, scene_size) -> QCursor:
+        px = self.cursor_px(scene_size)
+        key = (cursor_type, px)
+        cursor = self._cursor_cache.get(key)
+        if cursor is None:
+            if len(self._cursor_cache) > 64:
+                self._cursor_cache.clear()
+            cursor = self.create_inpaint_cursor(cursor_type, px)
+            self._cursor_cache[key] = cursor
+        return cursor
+
+    def refresh_cursors(self):
+        """Rebuild both cursors after a zoom change so the ring keeps matching
+        the stroke footprint."""
+        self.brush_cursor = self._build_cursor('brush', self.brush_size)
+        self.eraser_cursor = self._build_cursor('eraser', self.eraser_size)
 
     def create_inpaint_cursor(self, cursor_type, size):
-        size = max(1, size)
+        size = max(1, int(round(size)))
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if cursor_type == "brush":
-            painter.setBrush(QBrush(QColor(255, 0, 0, 127)))
+            # Faint fill (inset to sit under the ring) so brush and eraser
+            # rings are told apart at a glance.
+            line_w = max(1.0, round(size / 14.0, 1))
+            painter.setBrush(QBrush(QColor(255, 0, 0, 60)))
             painter.setPen(Qt.PenStyle.NoPen)
-        elif cursor_type == "eraser":
-            painter.setBrush(QBrush(QColor(0, 0, 0, 0)))
-            painter.setPen(QColor(0, 0, 0, 127))
-        else:
-            painter.setBrush(QBrush(QColor(0, 0, 0, 127)))
-            painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(0, 0, (size - 1), (size - 1))
+            painter.drawEllipse(QtCore.QRectF(0.5, 0.5, max(1.0, size - 1.0),
+                                               max(1.0, size - 1.0))
+                                .adjusted(line_w, line_w, -line_w, -line_w))
+        draw_size_ring(painter, size)
         painter.end()
         return QCursor(pixmap, size // 2, size // 2)
     
