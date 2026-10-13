@@ -2,21 +2,71 @@ from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsItem, \
      QApplication, QWidget, QStyleOptionGraphicsItem
 from PySide6.QtGui import QFont, QCursor, QColor, \
      QTextCharFormat, QTextBlockFormat, QTextCursor, QPainter, QPen, QTextFormat, \
-     QFontMetricsF
+     QFontMetricsF, QFontDatabase, QFontInfo
 from PySide6.QtCore import Qt, QRectF, Signal, QPointF
 import math, copy
 from dataclasses import dataclass
 from enum import Enum
 from .text.vertical_layout import VerticalTextDocumentLayout
 
-# Faux-bold stroke: on fonts with no Bold face (or a Bold face barely heavier
-# than Regular) weight 700 alone is not visibly heavier, so a thin outline in
-# the text color is added on top of the glyph. The width is proportional to the
-# font size and is re-derived whenever size/color change (see
+# Faux-bold stroke: on fonts where a Bold request resolves to the same face as
+# Regular, weight 700 is not visibly heavier, so a very thin outline in the
+# text color is added on top of the glyph. Fonts that supply their own boldness
+# (Bold, Black, Heavy -- or a fallback font with a Bold face) get no stroke at
+# all, otherwise the glyphs end up double-thickened. The width is proportional
+# to the font size and is re-derived whenever size/color change (see
 # _sync_faux_bold_outlines), otherwise the stroke would stay baked at its old
 # width while the glyph rescales.
-FAUX_BOLD_WIDTH_FACTOR = 0.015
-FAUX_BOLD_MIN_PX = 0.3
+FAUX_BOLD_WIDTH_FACTOR = 0.005
+FAUX_BOLD_MIN_PX = 0.1
+
+# Cache of family -> "does a Bold request resolve to a different face than a
+# Regular request". Invalidated by invalidate_faux_bold_cache() whenever
+# application fonts are installed at runtime.
+_BOLD_FACE_CACHE: dict = {}
+
+
+def invalidate_faux_bold_cache() -> None:
+    """Drop the bold-face lookup cache.
+
+    Called after QFontDatabase.addApplicationFont(): a family that was
+    previously missing (and therefore replaced by Qt's default font) may
+    become available with its own Bold face, which changes the answer.
+    """
+    _BOLD_FACE_CACHE.clear()
+
+
+def family_has_own_bold(family: str) -> bool:
+    """True if Qt resolves a Bold request for *family* to a distinct face.
+
+    QFontInfo.weight()/bold() echo the *requested* weight even when the
+    matched face is Regular (a font with a single face reports weight 700
+    for a Bold request), so they cannot detect a missing Bold face. The
+    matched style name does reflect the real face: when a Bold request
+    resolves to a different style than a Regular request, the font supplies
+    its own boldness -- a Bold face, a heavier face Qt picked instead (Black,
+    Heavy), or a fallback font that has a Bold face. When both requests
+    resolve to the same style, weight 700 has to be faked with an outline.
+    """
+    if not family:
+        return False
+    cached = _BOLD_FACE_CACHE.get(family)
+    if cached is not None:
+        return cached
+
+    regular_style = QFontInfo(QFont(family)).styleName()
+    bold_request = QFont(family)
+    bold_request.setBold(True)
+    resolved_style = QFontInfo(bold_request).styleName()
+    if resolved_style and regular_style != resolved_style:
+        has_bold = True
+    else:
+        # Empty style names (rare): fall back to the style list, which does
+        # not see Qt's per-glyph fallback, so it is only a best effort.
+        styles = QFontDatabase.styles(family)
+        has_bold = bool(styles) and any("bold" in s.casefold() for s in styles)
+    _BOLD_FACE_CACHE[family] = has_bold
+    return has_bold
 
 
 @dataclass
@@ -432,16 +482,20 @@ class TextBlockItem(QGraphicsTextItem):
     def _sync_faux_bold_outlines(self, start: int, end: int) -> None:
         """Reconcile the faux-bold outline of every fragment in [start, end).
 
-        The synthetic stroke is what makes bold readable on fonts whose Bold
-        face is missing or barely heavier than Regular. Two invariants are
+        The synthetic stroke is what makes bold readable on fonts where a Bold
+        request resolves to the same face as Regular. Three invariants are
         enforced per fragment:
 
-        * bold -> a text outline whose width is proportional to the fragment's
-          own point size and whose color matches its foreground, so resizing
-          or recoloring a bold span rescales the stroke with it (an SFX word at
-          48pt inside a 20pt block, or a whole block resized after bolding);
-        * not bold -> no text outline *property* at all. The property has to be
-          removed (setCharFormat with a cleared copy), not overwritten with
+        * bold on a font with its own boldness -> no text outline at all, the
+          font's own weight is enough (an outline would thicken the glyphs
+          twice);
+        * bold on a font without one -> a text outline whose width is
+          proportional to the fragment's own point size and whose color
+          matches its foreground, so resizing or recoloring a bold span
+          rescales the stroke with it (an SFX word at 48pt inside a 20pt
+          block, or a whole block resized after bolding);
+        * not bold -> no text outline *property* at all. The property has to
+          be removed (setCharFormat with a cleared copy), not overwritten with
           NoPen: mergeCharFormat cannot drop properties, and a NoPen pen still
           makes toHtml() emit -qt-stroke-width, which Qt turns back into a
           solid 1px outline on import.
@@ -453,6 +507,18 @@ class TextBlockItem(QGraphicsTextItem):
         """
         doc = self.document()
         cursor = QTextCursor(doc)
+        default_family = doc.defaultFont().family() or self.font_family
+
+        def clear_outline(frag_fmt, f_start, f_end):
+            """Drop the textOutline property (see below for why it cannot be
+            merged away) from a fragment."""
+            cleared = QTextCharFormat(frag_fmt)
+            cleared.clearProperty(QTextFormat.Property.TextOutline)
+            cursor.setPosition(max(f_start, start))
+            cursor.setPosition(min(f_end, end),
+                               QTextCursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(cleared)
+
         block = doc.begin()
         while block.isValid():
             iterator = block.begin()
@@ -468,12 +534,18 @@ class TextBlockItem(QGraphicsTextItem):
                 has_outline = fmt.hasProperty(QTextFormat.Property.TextOutline)
                 if not is_bold:
                     if has_outline:
-                        cleared = QTextCharFormat(fmt)
-                        cleared.clearProperty(QTextFormat.Property.TextOutline)
-                        cursor.setPosition(max(f_start, start))
-                        cursor.setPosition(min(f_end, end),
-                                           QTextCursor.MoveMode.KeepAnchor)
-                        cursor.setCharFormat(cleared)
+                        clear_outline(fmt, f_start, f_end)
+                    continue
+                # A font that has its own boldness must not also get the
+                # synthetic stroke: the glyphs would be thickened twice.
+                # The outline still has to be cleared explicitly, e.g. when
+                # the span's family changed to a font with a Bold face after
+                # it was bolded.
+                families = fmt.fontFamilies()
+                family = families[0] if families else default_family
+                if family_has_own_bold(family):
+                    if has_outline:
+                        clear_outline(fmt, f_start, f_end)
                     continue
                 size = fmt.fontPointSize()
                 if size <= 0:

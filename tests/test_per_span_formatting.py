@@ -19,18 +19,36 @@ if os.environ.get("QT_QPA_PLATFORM", "") == "":
 import pytest
 import re
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QTextCursor, QColor
+from PySide6.QtGui import QTextCursor, QColor, QFont, QFontDatabase
 from PySide6.QtWidgets import (QApplication, QTextEdit, QToolButton, QComboBox,
                                QLabel, QPushButton, QCheckBox, QGraphicsScene,
                                QSlider)
 
-from app.ui.canvas.text_item import TextBlockItem, FAUX_BOLD_WIDTH_FACTOR
+from app.ui.canvas import text_item as text_item_module
+from app.ui.canvas.text_item import (
+    TextBlockItem,
+    FAUX_BOLD_WIDTH_FACTOR,
+    family_has_own_bold,
+    invalidate_faux_bold_cache,
+)
 from app.ui.canvas.text.text_item_properties import TextItemProperties
 
 
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def no_own_bold_font(monkeypatch):
+    """Pretend the item's font has no Bold face of its own.
+
+    The default test family ("Sans Serif") resolves to a font that ships a
+    Bold face, which means no faux-bold stroke is ever produced. Tests of the
+    stroke itself force the "font supplies no boldness" branch.
+    """
+    monkeypatch.setattr(text_item_module, "family_has_own_bold",
+                        lambda family: False)
 
 
 def _select_span(item: TextBlockItem, start: int, end: int):
@@ -413,7 +431,7 @@ def _make_editable(text="hello world", size=20):
     return item
 
 
-def test_faux_bold_width_proportional_to_font_size(app):
+def test_faux_bold_width_proportional_to_font_size(app, no_own_bold_font):
     item = _make_editable(size=20)
     _select_span(item, 0, 5)
 
@@ -424,7 +442,7 @@ def test_faux_bold_width_proportional_to_font_size(app):
     assert width[:5] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 5
 
 
-def test_faux_bold_width_tracks_span_font_size_change(app):
+def test_faux_bold_width_tracks_span_font_size_change(app, no_own_bold_font):
     """Resizing an already-bold span must rescale the stroke with it."""
     item = _make_editable(size=20)
     _select_span(item, 0, 5)
@@ -440,7 +458,7 @@ def test_faux_bold_width_tracks_span_font_size_change(app):
     assert has_pen[5:] == [False] * 6
 
 
-def test_faux_bold_width_uses_each_spans_own_size(app):
+def test_faux_bold_width_uses_each_spans_own_size(app, no_own_bold_font):
     """An oversized word (e.g. an SFX) inside a smaller block must get the
     stroke for *its* size, not the block's."""
     item = _make_editable(text="aa bb", size=20)
@@ -456,7 +474,7 @@ def test_faux_bold_width_uses_each_spans_own_size(app):
     assert width[3:5] == [pytest.approx(48 * FAUX_BOLD_WIDTH_FACTOR)] * 2
 
 
-def test_faux_bold_color_tracks_span_color(app):
+def test_faux_bold_color_tracks_span_color(app, no_own_bold_font):
     item = _make_editable()
     _select_span(item, 0, 5)
 
@@ -474,7 +492,7 @@ def test_faux_bold_color_tracks_span_color(app):
     assert color[:5] == ["#0000ff"] * 5
 
 
-def test_faux_bold_cleared_when_bold_turned_off(app):
+def test_faux_bold_cleared_when_bold_turned_off(app, no_own_bold_font):
     item = _make_editable()
     _select_span(item, 0, 5)
     item.set_bold(True)
@@ -485,7 +503,7 @@ def test_faux_bold_cleared_when_bold_turned_off(app):
     assert has_pen == [False] * 11
 
 
-def test_faux_bold_survives_html_roundtrip(app):
+def test_faux_bold_survives_html_roundtrip(app, no_own_bold_font):
     """toHtml()/setHtml() is how undo/redo, save/load and the export renderer
     move text around; the stroke must survive that trip."""
     item = _make_editable(size=20)
@@ -501,7 +519,7 @@ def test_faux_bold_survives_html_roundtrip(app):
     assert width[:5] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 5
 
 
-def test_faux_bold_does_not_leak_onto_plain_text(app):
+def test_faux_bold_does_not_leak_onto_plain_text(app, no_own_bold_font):
     """Regression: a NoPen pen still makes toHtml() emit -qt-stroke-width,
     which Qt reads back as a solid 1px outline -- so unbolding a span (or
     merely having a non-bold span next to a bold one) silently thickened all
@@ -531,7 +549,7 @@ def test_faux_bold_does_not_leak_onto_plain_text(app):
     assert has_pen == [True] * 5 + [False] * 6
 
 
-def test_faux_bold_retro_applied_to_legacy_html(app):
+def test_faux_bold_retro_applied_to_legacy_html(app, no_own_bold_font):
     """Projects saved before the faux-bold fix carry a bold weight with no
     -qt-stroke-* at all; loading must add the stroke."""
     legacy = (
@@ -545,3 +563,67 @@ def test_faux_bold_retro_applied_to_legacy_html(app):
     has_pen, width, _ = _per_char_outline(item)
     assert has_pen == [False] * 6 + [True] * 4
     assert width[6:] == [pytest.approx(20 * FAUX_BOLD_WIDTH_FACTOR)] * 4
+
+
+def test_bold_on_font_with_own_bold_has_no_stroke(app, monkeypatch):
+    """A font that supplies its own boldness needs no synthetic outline --
+    adding one thickened the glyphs twice."""
+    monkeypatch.setattr(text_item_module, "family_has_own_bold",
+                        lambda family: True)
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+
+    item.set_bold(True)
+
+    has_pen, _, _ = _per_char_outline(item)
+    assert has_pen == [False] * 11
+    assert "-qt-stroke" not in item.toHtml()
+    # The weight itself is still applied; only the stroke is skipped.
+    bold, _, _ = _per_char(item)
+    assert bold[:5] == [True] * 5
+
+
+def test_faux_bold_removed_when_family_gains_own_bold(app, monkeypatch):
+    """Changing a bold span's family to a font that has a Bold face must drop
+    the stroke it picked up from the previous (single-weight) font."""
+    monkeypatch.setattr(text_item_module, "family_has_own_bold",
+                        lambda family: family == "OwnBold")
+    item = _make_editable(size=20)
+    _select_span(item, 0, 5)
+    item.set_bold(True)
+    has_pen, _, _ = _per_char_outline(item)
+    assert has_pen[:5] == [True] * 5
+
+    new_font = QFont("OwnBold")
+    new_font.setPointSizeF(20)
+    item.update_text_format("font", new_font)
+
+    has_pen, _, _ = _per_char_outline(item)
+    assert has_pen == [False] * 11
+
+
+def test_family_has_own_bold_detection(app):
+    """Detection follows the face Qt actually resolves, not style names alone:
+    a family shipping a Bold face reports True, a single-weight one False."""
+    invalidate_faux_bold_cache()
+
+    def _styles(family):
+        return list(QFontDatabase.styles(family))
+
+    def _first(predicate):
+        return next((f for f in QFontDatabase.families() if predicate(f)), None)
+
+    # Needs both a plain and a bold style, otherwise a Bold request could
+    # resolve to the same (only) style the Regular request gets.
+    with_bold = _first(
+        lambda f: (_styles(f)
+                   and any("bold" in s.casefold() for s in _styles(f))
+                   and any("bold" not in s.casefold() for s in _styles(f))))
+    without_bold = _first(
+        lambda f: len(_styles(f)) == 1
+        and "bold" not in _styles(f)[0].casefold())
+    if with_bold is None or without_bold is None:
+        pytest.skip("no single-weight and multi-weight test fonts installed")
+
+    assert family_has_own_bold(with_bold) is True
+    assert family_has_own_bold(without_bold) is False

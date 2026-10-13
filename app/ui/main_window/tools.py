@@ -160,6 +160,11 @@ class ToolStateMixin:
         if font_id == -1:
             return None
 
+        # Newly installed families change which fonts resolve Bold to their own
+        # face, so the faux-bold lookup cache is stale from here on.
+        from app.ui.canvas.text_item import invalidate_faux_bold_cache
+        invalidate_faux_bold_cache()
+
         families = QFontDatabase.applicationFontFamilies(font_id)
         if not families:
             return None

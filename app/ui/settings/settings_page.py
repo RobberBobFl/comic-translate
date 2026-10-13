@@ -720,6 +720,10 @@ class SettingsPage(QtWidgets.QWidget):
             if font_id != -1:
                 font_families = QFontDatabase.applicationFontFamilies(font_id)
                 if font_families:
+                    # Newly installed families change which fonts resolve Bold
+                    # to their own face; the faux-bold cache is stale now.
+                    from app.ui.canvas.text_item import invalidate_faux_bold_cache
+                    invalidate_faux_bold_cache()
                     return font_families[0]
         
         # If not a file path or loading failed, treat as font family name
