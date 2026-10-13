@@ -1,7 +1,9 @@
+import logging
 import numpy as np
 from typing import List, Dict, Tuple
 
 from PySide6 import QtWidgets, QtCore, QtGui
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QGraphicsView, QGraphicsPixmapItem, QGraphicsScene
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 
@@ -13,6 +15,8 @@ from .drawing_manager import DrawingManager
 from .webtoons.webtoon_manager import LazyWebtoonManager
 from .interaction_manager import InteractionManager
 from .event_handler import EventHandler
+
+logger = logging.getLogger(__name__)
 
 
 class ImageViewer(QGraphicsView):
@@ -244,30 +248,77 @@ class ImageViewer(QGraphicsView):
             return True
         return any(getattr(t, 'editing_mode', False) for t in self.text_items)
 
-    def _space_pan_allowed(self) -> bool:
-        # Text entry wins: no panning while a text block is being edited.
-        if self._text_editing_active():
-            return False
-        focus = QtWidgets.QApplication.focusWidget()
-        if isinstance(focus, (QtWidgets.QLineEdit, QtWidgets.QTextEdit,
-                              QtWidgets.QPlainTextEdit, QtWidgets.QAbstractSpinBox,
-                              QtWidgets.QKeySequenceEdit)):
-            return False
-        # Don't hijack Space in the middle of a stroke / box drag / item
-        # drag-resize: the mouse guards below would skip their release
-        # handling and leave stale interaction state behind.
-        if (self.drawing_manager.current_path is not None
-                or self.paint_manager.painting
-                or self.start_point is not None):
-            return False
+    def _flush_stale_interaction(self):
+        """Clear interaction flags left behind by a swallowed mouse release.
+
+        A live brush/paint stroke or item drag always holds the left mouse
+        button, so when it is not pressed any lingering state is stale and
+        would otherwise block hold-Space panning forever.
+        """
+        if QGuiApplication.mouseButtons() & Qt.MouseButton.LeftButton:
+            return  # a real interaction is in progress; leave it alone.
+
+        flushed = []
+        if self.paint_manager.painting:
+            try:
+                self.paint_manager.end_stroke()
+            except Exception:
+                self.paint_manager.painting = False
+            flushed.append('painting')
+        if self.drawing_manager.current_path is not None:
+            try:
+                self.drawing_manager.end_stroke()
+            except Exception:
+                self.drawing_manager.current_path = None
+                self.drawing_manager.current_path_item = None
+            flushed.append('brush_path')
+        if self.start_point is not None:
+            try:
+                if self.current_rect is not None:
+                    self._scene.removeItem(self.current_rect)
+            except Exception:
+                pass
+            self.start_point = None
+            self.current_rect = None
+            flushed.append('box_start')
         if self.event_handler.dragged_item is not None:
-            return False
+            self.event_handler.dragged_item = None
+            flushed.append('dragged_item')
+
         blk_item, rect_item = self.sel_rot_item()
         sel_item = blk_item or rect_item
         if sel_item is not None and (getattr(sel_item, 'resizing', False)
                                      or getattr(sel_item, 'rotating', False)):
-            return False
-        return True
+            sel_item.resizing = False
+            sel_item.resize_handle = None
+            sel_item.resize_start = None
+            sel_item.rotating = False
+            sel_item.center_scene_pos = None
+            sel_item.rot_handle = None
+            flushed.append('item_interaction')
+            self.apply_tool_cursor()
+
+        if flushed:
+            logger.warning("Flushed stale interaction state before pan: %s",
+                           ", ".join(flushed))
+
+    def _space_pan_block_reason(self) -> str | None:
+        # Text entry wins: no panning while a text block is being edited.
+        if self._text_editing_active():
+            return "text_editing"
+        focus = QtWidgets.QApplication.focusWidget()
+        if isinstance(focus, (QtWidgets.QLineEdit, QtWidgets.QTextEdit,
+                              QtWidgets.QPlainTextEdit, QtWidgets.QAbstractSpinBox,
+                              QtWidgets.QKeySequenceEdit)):
+            return f"focus_on_{type(focus).__name__}"
+        # A live stroke/drag keeps the left button held; anything else here is
+        # stale state that _flush_stale_interaction will have already cleared.
+        if QGuiApplication.mouseButtons() & Qt.MouseButton.LeftButton:
+            return "mouse_drag_in_progress"
+        return None
+
+    def _space_pan_allowed(self) -> bool:
+        return self._space_pan_block_reason() is None
 
     def _start_space_pan(self):
         if self._space_pan_active or not self._space_pan_allowed():
@@ -293,10 +344,16 @@ class ImageViewer(QGraphicsView):
             if self._space_pan_active:
                 event.accept()
                 return
+            # Heal any interaction state abandoned by a swallowed mouse
+            # release before deciding (only when the left button is up).
+            self._flush_stale_interaction()
             self._start_space_pan()
             if self._space_pan_active:
                 event.accept()
                 return
+            reason = self._space_pan_block_reason()
+            if reason:
+                logger.info("Space ignored (pan blocked): %s", reason)
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event: QtGui.QKeyEvent):

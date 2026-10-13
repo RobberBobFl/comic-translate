@@ -1243,6 +1243,19 @@ class TextBlockItem(QGraphicsTextItem):
         self.clearFocus()
         self.update()
 
+    def focusOutEvent(self, event):
+        # Leaving the item (focus moved to another widget/item) must end text
+        # editing. Without this, editing_mode can stay True forever when the
+        # click that moved focus away never reached the canvas (e.g. a slider),
+        # which permanently blocks canvas shortcuts like hold-Space panning.
+        if self.editing_mode and not getattr(self, "_exiting_editing_mode", False):
+            self._exiting_editing_mode = True
+            try:
+                self.exit_editing_mode()
+            finally:
+                self._exiting_editing_mode = False
+        super().focusOutEvent(event)
+
     def _on_text_changed(self):
         new_text = self.toPlainText()
         self.text_changed.emit(new_text)

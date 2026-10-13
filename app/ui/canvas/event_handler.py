@@ -211,6 +211,10 @@ class EventHandler:
 
     def handle_mouse_release(self, event: QtGui.QMouseEvent):
         if self.viewer.space_pan_active:
+            # The pan's own mouse guards never ran (press/move were delegated
+            # straight to the base view), so no custom flags were set by this
+            # gesture; make sure none survive from an earlier interaction.
+            self.viewer._flush_stale_interaction()
             QtWidgets.QGraphicsView.mouseReleaseEvent(self.viewer, event)
             return
 

@@ -513,6 +513,8 @@ class WorkspaceMixin:
         self.paint_slider.setMaximum(100)
         self.paint_slider.setValue(25)
         self.paint_slider.setToolTip(self.tr("Retouch Brush Size"))
+        # Keep focus on the canvas so hold-Space panning survives size changes.
+        self.paint_slider.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.paint_slider.valueChanged.connect(self.set_paint_size)
         tools_layout.addWidget(self.paint_slider)
 
@@ -538,6 +540,8 @@ class WorkspaceMixin:
         self.brush_eraser_slider.setMaximum(100)
         self.brush_eraser_slider.setValue(10)
         self.brush_eraser_slider.setToolTip(self.tr("Brush/Eraser Size Slider"))
+        # Keep focus on the canvas so hold-Space panning survives size changes.
+        self.brush_eraser_slider.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.brush_eraser_slider.valueChanged.connect(self.set_brush_eraser_size)
 
         tools_layout.addLayout(misc_lay)
@@ -606,6 +610,9 @@ class WorkspaceMixin:
             button = MToolButton().svg(svg)
 
         button.setCheckable(True) if checkable else button.setCheckable(False)
+        # Tool buttons must never steal keyboard focus from the canvas, otherwise
+        # canvas-level shortcuts (hold-Space pan) stop working after a click.
+        button.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
 
         return button
 
