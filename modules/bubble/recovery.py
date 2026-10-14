@@ -977,88 +977,89 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     f = tuple(int(np.clip(v, 0, 255)) for v in fill)
     out[subm > 0] = f
     base = (outer > 0).astype(np.uint8)
-    new_band = (subm > 0) & (base == 0)
-    if not new_band.any() or px <= 0:
-        return out
+    H, W = subm.shape
+    base = (outer > 0).astype(np.uint8)
+    f = tuple(int(np.clip(v, 0, 255)) for v in fill)
+    f_arr = np.array(f, dtype=np.float32)
 
-    # Base distance transform of the pre-expansion mask (base)
+    # Ring depth covers the full stroke width plus inward shoulder
+    effective_stroke_w = max(float(wmax), 5.0)
+    ring_depth = effective_stroke_w + 3.0
+
+    # 1. Smooth SDF of source outer mask (sdf <= 0 inside base, > 0 outside base)
     d_out_base = cv2.distanceTransform((base == 0).astype(np.uint8), cv2.DIST_L2, 5)
     d_in_base = cv2.distanceTransform(base, cv2.DIST_L2, 5)
-    sdf_old = (d_out_base - d_in_base).astype(np.float32)
+    sdf_outer = (d_out_base - d_in_base).astype(np.float32)
+    sdf_outer_smooth = cv2.GaussianBlur(sdf_outer, (0, 0), sigmaX=2.0, sigmaY=2.0)
 
-    dist = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
-    # Smooth distance field with a gentle gaussian for stable, noise-free normals
-    dist_smooth = cv2.GaussianBlur(dist, (3, 3), 0.8)
-    gx = cv2.Sobel(dist_smooth, cv2.CV_32F, 1, 0, ksize=3)
-    gy = cv2.Sobel(dist_smooth, cv2.CV_32F, 0, 1, ksize=3)
+    # 2. Smooth distance transform and gradient of expanded mask:
+    dist_exp = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
+    dist_exp_smooth = cv2.GaussianBlur(dist_exp, (0, 0), sigmaX=1.5, sigmaY=1.5)
+
+    gx = cv2.Sobel(dist_exp_smooth, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(dist_exp_smooth, cv2.CV_32F, 0, 1, ksize=3)
     mag = np.hypot(gx, gy)
     mag[mag < 1e-6] = 1.0
-    nx, ny = gx / mag, gy / mag  # inward normals (dist grows inward)
-    H, W = subm.shape
+    nx, ny = gx / mag, gy / mag  # inward normals
+
+    # 3. Sampling ring:
     yy, xx = np.mgrid[0:H, 0:W]
-    # Widen the ring zone by aa_width so the blend tail has room to fade
-    ring = new_band & (dist <= float(wmax) + 1.0 + aa_width)
+    ring = (subm > 0) & (dist_exp <= ring_depth + aa_width)
+    core = (subm > 0) & (dist_exp > ring_depth + aa_width)
+    out[core] = f
+
     if not ring.any():
         return out
-    rx, ry = xx[ring], yy[ring]
 
-    # Target depth in the old stroke corresponds to current depth from the expanded boundary
-    # Newton iteration: ensures sx, sy lands on the exact same SDF depth in the source bubble,
-    # completely eliminating thinning or gaps caused by curvature differences or local variations.
-    target_v = dist[ring] - float(px)
+    rx, ry = xx[ring], yy[ring]
+    d_ring = dist_exp[ring]
+
+    # Target distance from outer boundary of source:
+    # Outer edge of expanded (d_ring == 0) corresponds to outer edge of base (sdf == 0)
+    # Depth d_ring from expanded edge corresponds to depth d_ring inside base (sdf == -d_ring)
+    target_d = -d_ring
+
+    # Shift inward by px
     sx = (rx + px * nx[ring]).astype(np.float32)
     sy = (ry + px * ny[ring]).astype(np.float32)
 
-    # 1 iteration of Newton refinement on the source distance field
+    # Newton refinement: sample sdf_outer_smooth at (sx, sy) and refine along normal
     sx_grid = np.zeros((H, W), dtype=np.float32)
     sy_grid = np.zeros((H, W), dtype=np.float32)
     sx_grid[ring] = sx
     sy_grid[ring] = sy
-    sampled_sdf = cv2.remap(sdf_old, sx_grid, sy_grid, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    residual = sampled_sdf[ring] - target_v
-    # Cap residual step to prevent overshooting near sharp corners
-    residual = np.clip(residual, -2.0, 2.0)
-    sx = np.clip(sx - residual * nx[ring], 0.0, W - 1.0)
-    sy = np.clip(sy - residual * ny[ring], 0.0, H - 1.0)
+    sampled_sdf = cv2.remap(sdf_outer_smooth, sx_grid, sy_grid, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
+    residual = sampled_sdf[ring] - target_d
+    residual = np.clip(residual, -3.0, 3.0)
+    sx = np.clip(sx + residual * nx[ring], 0.0, W - 1.0)
+    sy = np.clip(sy + residual * ny[ring], 0.0, H - 1.0)
+
+    # 4. Bilinear sampling of source image:
     src = rgb.astype(np.float32)
+    x0 = np.clip(np.floor(sx).astype(int), 0, W - 1)
+    y0 = np.clip(np.floor(sy).astype(int), 0, H - 1)
+    x1 = np.clip(x0 + 1, 0, W - 1)
+    y1 = np.clip(y0 + 1, 0, H - 1)
+    fx = (sx - x0).astype(np.float32)
+    fy = (sy - y0).astype(np.float32)
 
-    def _sample(cx, cy):
-        x0 = np.clip(np.floor(cx).astype(int), 0, W - 1)
-        y0 = np.clip(np.floor(cy).astype(int), 0, H - 1)
-        x1 = np.clip(x0 + 1, 0, W - 1)
-        y1 = np.clip(y0 + 1, 0, H - 1)
-        fx = (cx - x0).astype(np.float32)
-        fy = (cy - y0).astype(np.float32)
-        return (src[y0, x0] * (1 - fx[:, None]) * (1 - fy[:, None])
-                + src[y0, x1] * fx[:, None] * (1 - fy[:, None])
-                + src[y1, x0] * (1 - fx[:, None]) * fy[:, None]
-                + src[y1, x1] * fx[:, None] * fy[:, None])
+    samp = (src[y0, x0] * (1 - fx[:, None]) * (1 - fy[:, None])
+            + src[y0, x1] * fx[:, None] * (1 - fy[:, None])
+            + src[y1, x0] * (1 - fx[:, None]) * fy[:, None]
+            + src[y1, x1] * fx[:, None] * fy[:, None])
 
-    samp_c = _sample(sx, sy)
-    # Check a subpixel +-0.8px step along the normal to lock onto the true ink core
-    # even when discrete dilation slightly misaligns the normal phase.
-    samp_in = _sample(sx + 0.8 * nx[ring], sy + 0.8 * ny[ring])
-    samp_out = _sample(sx - 0.8 * nx[ring], sy - 0.8 * ny[ring])
+    # Fade to fill only past the full stroke width (so entire original stroke is kept!)
+    depth_in_base = d_in_base[np.clip(np.round(sy).astype(int), 0, H - 1), np.clip(np.round(sx).astype(int), 0, W - 1)]
+    text_fade_start = effective_stroke_w + 1.0
+    text_fade_end = effective_stroke_w + 2.5
+    text_blend = np.clip((depth_in_base - text_fade_start) / (text_fade_end - text_fade_start), 0.0, 1.0)
+    samp = samp * (1.0 - text_blend[:, None]) + f_arr[None, :] * text_blend[:, None]
 
-    lum_c = samp_c[:, 0] * 0.299 + samp_c[:, 1] * 0.587 + samp_c[:, 2] * 0.114
-    lum_i = samp_in[:, 0] * 0.299 + samp_in[:, 1] * 0.587 + samp_in[:, 2] * 0.114
-    lum_o = samp_out[:, 0] * 0.299 + samp_out[:, 1] * 0.587 + samp_out[:, 2] * 0.114
+    # 5. Alpha blend on outer edge:
+    alpha = np.clip(d_ring / aa_width, 0.0, 1.0).astype(np.float32)
 
-    min_lum = np.minimum(lum_c, np.minimum(lum_i, lum_o))
-    samp = samp_c.copy()
-    pick_i = (lum_i == min_lum) & (lum_i < lum_c - 12)
-    pick_o = (lum_o == min_lum) & (lum_o < lum_c - 12)
-    samp[pick_i] = samp_in[pick_i]
-    samp[pick_o] = samp_out[pick_o]
-
-    # Alpha ramp: dist ≥ aa_width → 1.0 (solid), dist → 0 fades to 0.
-    # This anti-aliases the outer edge of the ring over ~aa_width px against the
-    # true original page background (not the repainted fill), avoiding a light halo.
-    edge_dist = dist[ring]
-    alpha = np.clip(edge_dist / aa_width, 0.0, 1.0).astype(np.float32)
-
-    # Portal / tail cut suppression: do not paint outline across open cuts or tails
+    # 6. Portal / tail cut suppression: do not paint outline across open cuts or tails
     if fragments is not None and (fragments > 0).any():
         portal_dist = cv2.distanceTransform((fragments == 0).astype(np.uint8), cv2.DIST_L2, 5)
         portal_suppress = np.clip((portal_dist[ring] - 1.0) / 4.0, 0.0, 1.0).astype(np.float32)
