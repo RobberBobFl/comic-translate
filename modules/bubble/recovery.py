@@ -805,6 +805,46 @@ def estimate_fill(rgb: np.ndarray, inner: np.ndarray,
     return tuple(int(round(float(v))) for v in med)
 
 
+def ink_inner_snap(mask: np.ndarray, gray: np.ndarray, text_xyxy,
+                   fill_gray: float = 255.0, snap_dist: int = 3,
+                   dark_margin: float = 35.0) -> np.ndarray:
+    """Geodesic snap of bubble interior to the ink outline wall.
+
+    1. Cuts mask along closed ink barrier (gray < fill_gray - dark_margin).
+    2. Keeps strictly the connected component containing text seed,
+       eliminating any islands in neighboring bubbles or panel gutters.
+    3. Dilates up to snap_dist px stopping strictly at ink pixels.
+    4. Fills holes and applies continuous SDF level-set smoothing.
+    """
+    if mask is None or not mask.any():
+        return mask
+    ink_raw = (gray < (fill_gray - dark_margin)).astype(np.uint8)
+    k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    ink = cv2.morphologyEx(ink_raw, cv2.MORPH_CLOSE, k3)
+
+    cut_mask = np.where(ink > 0, 0, mask).astype(np.uint8)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cut_mask, connectivity=8)
+    if num_labels <= 1:
+        return mask
+    tx1, ty1, tx2, ty2 = (int(v) for v in text_xyxy)
+    H, W = mask.shape
+    tx1, ty1 = max(0, tx1), max(0, ty1)
+    tx2, ty2 = min(W, tx2), min(H, ty2)
+    t_crop = labels[ty1:ty2, tx1:tx2]
+    counts = np.bincount(t_crop.flatten(), minlength=num_labels)
+    counts[0] = 0
+    best_label = int(np.argmax(counts)) if len(counts) > 1 and counts.max() > 0 else 0
+    if best_label == 0:
+        return mask
+    snapped = (labels == best_label).astype(np.uint8) * 255
+
+    for _ in range(snap_dist):
+        dilated = cv2.dilate(snapped, k3)
+        snapped = np.where(ink == 0, dilated, snapped)
+
+    return smooth_mask(fill_holes(snapped))
+
+
 def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
                    text_mask=None, other_texts=None) -> dict | None:
     """Recommended path: C -> Cx, falling back to C2 -> C2x.
@@ -858,6 +898,13 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
             ignore_dt = cv2.distanceTransform(
                 (cut == 0).astype(np.uint8), cv2.DIST_L2, 5)
     if not plausible_size(inner, text_xyxy, bubble_xyxy):
+        return None
+
+    # Geodesic ink-inner snap: clean boundary and stop at ink stroke
+    fill_pre = estimate_fill(rgb, inner, gray)
+    fill_g = 0.299 * fill_pre[0] + 0.587 * fill_pre[1] + 0.114 * fill_pre[2]
+    inner = ink_inner_snap(inner, gray, text_xyxy, fill_gray=fill_g)
+    if not inner.any():
         return None
 
     stroke_w = measure_stroke_width(gray, inner, ignore_dt=ignore_dt)
