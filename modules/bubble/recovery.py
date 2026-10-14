@@ -947,7 +947,8 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
 
 def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
                        px: int, fill: tuple[int, int, int] = (255, 255, 255),
-                       wmax: int = 6, aa_width: float = 1.4) -> np.ndarray:
+                       wmax: int = 6, aa_width: float = 1.4,
+                       fragments: np.ndarray | None = None) -> np.ndarray:
     """Flat fill + original outline transplanted outward by ``px`` (variant A).
 
     ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
@@ -960,6 +961,10 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     ``outer`` boundary, i.e. shifted ``px`` inward along the boundary normal
     and bilinearly sampled. Width, ink colour and anti-aliasing therefore
     match the original balloon instead of a uniform synthetic band.
+
+    When ``fragments`` (tail mask / adjoining bubble cuts) is provided,
+    the outline alpha is suppressed across portals so lines are never drawn
+    across open tails or corridors between merged balloons.
 
     The outer edge of the ring is alpha-blended with the background over
     ``aa_width`` px (default 1.4) so the boundary fades smoothly instead of
@@ -1052,6 +1057,13 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     # true original page background (not the repainted fill), avoiding a light halo.
     edge_dist = dist[ring]
     alpha = np.clip(edge_dist / aa_width, 0.0, 1.0).astype(np.float32)
+
+    # Portal / tail cut suppression: do not paint outline across open cuts or tails
+    if fragments is not None and (fragments > 0).any():
+        portal_dist = cv2.distanceTransform((fragments == 0).astype(np.uint8), cv2.DIST_L2, 5)
+        portal_suppress = np.clip((portal_dist[ring] - 1.0) / 4.0, 0.0, 1.0).astype(np.float32)
+        alpha = alpha * portal_suppress
+
     bg = rgb[ring].astype(np.float32)
     out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
     return out
