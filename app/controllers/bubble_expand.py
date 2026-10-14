@@ -204,6 +204,7 @@ class BubbleExpandController:
         stroke_w = res["stroke_w"]
         repainted = br.repaint_transplant(
             rgb, base, expanded, px, res.get("fill", (255, 255, 255)),
+            stroke_w=stroke_w,
             fragments=res.get("fragments"),
         )
 
