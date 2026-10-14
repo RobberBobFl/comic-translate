@@ -3,8 +3,8 @@
 Works only inside the manual editor: for the selected text block it recovers
 the bubble mask (recommended research path C->C2->Cx, with tail/fragment
 trimming), shows a preview overlay, asks for an expansion in px, then repaints
-the enlarged bubble (flat fill + distance-transform-ring contour at the
-measured stroke width) and applies it as a single inpaint patch.
+the enlarged bubble (flat fill + original outline transplanted outward) and
+applies it as a single inpaint patch.
 
 The patch goes through the existing ``PatchInsertCommand`` machinery, so Undo
 works and the automatic pipeline is untouched. Enable analysis dumps with
@@ -77,8 +77,12 @@ class BubbleExpandController:
         bubble = blk.bubble_xyxy
         bubble_xyxy = tuple(int(v) for v in bubble) if bubble is not None else None
         text_mask = get_inpaint_mask(list(text_xyxy), rgb)
+        others = [tuple(int(v) for v in b.xyxy)
+                  for b in (getattr(main, "blk_list", None) or [])
+                  if b is not blk and tuple(int(v) for v in b.xyxy) != text_xyxy]
 
-        res = br.recover_bubble(rgb, text_xyxy, bubble_xyxy, text_mask)
+        res = br.recover_bubble(rgb, text_xyxy, bubble_xyxy, text_mask,
+                                other_texts=others)
         if res is None:
             self._clear_preview()
             MMessage.warning(
@@ -91,8 +95,8 @@ class BubbleExpandController:
 
         trim = res.get("trim", {})
         logger.debug(
-            "[bubble-expand] method=%s stroke_w=%s fill=%s trim=%s containment=%s",
-            res["method"], res["stroke_w"], res.get("fill"),
+            "[bubble-expand] method=%s stroke_w=%s fill=%s split=%s trim=%s containment=%s",
+            res["method"], res["stroke_w"], res.get("fill"), res.get("split"),
             f"{trim.get('fragments', 0.0)}%" if trim.get("trimmed") else "no",
             trim.get("containment"),
         )
@@ -198,8 +202,8 @@ class BubbleExpandController:
             self._clear_preview()
             return
         stroke_w = res["stroke_w"]
-        repainted = br.repaint(
-            rgb, expanded, stroke_w, res.get("fill", (255, 255, 255)),
+        repainted = br.repaint_transplant(
+            rgb, base, expanded, px, res.get("fill", (255, 255, 255)),
         )
 
         self._apply_patch(repainted, expanded, stroke_w)
