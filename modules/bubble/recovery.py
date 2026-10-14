@@ -68,6 +68,42 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
     return out
 
 
+def smooth_mask(mask: np.ndarray, sigma: float = 2.0) -> np.ndarray:
+    """Smooth the contour of a binary mask to remove staircase / jagged edges.
+
+    Extracts all outer contours at pixel resolution, filters their (x, y)
+    coordinates with a periodic 1-D Gaussian of width ``sigma``, then
+    redraws them as filled polygons.  Small contours (perimeter < kernel
+    width) are left untouched.
+
+    This removes the staircase inherent in binary masks from thresholding
+    and morphological ops while preserving the overall balloon shape.
+    """
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return mask
+    out = np.zeros_like(mask)
+    ksize = max(3, int(6 * sigma) | 1)          # ≥ 3, always odd
+    half = ksize // 2
+    t = np.arange(-half, half + 1, dtype=np.float64)
+    ker = np.exp(-0.5 * (t / sigma) ** 2)
+    ker /= ker.sum()
+    for c in contours:
+        pts = c[:, 0, :].astype(np.float64)
+        n = len(pts)
+        if n < ksize:
+            cv2.drawContours(out, [c], -1, 255, -1)
+            continue
+        xp = np.concatenate([pts[-half:, 0], pts[:, 0], pts[:half, 0]])
+        yp = np.concatenate([pts[-half:, 1], pts[:, 1], pts[:half, 1]])
+        sx = np.convolve(xp, ker, 'valid')
+        sy = np.convolve(yp, ker, 'valid')
+        smooth = np.stack([sx, sy], axis=1).astype(np.int32).reshape(-1, 1, 2)
+        cv2.drawContours(out, [smooth], -1, 255, -1)
+    return fill_holes(out)
+
+
 def _center(xyxy) -> tuple[int, int]:
     x1, y1, x2, y2 = (int(v) for v in xyxy)
     return (x1 + x2) // 2, (y1 + y2) // 2
@@ -419,7 +455,7 @@ def expand_to_outer(interior: np.ndarray, k: int) -> np.ndarray:
     cur = (interior > 0).astype(np.uint8)
     for _ in range(max(0, k)):
         cur = cv2.dilate(cur, ELL3)
-    return fill_holes(cur.astype(np.uint8) * 255)
+    return smooth_mask(fill_holes(cur.astype(np.uint8) * 255))
 
 
 def _max_cross_width(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
@@ -839,7 +875,7 @@ def expand_mask(outer: np.ndarray, px: int) -> np.ndarray:
     expanded = cv2.morphologyEx(
         expanded, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     )
-    return fill_holes(expanded)
+    return smooth_mask(fill_holes(expanded))
 
 
 def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
@@ -896,7 +932,7 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
 
 def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
                        px: int, fill: tuple[int, int, int] = (255, 255, 255),
-                       wmax: int = 6) -> np.ndarray:
+                       wmax: int = 6, aa_width: float = 1.4) -> np.ndarray:
     """Flat fill + original outline transplanted outward by ``px`` (variant A).
 
     ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
@@ -909,6 +945,10 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     ``outer`` boundary, i.e. shifted ``px`` inward along the boundary normal
     and bilinearly sampled. Width, ink colour and anti-aliasing therefore
     match the original balloon instead of a uniform synthetic band.
+
+    The outer edge of the ring is alpha-blended with the background over
+    ``aa_width`` px (default 1.4) so the boundary fades smoothly instead of
+    producing a hard staircase from the binary mask.
     """
     out = rgb.copy()
     subm = (expanded > 0).astype(np.uint8)
@@ -929,7 +969,8 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     nx, ny = gx / mag, gy / mag  # inward normals (dist grows inward)
     H, W = subm.shape
     yy, xx = np.mgrid[0:H, 0:W]
-    ring = new_band & (dist <= float(wmax) + 1.0)
+    # Widen the ring zone by aa_width so the blend tail has room to fade
+    ring = new_band & (dist <= float(wmax) + 1.0 + aa_width)
     if not ring.any():
         return out
     rx, ry = xx[ring], yy[ring]
@@ -948,7 +989,13 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
             + src[y0c, x1c] * fx[:, None] * (1 - fy[:, None])
             + src[y1c, x0c] * (1 - fx[:, None]) * fy[:, None]
             + src[y1c, x1c] * fx[:, None] * fy[:, None])
-    out[ring] = np.round(samp).astype(np.uint8)
+
+    # Alpha ramp: dist ≥ aa_width → 1.0 (solid), dist → 0 fades to 0.
+    # This anti-aliases the outer edge of the ring over ~aa_width px.
+    edge_dist = dist[ring]
+    alpha = np.clip(edge_dist / aa_width, 0.0, 1.0).astype(np.float32)
+    bg = out[ring].astype(np.float32)
+    out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
     return out
 
 
