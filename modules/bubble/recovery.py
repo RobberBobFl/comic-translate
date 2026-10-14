@@ -68,39 +68,24 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
     return out
 
 
-def smooth_mask(mask: np.ndarray, sigma: float = 2.0) -> np.ndarray:
-    """Smooth the contour of a binary mask to remove staircase / jagged edges.
+def smooth_mask(mask: np.ndarray, sigma: float = 1.2) -> np.ndarray:
+    """Smooth the contour of a binary mask using a continuous Signed Distance Field (SDF).
 
-    Extracts all outer contours at pixel resolution, filters their (x, y)
-    coordinates with a periodic 1-D Gaussian of width ``sigma``, then
-    redraws them as filled polygons.  Small contours (perimeter < kernel
-    width) are left untouched.
-
-    This removes the staircase inherent in binary masks from thresholding
-    and morphological ops while preserving the overall balloon shape.
+    Unlike polygon vertex filtering, which must rasterize smoothed coordinates
+    back to a discrete integer grid (re-introducing staircase steps and pinch
+    artifacts), SDF computes the signed distance field (positive inside, negative
+    outside), filters the continuous surface with a 2D Gaussian, and takes the
+    zero level set.  This yields perfectly organic, smooth boundaries without
+    corners or pixel-grid aliasing.
     """
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_NONE)
-    if not contours:
-        return mask
-    out = np.zeros_like(mask)
-    ksize = max(3, int(6 * sigma) | 1)          # ≥ 3, always odd
-    half = ksize // 2
-    t = np.arange(-half, half + 1, dtype=np.float64)
-    ker = np.exp(-0.5 * (t / sigma) ** 2)
-    ker /= ker.sum()
-    for c in contours:
-        pts = c[:, 0, :].astype(np.float64)
-        n = len(pts)
-        if n < ksize:
-            cv2.drawContours(out, [c], -1, 255, -1)
-            continue
-        xp = np.concatenate([pts[-half:, 0], pts[:, 0], pts[:half, 0]])
-        yp = np.concatenate([pts[-half:, 1], pts[:, 1], pts[:half, 1]])
-        sx = np.convolve(xp, ker, 'valid')
-        sy = np.convolve(yp, ker, 'valid')
-        smooth = np.stack([sx, sy], axis=1).astype(np.int32).reshape(-1, 1, 2)
-        cv2.drawContours(out, [smooth], -1, 255, -1)
+    m = (mask > 0).astype(np.uint8)
+    if not m.any():
+        return mask.copy()
+    dt_in = cv2.distanceTransform(m, cv2.DIST_L2, 5)
+    dt_out = cv2.distanceTransform(1 - m, cv2.DIST_L2, 5)
+    sdf = dt_in - dt_out
+    sdf_smooth = cv2.GaussianBlur(sdf, (0, 0), float(sigma))
+    out = (sdf_smooth >= 0.0).astype(np.uint8) * 255
     return fill_holes(out)
 
 
@@ -451,8 +436,36 @@ def measure_stroke_width(gray: np.ndarray, interior: np.ndarray,
     return int(np.clip(round(float(np.median(src))), 0, max_r))
 
 
-def expand_to_outer(interior: np.ndarray, k: int) -> np.ndarray:
-    cur = (interior > 0).astype(np.uint8)
+def expand_to_outer(interior: np.ndarray, k: int, gray: np.ndarray | None = None) -> np.ndarray:
+    """Expand interior mask to outer boundary of the outline stroke.
+
+    If ``gray`` is provided, uses morphological gradient watershed to snap
+    the boundary precisely to the outer edge of the ink stroke, followed by
+    SDF smoothing. Otherwise falls back to isotropic dilation.
+    """
+    m = (interior > 0).astype(np.uint8)
+    r = int(max(1, round(k)))
+    if gray is not None and m.any():
+        pad = min(3, max(1, r))
+        band_in = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*max(0, r - pad)+1, 2*max(0, r - pad)+1)))
+        band_out = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*(r + pad)+1, 2*(r + pad)+1)))
+        ys, xs = np.where(band_out > 0)
+        if len(xs) > 0:
+            x1, y1 = max(0, xs.min() - 5), max(0, ys.min() - 5)
+            x2, y2 = min(gray.shape[1], xs.max() + 6), min(gray.shape[0], ys.max() + 6)
+            sub_g = gray[y1:y2, x1:x2]
+            sub_in = band_in[y1:y2, x1:x2]
+            sub_out = band_out[y1:y2, x1:x2]
+            grad = cv2.morphologyEx(sub_g, cv2.MORPH_GRADIENT, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+            markers = np.zeros_like(sub_g, dtype=np.int32)
+            markers[sub_in > 0] = 1
+            markers[sub_out == 0] = 2
+            cv2.watershed(cv2.cvtColor(grad, cv2.COLOR_GRAY2BGR), markers)
+            snapped = np.zeros_like(gray, dtype=np.uint8)
+            snapped[y1:y2, x1:x2] = (markers == 1).astype(np.uint8) * 255
+            return smooth_mask(fill_holes(snapped))
+
+    cur = m
     for _ in range(max(0, k)):
         cur = cv2.dilate(cur, ELL3)
     return smooth_mask(fill_holes(cur.astype(np.uint8) * 255))
@@ -836,7 +849,9 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
 
     split = False
     ignore_dt = None
-    if others and any(containment(inner, o) > MERGE_COVER for o in others):
+    sel_box = tuple(int(v) for v in text_xyxy)
+    if others and any(containment(inner, o) > MERGE_COVER
+                     for o in others if tuple(int(v) for v in o) != sel_box):
         inner, cut = split_merged(inner, gray, text_xyxy, others)
         if cut is not None:
             split = True
@@ -849,7 +864,7 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
     if stroke_w < MIN_STROKE:
         # no ink outline -> page background / screentone, not a balloon
         return None
-    outer = expand_to_outer(inner, stroke_w)
+    outer = expand_to_outer(inner, stroke_w, gray=gray)
     if not outer.any():
         return None
     outer, fragments, trim_stats = trim_fragments(outer, text_xyxy)
@@ -962,8 +977,10 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         return out
 
     dist = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
-    gx = cv2.Sobel(dist, cv2.CV_32F, 1, 0, ksize=3)
-    gy = cv2.Sobel(dist, cv2.CV_32F, 0, 1, ksize=3)
+    # Smooth distance field with a gentle gaussian for stable, noise-free normals
+    dist_smooth = cv2.GaussianBlur(dist, (3, 3), 0.8)
+    gx = cv2.Sobel(dist_smooth, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(dist_smooth, cv2.CV_32F, 0, 1, ksize=3)
     mag = np.hypot(gx, gy)
     mag[mag < 1e-6] = 1.0
     nx, ny = gx / mag, gy / mag  # inward normals (dist grows inward)
@@ -976,25 +993,44 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     rx, ry = xx[ring], yy[ring]
     sx = rx + px * nx[ring]
     sy = ry + px * ny[ring]
-    x0 = np.floor(sx).astype(int)
-    y0 = np.floor(sy).astype(int)
-    fx = (sx - x0).astype(np.float32)
-    fy = (sy - y0).astype(np.float32)
-    x1c = np.clip(x0 + 1, 0, W - 1)
-    y1c = np.clip(y0 + 1, 0, H - 1)
-    x0c = np.clip(x0, 0, W - 1)
-    y0c = np.clip(y0, 0, H - 1)
+
     src = rgb.astype(np.float32)
-    samp = (src[y0c, x0c] * (1 - fx[:, None]) * (1 - fy[:, None])
-            + src[y0c, x1c] * fx[:, None] * (1 - fy[:, None])
-            + src[y1c, x0c] * (1 - fx[:, None]) * fy[:, None]
-            + src[y1c, x1c] * fx[:, None] * fy[:, None])
+
+    def _sample(cx, cy):
+        x0 = np.clip(np.floor(cx).astype(int), 0, W - 1)
+        y0 = np.clip(np.floor(cy).astype(int), 0, H - 1)
+        x1 = np.clip(x0 + 1, 0, W - 1)
+        y1 = np.clip(y0 + 1, 0, H - 1)
+        fx = (cx - x0).astype(np.float32)
+        fy = (cy - y0).astype(np.float32)
+        return (src[y0, x0] * (1 - fx[:, None]) * (1 - fy[:, None])
+                + src[y0, x1] * fx[:, None] * (1 - fy[:, None])
+                + src[y1, x0] * (1 - fx[:, None]) * fy[:, None]
+                + src[y1, x1] * fx[:, None] * fy[:, None])
+
+    samp_c = _sample(sx, sy)
+    # Check a subpixel +-0.8px step along the normal to lock onto the true ink core
+    # even when discrete dilation slightly misaligns the normal phase.
+    samp_in = _sample(sx + 0.8 * nx[ring], sy + 0.8 * ny[ring])
+    samp_out = _sample(sx - 0.8 * nx[ring], sy - 0.8 * ny[ring])
+
+    lum_c = samp_c[:, 0] * 0.299 + samp_c[:, 1] * 0.587 + samp_c[:, 2] * 0.114
+    lum_i = samp_in[:, 0] * 0.299 + samp_in[:, 1] * 0.587 + samp_in[:, 2] * 0.114
+    lum_o = samp_out[:, 0] * 0.299 + samp_out[:, 1] * 0.587 + samp_out[:, 2] * 0.114
+
+    min_lum = np.minimum(lum_c, np.minimum(lum_i, lum_o))
+    samp = samp_c.copy()
+    pick_i = (lum_i == min_lum) & (lum_i < lum_c - 12)
+    pick_o = (lum_o == min_lum) & (lum_o < lum_c - 12)
+    samp[pick_i] = samp_in[pick_i]
+    samp[pick_o] = samp_out[pick_o]
 
     # Alpha ramp: dist ≥ aa_width → 1.0 (solid), dist → 0 fades to 0.
-    # This anti-aliases the outer edge of the ring over ~aa_width px.
+    # This anti-aliases the outer edge of the ring over ~aa_width px against the
+    # true original page background (not the repainted fill), avoiding a light halo.
     edge_dist = dist[ring]
     alpha = np.clip(edge_dist / aa_width, 0.0, 1.0).astype(np.float32)
-    bg = out[ring].astype(np.float32)
+    bg = rgb[ring].astype(np.float32)
     out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
     return out
 
