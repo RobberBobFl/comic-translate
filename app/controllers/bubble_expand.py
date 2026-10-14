@@ -197,7 +197,7 @@ class BubbleExpandController:
         rgb = self._last_rgb
         base = mask if mask is not None else res["outer"]
 
-        expanded = br.expand_mask(base, px)
+        expanded = br.expand_mask(base, px, borders=res.get("borders"))
         if not expanded.any():
             self._clear_preview()
             return

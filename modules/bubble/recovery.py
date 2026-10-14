@@ -845,6 +845,97 @@ def ink_inner_snap(mask: np.ndarray, gray: np.ndarray, text_xyxy,
     return smooth_mask(fill_holes(snapped))
 
 
+def find_panel_borders(gray: np.ndarray, mask: np.ndarray, dark_thresh: int = 70) -> dict[str, int]:
+    """Detect straight panel frame borders that the bubble touches or rests against.
+
+    When a bubble rests against a continuous panel border (e.g. at the right edge
+    of a frame or top/bottom border), expanding the mask isotropically would leak
+    past the frame line into the gutter. Furthermore, repainting an outline across
+    that border would draw an artificial round arc over the straight panel line.
+
+    Returns a dict with detected borders, e.g. {'right': 596, 'top': 123}.
+    """
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0:
+        return {}
+    x_min, x_max = int(xs.min()), int(xs.max())
+    y_min, y_max = int(ys.min()), int(ys.max())
+    h_bubble = y_max - y_min + 1
+    w_bubble = x_max - x_min + 1
+    H, W = gray.shape
+
+    borders: dict[str, int] = {}
+    # 1. Right edge
+    for x in range(x_max - 2, min(W, x_max + 4)):
+        in_b = np.sum(gray[y_min:y_max+1, x] < dark_thresh)
+        above = np.sum(gray[max(0, y_min - 60):y_min, x] < dark_thresh)
+        below = np.sum(gray[y_max+1:min(H, y_max + 61), x] < dark_thresh)
+        line_above = (above >= 20) and (
+            (np.sum(gray[max(0, y_min - 60):y_min, max(0, x - 8)] > dark_thresh) > 10) or
+            (np.sum(gray[max(0, y_min - 60):y_min, min(W - 1, x + 8)] > dark_thresh) > 10)
+        )
+        line_below = (below >= 20) and (
+            (np.sum(gray[y_max+1:min(H, y_max + 61), max(0, x - 8)] > dark_thresh) > 10) or
+            (np.sum(gray[y_max+1:min(H, y_max + 61), min(W - 1, x + 8)] > dark_thresh) > 10)
+        )
+        if in_b >= 0.45 * h_bubble and (line_above or line_below):
+            borders["right"] = x
+            break
+
+    # 2. Left edge
+    for x in range(max(0, x_min - 3), x_min + 3):
+        in_b = np.sum(gray[y_min:y_max+1, x] < dark_thresh)
+        above = np.sum(gray[max(0, y_min - 60):y_min, x] < dark_thresh)
+        below = np.sum(gray[y_max+1:min(H, y_max + 61), x] < dark_thresh)
+        line_above = (above >= 20) and (
+            (np.sum(gray[max(0, y_min - 60):y_min, max(0, x - 8)] > dark_thresh) > 10) or
+            (np.sum(gray[max(0, y_min - 60):y_min, min(W - 1, x + 8)] > dark_thresh) > 10)
+        )
+        line_below = (below >= 20) and (
+            (np.sum(gray[y_max+1:min(H, y_max + 61), max(0, x - 8)] > dark_thresh) > 10) or
+            (np.sum(gray[y_max+1:min(H, y_max + 61), min(W - 1, x + 8)] > dark_thresh) > 10)
+        )
+        if in_b >= 0.45 * h_bubble and (line_above or line_below):
+            borders["left"] = x
+            break
+
+    # 3. Top edge
+    for y in range(max(0, y_min - 3), y_min + 3):
+        in_b = np.sum(gray[y, x_min:x_max+1] < dark_thresh)
+        left = np.sum(gray[y, max(0, x_min - 60):x_min] < dark_thresh)
+        right = np.sum(gray[y, x_max+1:min(W, x_max + 61)] < dark_thresh)
+        line_left = (left >= 20) and (
+            (np.sum(gray[max(0, y - 8), max(0, x_min - 60):x_min] > dark_thresh) > 10) or
+            (np.sum(gray[min(H - 1, y + 8), max(0, x_min - 60):x_min] > dark_thresh) > 10)
+        )
+        line_right = (right >= 20) and (
+            (np.sum(gray[max(0, y - 8), x_max+1:min(W, x_max + 61)] > dark_thresh) > 10) or
+            (np.sum(gray[min(H - 1, y + 8), x_max+1:min(W, x_max + 61)] > dark_thresh) > 10)
+        )
+        if in_b >= 0.45 * w_bubble and (line_left or line_right):
+            borders["top"] = y
+            break
+
+    # 4. Bottom edge
+    for y in range(y_max - 2, min(H, y_max + 4)):
+        in_b = np.sum(gray[y, x_min:x_max+1] < dark_thresh)
+        left = np.sum(gray[y, max(0, x_min - 60):x_min] < dark_thresh)
+        right = np.sum(gray[y, x_max+1:min(W, x_max + 61)] < dark_thresh)
+        line_left = (left >= 20) and (
+            (np.sum(gray[max(0, y - 8), max(0, x_min - 60):x_min] > dark_thresh) > 10) or
+            (np.sum(gray[min(H - 1, y + 8), max(0, x_min - 60):x_min] > dark_thresh) > 10)
+        )
+        line_right = (right >= 20) and (
+            (np.sum(gray[max(0, y - 8), x_max+1:min(W, x_max + 61)] > dark_thresh) > 10) or
+            (np.sum(gray[min(H - 1, y + 8), x_max+1:min(W, x_max + 61)] > dark_thresh) > 10)
+        )
+        if in_b >= 0.45 * w_bubble and (line_left or line_right):
+            borders["bottom"] = y
+            break
+
+    return borders
+
+
 def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
                    text_mask=None, other_texts=None) -> dict | None:
     """Recommended path: C -> Cx, falling back to C2 -> C2x.
@@ -915,6 +1006,35 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
     if not outer.any():
         return None
     outer, fragments, trim_stats = trim_fragments(outer, text_xyxy)
+    borders = find_panel_borders(gray, outer)
+    if borders:
+        if "right" in borders:
+            outer[:, borders["right"] + 1:] = 0
+        if "left" in borders:
+            outer[:, :borders["left"]] = 0
+        if "top" in borders:
+            outer[:borders["top"], :] = 0
+        if "bottom" in borders:
+            outer[borders["bottom"] + 1:, :] = 0
+
+        if fragments is None:
+            fragments = np.zeros_like(outer)
+        else:
+            fragments = fragments.copy()
+        ys, xs = np.where(outer > 0)
+        if len(xs) > 0:
+            x_min, x_max = int(xs.min()), int(xs.max())
+            y_min, y_max = int(ys.min()), int(ys.max())
+            H, W = gray.shape
+            if "right" in borders:
+                fragments[y_min:y_max+1, max(0, borders["right"]-1):min(W, borders["right"]+2)] = 255
+            if "left" in borders:
+                fragments[y_min:y_max+1, max(0, borders["left"]-1):min(W, borders["left"]+2)] = 255
+            if "top" in borders:
+                fragments[max(0, borders["top"]-1):min(H, borders["top"]+2), x_min:x_max+1] = 255
+            if "bottom" in borders:
+                fragments[max(0, borders["bottom"]-1):min(H, borders["bottom"]+2), x_min:x_max+1] = 255
+
     return {
         "interior": inner,
         "outer": outer,
@@ -924,12 +1044,13 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
         "fill": estimate_fill(rgb, inner, gray),
         "trim": trim_stats,
         "split": split,
+        "borders": borders,
     }
 
 
 # ------------------------------------------------------------------ expansion
-def expand_mask(outer: np.ndarray, px: int) -> np.ndarray:
-    """Grow the bubble mask by ``px`` px (isotropic)."""
+def expand_mask(outer: np.ndarray, px: int, borders: dict[str, int] | None = None) -> np.ndarray:
+    """Grow the bubble mask by ``px`` px (isotropic), clamped at panel borders."""
     if px <= 0:
         return outer.copy()
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * px + 1, 2 * px + 1))
@@ -937,7 +1058,17 @@ def expand_mask(outer: np.ndarray, px: int) -> np.ndarray:
     expanded = cv2.morphologyEx(
         expanded, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     )
-    return smooth_mask(fill_holes(expanded))
+    res = smooth_mask(fill_holes(expanded))
+    if borders:
+        if "right" in borders:
+            res[:, borders["right"] + 1:] = 0
+        if "left" in borders:
+            res[:, :borders["left"]] = 0
+        if "top" in borders:
+            res[:borders["top"], :] = 0
+        if "bottom" in borders:
+            res[borders["bottom"] + 1:, :] = 0
+    return res
 
 
 def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
