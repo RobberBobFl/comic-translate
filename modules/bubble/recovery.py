@@ -976,6 +976,11 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     if not new_band.any() or px <= 0:
         return out
 
+    # Base distance transform of the pre-expansion mask (base)
+    d_out_base = cv2.distanceTransform((base == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    d_in_base = cv2.distanceTransform(base, cv2.DIST_L2, 5)
+    sdf_old = (d_out_base - d_in_base).astype(np.float32)
+
     dist = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
     # Smooth distance field with a gentle gaussian for stable, noise-free normals
     dist_smooth = cv2.GaussianBlur(dist, (3, 3), 0.8)
@@ -991,8 +996,25 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     if not ring.any():
         return out
     rx, ry = xx[ring], yy[ring]
-    sx = rx + px * nx[ring]
-    sy = ry + px * ny[ring]
+
+    # Target depth in the old stroke corresponds to current depth from the expanded boundary
+    # Newton iteration: ensures sx, sy lands on the exact same SDF depth in the source bubble,
+    # completely eliminating thinning or gaps caused by curvature differences or local variations.
+    target_v = dist[ring] - float(px)
+    sx = (rx + px * nx[ring]).astype(np.float32)
+    sy = (ry + px * ny[ring]).astype(np.float32)
+
+    # 1 iteration of Newton refinement on the source distance field
+    sx_grid = np.zeros((H, W), dtype=np.float32)
+    sy_grid = np.zeros((H, W), dtype=np.float32)
+    sx_grid[ring] = sx
+    sy_grid[ring] = sy
+    sampled_sdf = cv2.remap(sdf_old, sx_grid, sy_grid, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    residual = sampled_sdf[ring] - target_v
+    # Cap residual step to prevent overshooting near sharp corners
+    residual = np.clip(residual, -2.0, 2.0)
+    sx = np.clip(sx - residual * nx[ring], 0.0, W - 1.0)
+    sy = np.clip(sy - residual * ny[ring], 0.0, H - 1.0)
 
     src = rgb.astype(np.float32)
 
