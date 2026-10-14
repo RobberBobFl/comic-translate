@@ -68,6 +68,42 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
     return out
 
 
+def smooth_mask(mask: np.ndarray, sigma: float = 2.0) -> np.ndarray:
+    """Smooth the contour of a binary mask to remove staircase / jagged edges.
+
+    Extracts all outer contours at pixel resolution, filters their (x, y)
+    coordinates with a periodic 1-D Gaussian of width ``sigma``, then
+    redraws them as filled polygons.  Small contours (perimeter < kernel
+    width) are left untouched.
+
+    This removes the staircase inherent in binary masks from thresholding
+    and morphological ops while preserving the overall balloon shape.
+    """
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return mask
+    out = np.zeros_like(mask)
+    ksize = max(3, int(6 * sigma) | 1)          # ≥ 3, always odd
+    half = ksize // 2
+    t = np.arange(-half, half + 1, dtype=np.float64)
+    ker = np.exp(-0.5 * (t / sigma) ** 2)
+    ker /= ker.sum()
+    for c in contours:
+        pts = c[:, 0, :].astype(np.float64)
+        n = len(pts)
+        if n < ksize:
+            cv2.drawContours(out, [c], -1, 255, -1)
+            continue
+        xp = np.concatenate([pts[-half:, 0], pts[:, 0], pts[:half, 0]])
+        yp = np.concatenate([pts[-half:, 1], pts[:, 1], pts[:half, 1]])
+        sx = np.convolve(xp, ker, 'valid')
+        sy = np.convolve(yp, ker, 'valid')
+        smooth = np.stack([sx, sy], axis=1).astype(np.int32).reshape(-1, 1, 2)
+        cv2.drawContours(out, [smooth], -1, 255, -1)
+    return fill_holes(out)
+
+
 def _center(xyxy) -> tuple[int, int]:
     x1, y1, x2, y2 = (int(v) for v in xyxy)
     return (x1 + x2) // 2, (y1 + y2) // 2
@@ -419,7 +455,7 @@ def expand_to_outer(interior: np.ndarray, k: int) -> np.ndarray:
     cur = (interior > 0).astype(np.uint8)
     for _ in range(max(0, k)):
         cur = cv2.dilate(cur, ELL3)
-    return fill_holes(cur.astype(np.uint8) * 255)
+    return smooth_mask(fill_holes(cur.astype(np.uint8) * 255))
 
 
 def _max_cross_width(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
@@ -839,7 +875,7 @@ def expand_mask(outer: np.ndarray, px: int) -> np.ndarray:
     expanded = cv2.morphologyEx(
         expanded, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     )
-    return fill_holes(expanded)
+    return smooth_mask(fill_holes(expanded))
 
 
 def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
