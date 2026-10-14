@@ -3,8 +3,8 @@
 Works only inside the manual editor: for the selected text block it recovers
 the bubble mask (recommended research path C->C2->Cx, with tail/fragment
 trimming), shows a preview overlay, asks for an expansion in px, then repaints
-the enlarged bubble (flat fill + distance-transform-ring contour at the
-measured stroke width) and applies it as a single inpaint patch.
+the enlarged bubble (flat fill + original outline transplanted outward) and
+applies it as a single inpaint patch.
 
 The patch goes through the existing ``PatchInsertCommand`` machinery, so Undo
 works and the automatic pipeline is untouched. Enable analysis dumps with
@@ -198,8 +198,8 @@ class BubbleExpandController:
             self._clear_preview()
             return
         stroke_w = res["stroke_w"]
-        repainted = br.repaint(
-            rgb, expanded, stroke_w, res.get("fill", (255, 255, 255)),
+        repainted = br.repaint_transplant(
+            rgb, base, expanded, px, res.get("fill", (255, 255, 255)),
         )
 
         self._apply_patch(repainted, expanded, stroke_w)

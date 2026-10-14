@@ -6,11 +6,11 @@ recovery   interior mask via C (white-threshold connected components inside the
            detector bubble box), falling back to C2 (colour-adaptive) when the
            text is not contained, then expanding through the stroke to the
            outer contour (Cx / C2x) with an auto-estimated stroke width.
-expansion  dilate the outer mask, repaint a flat fill and redraw the outline as
-           a distance-transform ring (``stroke_r`` deep from the mask edge).
-           The ring hits the requested width exactly and stays constant along
-           the perimeter, unlike ``cv2.drawContours`` which quantises stroke
-           width in ~2px steps (Stage 7 calibration).
+expansion  dilate the outer mask, flat-fill the interior and transplant the
+           original outline outward: the new edge ring is a copy of the true
+           edge strip, shifted along the boundary normals by the expansion
+           distance, so width / colour / anti-aliasing match the original
+           balloon instead of a uniform synthetic band.
 
 Inputs are only what the editor already holds: page RGB, text bbox and the
 optional detector bubble box. Nothing here touches the automatic pipeline.
@@ -548,8 +548,6 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
         if area == 0 or area > max_frag_frac * total:
             continue
         trial = kept & (frag == 0)
-        print(f'[P2 dbg] depth={depth:.1f} dist_tip={dist_tip:.0f} far={far[0]},{far[1]} '
-              f'trial_cont={containment(trial, text_xyxy):.2f} frag_px={int((frag > 0).sum())}')
         if containment(trial, text_xyxy) < min(min_cont, orig_cont):
             continue
         if not _narrows_to_tip(frag, far, n):
@@ -745,6 +743,64 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
 
     a = alpha[..., None]
     sub[:] = (sub * (1 - a)).astype(np.uint8)
+    return out
+
+
+def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
+                       px: int, fill: tuple[int, int, int] = (255, 255, 255),
+                       wmax: int = 6) -> np.ndarray:
+    """Flat fill + original outline transplanted outward by ``px`` (variant A).
+
+    ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
+    The whole expanded interior is filled with ``fill`` (this erases the old
+    outline, which would otherwise stay behind as a ghost ring, plus the
+    source glyphs so translated text lands on a clean plate). The new edge
+    ring (``wmax`` px deep from the expanded boundary) is then copied from
+    the true original edge strip: every new-edge pixel at depth ``d`` takes
+    the colour of the original pixel at the same depth ``d`` from the
+    ``outer`` boundary, i.e. shifted ``px`` inward along the boundary normal
+    and bilinearly sampled. Width, ink colour and anti-aliasing therefore
+    match the original balloon instead of a uniform synthetic band.
+    """
+    out = rgb.copy()
+    subm = (expanded > 0).astype(np.uint8)
+    if not subm.any():
+        return out
+    f = tuple(int(np.clip(v, 0, 255)) for v in fill)
+    out[subm > 0] = f
+    base = (outer > 0).astype(np.uint8)
+    new_band = (subm > 0) & (base == 0)
+    if not new_band.any() or px <= 0:
+        return out
+
+    dist = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
+    gx = cv2.Sobel(dist, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(dist, cv2.CV_32F, 0, 1, ksize=3)
+    mag = np.hypot(gx, gy)
+    mag[mag < 1e-6] = 1.0
+    nx, ny = gx / mag, gy / mag  # inward normals (dist grows inward)
+    H, W = subm.shape
+    yy, xx = np.mgrid[0:H, 0:W]
+    ring = new_band & (dist <= float(wmax) + 1.0)
+    if not ring.any():
+        return out
+    rx, ry = xx[ring], yy[ring]
+    sx = rx + px * nx[ring]
+    sy = ry + px * ny[ring]
+    x0 = np.floor(sx).astype(int)
+    y0 = np.floor(sy).astype(int)
+    fx = (sx - x0).astype(np.float32)
+    fy = (sy - y0).astype(np.float32)
+    x1c = np.clip(x0 + 1, 0, W - 1)
+    y1c = np.clip(y0 + 1, 0, H - 1)
+    x0c = np.clip(x0, 0, W - 1)
+    y0c = np.clip(y0, 0, H - 1)
+    src = rgb.astype(np.float32)
+    samp = (src[y0c, x0c] * (1 - fx[:, None]) * (1 - fy[:, None])
+            + src[y0c, x1c] * fx[:, None] * (1 - fy[:, None])
+            + src[y1c, x0c] * (1 - fx[:, None]) * fy[:, None]
+            + src[y1c, x1c] * fx[:, None] * fy[:, None])
+    out[ring] = np.round(samp).astype(np.uint8)
     return out
 
 
