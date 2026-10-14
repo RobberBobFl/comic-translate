@@ -896,7 +896,7 @@ def repaint(rgb: np.ndarray, expanded: np.ndarray, stroke_r: int,
 
 def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
                        px: int, fill: tuple[int, int, int] = (255, 255, 255),
-                       wmax: int = 6) -> np.ndarray:
+                       wmax: int = 6, aa_width: float = 1.4) -> np.ndarray:
     """Flat fill + original outline transplanted outward by ``px`` (variant A).
 
     ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
@@ -909,6 +909,10 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     ``outer`` boundary, i.e. shifted ``px`` inward along the boundary normal
     and bilinearly sampled. Width, ink colour and anti-aliasing therefore
     match the original balloon instead of a uniform synthetic band.
+
+    The outer edge of the ring is alpha-blended with the background over
+    ``aa_width`` px (default 1.4) so the boundary fades smoothly instead of
+    producing a hard staircase from the binary mask.
     """
     out = rgb.copy()
     subm = (expanded > 0).astype(np.uint8)
@@ -929,7 +933,8 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     nx, ny = gx / mag, gy / mag  # inward normals (dist grows inward)
     H, W = subm.shape
     yy, xx = np.mgrid[0:H, 0:W]
-    ring = new_band & (dist <= float(wmax) + 1.0)
+    # Widen the ring zone by aa_width so the blend tail has room to fade
+    ring = new_band & (dist <= float(wmax) + 1.0 + aa_width)
     if not ring.any():
         return out
     rx, ry = xx[ring], yy[ring]
@@ -948,7 +953,13 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
             + src[y0c, x1c] * fx[:, None] * (1 - fy[:, None])
             + src[y1c, x0c] * (1 - fx[:, None]) * fy[:, None]
             + src[y1c, x1c] * fx[:, None] * fy[:, None])
-    out[ring] = np.round(samp).astype(np.uint8)
+
+    # Alpha ramp: dist ≥ aa_width → 1.0 (solid), dist → 0 fades to 0.
+    # This anti-aliases the outer edge of the ring over ~aa_width px.
+    edge_dist = dist[ring]
+    alpha = np.clip(edge_dist / aa_width, 0.0, 1.0).astype(np.float32)
+    bg = out[ring].astype(np.float32)
+    out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
     return out
 
 
