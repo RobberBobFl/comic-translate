@@ -141,9 +141,39 @@ def _interior_roi(text_xyxy, bubble_xyxy, shape):
     return inflate(bubble_xyxy, 0.12, 8, shape=shape)
 
 
-def interior_white(gray: np.ndarray, text_xyxy, bubble_xyxy) -> np.ndarray | None:
+def _union_roi(text_xyxy, others, shape, pad: int = 30, bubble_xyxy=None):
+    """ROI covering the selected text plus nearby texts (for merged splits).
+
+    Starts from the standard bubble-box ROI so nothing is lost when no
+    neighbour is close, then grows to include nearby texts.
+    """
+    if bubble_xyxy is not None:
+        bx1, by1, bx2, by2 = _interior_roi(text_xyxy, bubble_xyxy, shape)
+        xs = [bx1, bx2]
+        ys = [by1, by2]
+    else:
+        xs = [text_xyxy[0], text_xyxy[2]]
+        ys = [text_xyxy[1], text_xyxy[3]]
+    w = text_xyxy[2] - text_xyxy[0]
+    h = text_xyxy[3] - text_xyxy[1]
+    cx = (text_xyxy[0] + text_xyxy[2]) / 2
+    cy = (text_xyxy[1] + text_xyxy[3]) / 2
+    for o in others:
+        ox = (o[0] + o[2]) / 2
+        oy = (o[1] + o[3]) / 2
+        if abs(ox - cx) < 2 * w + 120 and abs(oy - cy) < 2 * h + 120:
+            xs += [o[0], o[2]]
+            ys += [o[1], o[3]]
+    x1, y1 = max(0, int(min(xs)) - pad), max(0, int(min(ys)) - pad)
+    x2, y2 = min(shape[1], int(max(xs)) + pad), min(shape[0], int(max(ys)) + pad)
+    return (x1, y1, x2, y2)
+
+
+def interior_white(gray: np.ndarray, text_xyxy, bubble_xyxy,
+                   roi=None) -> np.ndarray | None:
     """C: threshold + connected components inside the ROI around the text."""
-    roi = _interior_roi(text_xyxy, bubble_xyxy, gray.shape)
+    if roi is None:
+        roi = _interior_roi(text_xyxy, bubble_xyxy, gray.shape)
     x1, y1, x2, y2 = roi
     binw = (gray[y1:y2, x1:x2] >= WHITE).astype(np.uint8)
     comp = _pick_component(binw, roi, _center(text_xyxy), text_xyxy)
@@ -187,10 +217,11 @@ def _fill_color(rgb: np.ndarray, text_xyxy, bubble_xyxy, text_mask) -> np.ndarra
 
 
 def interior_color(rgb: np.ndarray, gray: np.ndarray, text_xyxy, bubble_xyxy,
-                   text_mask) -> np.ndarray | None:
+                   text_mask, roi=None) -> np.ndarray | None:
     """C2: colour-adaptive interior (white / cream / yellow bubbles)."""
     fill = _fill_color(rgb, text_xyxy, bubble_xyxy, text_mask)
-    roi = _interior_roi(text_xyxy, bubble_xyxy, gray.shape)
+    if roi is None:
+        roi = _interior_roi(text_xyxy, bubble_xyxy, gray.shape)
     x1, y1, x2, y2 = roi
     dist = np.abs(rgb[y1:y2, x1:x2].astype(np.int16) - fill).sum(2)
     comp = _pick_component((dist <= COLOR_MAX_DIST).astype(np.uint8), roi,
@@ -205,7 +236,9 @@ def interior_color(rgb: np.ndarray, gray: np.ndarray, text_xyxy, bubble_xyxy,
 
 # ------------------------------------------------------------------- outer Cx
 def _stroke_profile(gray: np.ndarray, interior: np.ndarray,
-                    max_r: int = MAX_STROKE) -> dict:
+                    max_r: int = MAX_STROKE,
+                    ignore_dt: np.ndarray | None = None,
+                    ignore_r: float = 4.0) -> dict:
     """Sample the outline along the interior boundary normals.
 
     From evenly arc-length-resampled boundary points a short walk goes outward
@@ -223,6 +256,12 @@ def _stroke_profile(gray: np.ndarray, interior: np.ndarray,
     outlines touching) are dropped for the same reason. Runs that *do* contact
     ink still count towards ``coverage`` (the share of the boundary that sits on
     ink), so a balloon over a black panel is not punished.
+
+    ``ignore_dt`` is an optional distance transform of "cut" pixels (e.g. the
+    watershed seam where a merged bubble was split from its neighbour):
+    sample points closer than ``ignore_r`` to a cut are skipped entirely, so
+    the seam - which has no ink by construction - does not drag ``coverage``
+    down and the split balloon is judged by its true outline only.
     """
     prof = {"n": 0, "runs": np.empty(0), "clean": np.empty(0), "blocked": 0,
             "coverage": 0.0, "med": 0.0, "p25": 0.0}
@@ -257,11 +296,23 @@ def _stroke_profile(gray: np.ndarray, interior: np.ndarray,
     py = np.convolve(np.concatenate([py[-k:], py, py[:k]]), ker, "same")[k:-k]
 
     H, W = gray.shape
+    if ignore_dt is not None:
+        ign = ignore_dt
+    else:
+        ign = None
     hits = []
     clean = []
     blocked = 0
     ink_contact = 0
+    counted = 0
     for i in range(n):
+        if ign is not None:
+            xi = int(round(px[i]))
+            yi = int(round(py[i]))
+            if 0 <= xi < ign.shape[1] and 0 <= yi < ign.shape[0]:
+                if float(ign[yi, xi]) < ignore_r:
+                    continue
+        counted += 1
         j, h = (i + 1) % n, (i - 1) % n
         tx, ty = float(px[j] - px[h]), float(py[j] - py[h])
         nt = float(np.hypot(tx, ty))
@@ -324,11 +375,11 @@ def _stroke_profile(gray: np.ndarray, interior: np.ndarray,
         clean.append(hit_clean)
 
     hits = np.asarray(hits)
-    prof["n"] = n
     prof["runs"] = hits
     prof["clean"] = np.asarray(clean, dtype=bool)
     prof["blocked"] = blocked
-    prof["coverage"] = float(ink_contact) / n if n else 0.0
+    prof["n"] = counted
+    prof["coverage"] = float(ink_contact) / counted if counted else 0.0
     if hits.size:
         prof["med"] = float(np.median(hits))
         prof["p25"] = float(np.percentile(hits, 25))
@@ -336,7 +387,9 @@ def _stroke_profile(gray: np.ndarray, interior: np.ndarray,
 
 
 def measure_stroke_width(gray: np.ndarray, interior: np.ndarray,
-                         max_r: int = MAX_STROKE) -> int:
+                         max_r: int = MAX_STROKE,
+                         ignore_dt: np.ndarray | None = None,
+                         ignore_r: float = 4.0) -> int:
     """Outline width in px (median of the normal runs).
 
     Samples whose walk ends in a *light* background are the unambiguous ones,
@@ -348,7 +401,7 @@ def measure_stroke_width(gray: np.ndarray, interior: np.ndarray,
     outline is absent on too much of the boundary (``MIN_OUTLINE_COVER``), and
     ``FALLBACK_STROKE`` when there are too few usable samples to measure.
     """
-    prof = _stroke_profile(gray, interior, max_r)
+    prof = _stroke_profile(gray, interior, max_r, ignore_dt, ignore_r)
     runs = prof["runs"]
     n = prof["n"]
     if prof["coverage"] < MIN_OUTLINE_COVER:
@@ -570,6 +623,81 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
     return kept.astype(np.uint8) * 255, fragments, stats
 
 
+MERGE_COVER = 0.3  # neighbour-text containment above this means one merged blob
+
+
+def split_merged(merged: np.ndarray, gray: np.ndarray, text_xyxy,
+                 others) -> tuple[np.ndarray, np.ndarray | None]:
+    """Split a merged white mask so only the selected text's balloon is kept.
+
+    Adjacent balloons joined by a neck (or touching through a thin/broken
+    wall) form a single white connected component, so the interior search
+    returns all of them at once. A watershed with the text boxes as markers
+    cuts the blob along the neck: the selected text keeps its basin, every
+    neighbour keeps its own, ink walls outside the (dilated) text boxes form
+    an excluded region the basins cannot cross.
+
+    Returns ``(kept, cut)``: the selected basin clipped to ``merged``, and
+    the seam band between text basins (``None`` when no neighbour marker
+    landed inside the ROI). The seam has no ink by construction - pass its
+    distance transform to ``measure_stroke_width`` as ``ignore_dt`` so the
+    cut does not drag the outline coverage down.
+    """
+    H, W = merged.shape
+    sel = tuple(int(v) for v in text_xyxy)
+    near = []
+    w = sel[2] - sel[0]
+    h = sel[3] - sel[1]
+    cx = (sel[0] + sel[2]) / 2
+    cy = (sel[1] + sel[3]) / 2
+    for o in others:
+        o = tuple(int(v) for v in o)
+        if o == sel:
+            continue
+        ox = (o[0] + o[2]) / 2
+        oy = (o[1] + o[3]) / 2
+        if abs(ox - cx) < 2 * w + 120 and abs(oy - cy) < 2 * h + 120:
+            near.append(o)
+    xs = [sel[0], sel[2]] + [o[0] for o in near] + [o[2] for o in near]
+    ys = [sel[1], sel[3]] + [o[1] for o in near] + [o[3] for o in near]
+    x1, y1 = max(0, min(xs) - 30), max(0, min(ys) - 30)
+    x2, y2 = min(W, max(xs) + 30), min(H, max(ys) + 30)
+    g = gray[y1:y2, x1:x2]
+    markers = np.zeros((y2 - y1, x2 - x1), np.int32)
+
+    def put(o, val):
+        ox1, oy1 = max(0, o[0] - x1), max(0, o[1] - y1)
+        ox2, oy2 = min(x2 - x1, o[2] - x1), min(y2 - y1, o[3] - y1)
+        if ox2 > ox1 and oy2 > oy1 and not (markers[oy1:oy2, ox1:ox2] != 0).any():
+            markers[oy1:oy2, ox1:ox2] = val
+            return True
+        return False
+
+    put(sel, 1)
+    n_mark = 1
+    for i, o in enumerate(near):
+        if put(o, i + 2):
+            n_mark += 1
+    if n_mark < 2:
+        return merged, None
+    boxes = cv2.dilate((markers != 0).astype(np.uint8), np.ones((5, 5), np.uint8))
+    ink = (g < DARK_STROKE).astype(np.uint8)  # thin walls: basin must abut the edge
+    markers[(ink > 0) & (boxes == 0)] = 99
+    cv2.watershed(cv2.cvtColor(g, cv2.COLOR_GRAY2BGR), markers)
+    m1 = (markers == 1).astype(np.uint8)
+    moth = (((markers >= 2) & (markers != 99)).astype(np.uint8))
+    k5 = np.ones((5, 5), np.uint8)
+    seam = (cv2.dilate(m1, k5) & cv2.dilate(moth, k5)).astype(bool)
+    keep = np.zeros_like(merged)
+    keep[y1:y2, x1:x2] = m1
+    keep = keep & (merged > 0).astype(np.uint8)
+    if not keep.any() or containment(keep.astype(np.uint8) * 255, sel) < 0.5:
+        return merged, None  # split lost the text: keep the merged blob
+    cut = np.zeros_like(merged)
+    cut[y1:y2, x1:x2] = seam.astype(np.uint8) * 255
+    return keep.astype(np.uint8) * 255, cut
+
+
 def plausible_size(inner: np.ndarray, text_xyxy, bubble_xyxy) -> bool:
     """Reject page-fill masks: a balloon interior cannot dwarf its own box."""
     area = int((inner > 0).sum())
@@ -629,13 +757,20 @@ def estimate_fill(rgb: np.ndarray, inner: np.ndarray,
 
 
 def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
-                   text_mask=None) -> dict | None:
+                   text_mask=None, other_texts=None) -> dict | None:
     """Recommended path: C -> Cx, falling back to C2 -> C2x.
 
     Returns ``{"interior", "outer", "fragments", "stroke_w", "method", "fill",
-    "trim"}`` or ``None`` when no plausible bubble was found. ``stroke_w`` is the
-    measured outline width in px; ``outer`` is the body mask after tail/fragment
-    trimming, ``fragments`` marks what was cut, ``fill`` is the interior colour.
+    "trim", "split"}`` or ``None`` when no plausible bubble was found.
+    ``stroke_w`` is the measured outline width in px; ``outer`` is the body
+    mask after tail/fragment trimming, ``fragments`` marks what was cut,
+    ``fill`` is the interior colour, ``split`` tells whether a merged blob
+    was cut away from a neighbouring balloon.
+
+    ``other_texts`` lists the remaining text boxes on the page: when the
+    white component around this text also covers a neighbour (adjacent
+    balloons joined by a neck), the blob is watershed-split and only this
+    text's basin is kept.
 
     Two guards separate a balloon from the page background before any repaint:
     the interior must be plausibly sized (``plausible_size``) and must sit on an
@@ -644,14 +779,17 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
     expander flooded the panel with white.
     """
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    inner = interior_white(gray, text_xyxy, bubble_xyxy)
+    others = [tuple(int(v) for v in o) for o in (other_texts or [])]
+    roi = (_union_roi(text_xyxy, others, gray.shape, bubble_xyxy=bubble_xyxy)
+           if others else None)
+    inner = interior_white(gray, text_xyxy, bubble_xyxy, roi)
     if inner is not None and containment(inner, text_xyxy) < 0.5:
         inner = None  # the white blob found is not the bubble around this text
 
     if inner is not None:
         method = "C->Cx"
     else:
-        inner = interior_color(rgb, gray, text_xyxy, bubble_xyxy, text_mask)
+        inner = interior_color(rgb, gray, text_xyxy, bubble_xyxy, text_mask, roi)
         if inner is not None and containment(inner, text_xyxy) < 0.5:
             inner = None
         method = "C2->C2x"
@@ -659,10 +797,19 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
         return None
     if not has_bubble_box(text_xyxy, bubble_xyxy):
         return None  # no balloon prior: page background / open art
+
+    split = False
+    ignore_dt = None
+    if others and any(containment(inner, o) > MERGE_COVER for o in others):
+        inner, cut = split_merged(inner, gray, text_xyxy, others)
+        if cut is not None:
+            split = True
+            ignore_dt = cv2.distanceTransform(
+                (cut == 0).astype(np.uint8), cv2.DIST_L2, 5)
     if not plausible_size(inner, text_xyxy, bubble_xyxy):
         return None
 
-    stroke_w = measure_stroke_width(gray, inner)
+    stroke_w = measure_stroke_width(gray, inner, ignore_dt=ignore_dt)
     if stroke_w < MIN_STROKE:
         # no ink outline -> page background / screentone, not a balloon
         return None
@@ -678,6 +825,7 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
         "method": method,
         "fill": estimate_fill(rgb, inner, gray),
         "trim": trim_stats,
+        "split": split,
     }
 
 

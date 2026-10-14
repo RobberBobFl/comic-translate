@@ -77,8 +77,12 @@ class BubbleExpandController:
         bubble = blk.bubble_xyxy
         bubble_xyxy = tuple(int(v) for v in bubble) if bubble is not None else None
         text_mask = get_inpaint_mask(list(text_xyxy), rgb)
+        others = [tuple(int(v) for v in b.xyxy)
+                  for b in (getattr(main, "blk_list", None) or [])
+                  if b is not blk and tuple(int(v) for v in b.xyxy) != text_xyxy]
 
-        res = br.recover_bubble(rgb, text_xyxy, bubble_xyxy, text_mask)
+        res = br.recover_bubble(rgb, text_xyxy, bubble_xyxy, text_mask,
+                                other_texts=others)
         if res is None:
             self._clear_preview()
             MMessage.warning(
@@ -91,8 +95,8 @@ class BubbleExpandController:
 
         trim = res.get("trim", {})
         logger.debug(
-            "[bubble-expand] method=%s stroke_w=%s fill=%s trim=%s containment=%s",
-            res["method"], res["stroke_w"], res.get("fill"),
+            "[bubble-expand] method=%s stroke_w=%s fill=%s split=%s trim=%s containment=%s",
+            res["method"], res["stroke_w"], res.get("fill"), res.get("split"),
             f"{trim.get('fragments', 0.0)}%" if trim.get("trimmed") else "no",
             trim.get("containment"),
         )
