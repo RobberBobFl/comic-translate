@@ -104,12 +104,12 @@ class BubbleExpandController:
         self._last_res = res
         self._last_rgb = rgb
 
-        self._show_preview(res["outer"], res.get("fragments"))
+        self._show_preview(res["outer"])
 
         # visible zone = inflated detector box + stroke pad (same pad the
         # patch bbox uses), clipped to the frame; the editor adds its own
         # DRAW_CLAMP_MARGIN for the hard draw limit.
-        zx1, zy1, zx2, zy2 = br.inflate(bubble_xyxy, 0.12, 8, shape=rgb.shape[:2])
+        zx1, zy1, zx2, zy2 = br.inflate(bubble_xyxy, 0.55, 70, shape=rgb.shape[:2])
         pad = int(res["stroke_w"]) + 4
         h, w = rgb.shape[:2]
         zone = (max(0, zx1 - pad), max(0, zy1 - pad),
@@ -158,7 +158,7 @@ class BubbleExpandController:
     def _start_editor(self, res, zone):
         main = self.main
         editor = BubbleMaskEditor(
-            main, main.image_viewer, res["outer"], res.get("fragments"),
+            main, main.image_viewer, res["outer"],
             zone=zone, default_size=10,
         )
         self._active_editor = editor
@@ -172,7 +172,7 @@ class BubbleExpandController:
         self._active_editor = None
         if res is None:
             return
-        self._show_preview(mask, None)
+        self._show_preview(mask)
         main = self.main
         px, ok = QtWidgets.QInputDialog.getInt(
             main.image_viewer,
@@ -234,14 +234,12 @@ class BubbleExpandController:
             )
         return None
 
-    def _show_preview(self, mask: np.ndarray, fragments: np.ndarray | None = None):
+    def _show_preview(self, mask: np.ndarray):
         self._clear_preview()
         viewer = self.main.image_viewer
         h, w = mask.shape[:2]
         overlay = np.zeros((h, w, 4), dtype=np.uint8)
-        overlay[mask > 0] = (0, 255, 0, 110)      # bubble body that will expand
-        if fragments is not None and fragments.any():
-            overlay[fragments > 0] = (255, 0, 0, 140)  # excluded tails / merged blobs
+        overlay[mask > 0] = (0, 255, 0, 110)      # bubble mask that will expand
         qimg = QtGui.QImage(
             overlay.data, w, h, 4 * w, QtGui.QImage.Format.Format_RGBA8888
         )
