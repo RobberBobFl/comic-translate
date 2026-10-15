@@ -1289,6 +1289,9 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     if tail_info is not None:
         tail_mask, base_pt, tip_pt, L_tail, gdist, _ = tail_info
         has_tail = tail_mask is not None and (tail_mask > 0).any()
+    elif not has_tail:
+        tail_mask, base_pt, tip_pt, L_tail, gdist, _ = extract_tail_robust(base_inner)
+        has_tail = tail_mask is not None and (tail_mask > 0).any()
 
     body_mask = (base_inner > 0) & (tail_mask == 0) if has_tail else (base_inner > 0)
     if not (body_mask > 0).any():

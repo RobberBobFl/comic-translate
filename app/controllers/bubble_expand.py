@@ -196,8 +196,10 @@ class BubbleExpandController:
         main = self.main
         rgb = self._last_rgb
         base = mask if mask is not None else res["outer"]
+        is_edited = mask is not None
         expanded = br.expand_mask(
-            base, px, borders=res.get("borders"), fragments=res.get("fragments")
+            base, px, borders=res.get("borders"),
+            fragments=None if is_edited else res.get("fragments")
         )
         if not expanded.any():
             self._clear_preview()
@@ -206,10 +208,10 @@ class BubbleExpandController:
         repainted = br.repaint_transplant(
             rgb, base, expanded, px, res.get("fill", (255, 255, 255)),
             stroke_w=stroke_w,
-            fragments=res.get("fragments"),
-            inner=res.get("interior"),
+            fragments=None if is_edited else res.get("fragments"),
+            inner=None if is_edited else res.get("interior"),
             borders=res.get("borders"),
-            tail_info=res.get("tail_info"),
+            tail_info=None if is_edited else res.get("tail_info"),
             other_texts=res.get("other_texts"),
         )
 
