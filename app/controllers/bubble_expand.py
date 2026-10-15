@@ -196,8 +196,9 @@ class BubbleExpandController:
         main = self.main
         rgb = self._last_rgb
         base = mask if mask is not None else res["outer"]
-
-        expanded = br.expand_mask(base, px, borders=res.get("borders"))
+        expanded = br.expand_mask(
+            base, px, borders=res.get("borders"), fragments=res.get("fragments")
+        )
         if not expanded.any():
             self._clear_preview()
             return
@@ -206,6 +207,8 @@ class BubbleExpandController:
             rgb, base, expanded, px, res.get("fill", (255, 255, 255)),
             stroke_w=stroke_w,
             fragments=res.get("fragments"),
+            inner=res.get("interior"),
+            borders=res.get("borders"),
         )
 
         self._apply_patch(repainted, expanded, stroke_w)

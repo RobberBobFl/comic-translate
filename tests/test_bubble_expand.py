@@ -149,3 +149,55 @@ def test_panel_border_clamping():
     assert detected.get("right") == 80
 
 
+def test_expand_mask_smooth_tail_sdf_union():
+    import cv2
+    import numpy as np
+
+    # Body circle + tail pointing downward
+    mask_body = np.zeros((120, 120), dtype=np.uint8)
+    cv2.circle(mask_body, (60, 50), 25, 255, -1)
+
+    mask_tail = np.zeros((120, 120), dtype=np.uint8)
+    pts = np.array([[55, 70], [65, 70], [60, 110]], dtype=np.int32)
+    cv2.fillPoly(mask_tail, [pts], 255)
+
+    expanded = br.expand_mask(mask_body, px=5, fragments=mask_tail, sigma=3.8)
+
+    # Body expands: max x increases from 85 to ~90
+    assert np.where(expanded > 0)[1].max() >= 89
+
+    # Tail tip at y=110 does NOT expand downward past 110
+    ys = np.where(expanded > 0)[0]
+    assert ys.max() <= 111
+
+
+def test_repaint_transplant_frame_preservation_and_interior_wipe():
+    import cv2
+    import numpy as np
+
+    # Image with panel border line at x=80 and dark text inside bubble
+    rgb = np.full((100, 100, 3), 255, dtype=np.uint8)
+    rgb[:, 80] = (0, 0, 0)  # Panel border
+    rgb[45:55, 45:55] = (10, 10, 10)  # Text inside bubble
+
+    outer = np.zeros((100, 100), dtype=np.uint8)
+    cv2.circle(outer, (50, 50), 25, 255, -1)
+    inner = np.zeros((100, 100), dtype=np.uint8)
+    cv2.circle(inner, (50, 50), 20, 255, -1)
+
+    borders = {"right": 80}
+    expanded = br.expand_mask(outer, 5, borders=borders)
+
+    rep = br.repaint_transplant(
+        rgb, outer, expanded, px=5, fill=(255, 255, 255),
+        stroke_w=3.0, inner=inner, borders=borders
+    )
+
+    # Frame line at x=80 and beyond is 100% bit-exact to original rgb
+    assert np.array_equal(rep[:, 80:], rgb[:, 80:])
+
+    # Inside text is completely wiped clean to fill
+    assert np.all(rep[45:55, 45:55] == (255, 255, 255))
+
+
+

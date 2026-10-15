@@ -1007,34 +1007,6 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
         return None
     outer, fragments, trim_stats = trim_fragments(outer, text_xyxy)
     borders = find_panel_borders(gray, outer)
-    if borders:
-        if "right" in borders:
-            outer[:, borders["right"] + 1:] = 0
-        if "left" in borders:
-            outer[:, :borders["left"]] = 0
-        if "top" in borders:
-            outer[:borders["top"], :] = 0
-        if "bottom" in borders:
-            outer[borders["bottom"] + 1:, :] = 0
-
-        if fragments is None:
-            fragments = np.zeros_like(outer)
-        else:
-            fragments = fragments.copy()
-        ys, xs = np.where(outer > 0)
-        if len(xs) > 0:
-            x_min, x_max = int(xs.min()), int(xs.max())
-            y_min, y_max = int(ys.min()), int(ys.max())
-            H, W = gray.shape
-            if "right" in borders:
-                fragments[y_min:y_max+1, max(0, borders["right"]-1):min(W, borders["right"]+2)] = 255
-            if "left" in borders:
-                fragments[y_min:y_max+1, max(0, borders["left"]-1):min(W, borders["left"]+2)] = 255
-            if "top" in borders:
-                fragments[max(0, borders["top"]-1):min(H, borders["top"]+2), x_min:x_max+1] = 255
-            if "bottom" in borders:
-                fragments[max(0, borders["bottom"]-1):min(H, borders["bottom"]+2), x_min:x_max+1] = 255
-
     return {
         "interior": inner,
         "outer": outer,
@@ -1049,16 +1021,39 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
 
 
 # ------------------------------------------------------------------ expansion
-def expand_mask(outer: np.ndarray, px: int, borders: dict[str, int] | None = None) -> np.ndarray:
-    """Grow the bubble mask by ``px`` px (isotropic), clamped at panel borders."""
+def expand_mask(outer: np.ndarray, px: int, borders: dict[str, int] | None = None,
+                fragments: np.ndarray | None = None, sigma: float = 3.8) -> np.ndarray:
+    """Grow the bubble mask by ``px`` px (isotropic), clamped at panel borders.
+
+    Smoothly expands the bubble body in continuous Signed Distance Field (SDF) space,
+    uniting with unexpanded tail fragments (expand = 0) via smooth SDF union (smax).
+    """
     if px <= 0:
         return outer.copy()
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * px + 1, 2 * px + 1))
-    expanded = cv2.dilate(outer, kernel)
-    expanded = cv2.morphologyEx(
-        expanded, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    )
-    res = smooth_mask(fill_holes(expanded))
+    body_exp = cv2.dilate(outer, kernel)
+
+    m_body = (body_exp > 0).astype(np.uint8)
+    dt_in_body = cv2.distanceTransform(m_body, cv2.DIST_L2, 5)
+    dt_out_body = cv2.distanceTransform((m_body == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    sdf_body = dt_in_body - dt_out_body
+
+    if fragments is not None and (fragments > 0).any():
+        m_tail = (fragments > 0).astype(np.uint8)
+        dt_in_tail = cv2.distanceTransform(m_tail, cv2.DIST_L2, 5)
+        dt_out_tail = cv2.distanceTransform((m_tail == 0).astype(np.uint8), cv2.DIST_L2, 5)
+        sdf_tail = dt_in_tail - dt_out_tail
+        k = max(8.0, 2.0 * float(px))
+        h = np.clip(0.5 + 0.5 * (sdf_body - sdf_tail) / k, 0.0, 1.0)
+        sdf = h * sdf_body + (1.0 - h) * sdf_tail + k * h * (1.0 - h)
+    else:
+        sdf = sdf_body
+
+    if sigma > 0:
+        sdf = cv2.GaussianBlur(sdf, (0, 0), sigmaX=float(sigma), sigmaY=float(sigma))
+    expanded = (sdf >= 0.0).astype(np.uint8) * 255
+    res = fill_holes(expanded)
+
     if borders:
         if "right" in borders:
             res[:, borders["right"] + 1:] = 0
@@ -1127,7 +1122,9 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
                        px: int, fill: tuple[int, int, int] = (255, 255, 255),
                        stroke_w: float | None = None, wmax: int = 6,
                        aa_width: float = 1.4,
-                       fragments: np.ndarray | None = None) -> np.ndarray:
+                       fragments: np.ndarray | None = None,
+                       inner: np.ndarray | None = None,
+                       borders: dict[str, int] | None = None) -> np.ndarray:
     """Flat fill + original outline transplanted outward by ``px`` (variant A).
 
     ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
@@ -1260,6 +1257,24 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
 
     bg = rgb[ring].astype(np.float32)
     out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
+
+    # 9. Inside wipe guarantee: unconditionally fill inner + core deeper than stroke_w
+    wipe_mask = (subm > 0) & (dist_exp > effective_stroke_w + aa_width)
+    if inner is not None and (inner > 0).any():
+        wipe_mask = wipe_mask | ((inner > 0) & (subm > 0))
+    out[wipe_mask] = f
+
+    # 10. Frame line preservation: restore original panel borders
+    if borders:
+        if "right" in borders:
+            out[:, borders["right"]:] = rgb[:, borders["right"]:]
+        if "left" in borders:
+            out[:, :borders["left"] + 1] = rgb[:, :borders["left"] + 1]
+        if "top" in borders:
+            out[:borders["top"] + 1, :] = rgb[:borders["top"] + 1, :]
+        if "bottom" in borders:
+            out[borders["bottom"]:, :] = rgb[borders["bottom"]:, :]
+
     return out
 
 
