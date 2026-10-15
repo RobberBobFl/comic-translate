@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import scipy.ndimage as ndi
 
 WHITE = 185          # "bubble interior" grey threshold
 DARK_STROKE = 100    # strong-stroke grey threshold
@@ -519,7 +520,8 @@ def _narrows_to_tip(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
 
 
 def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
-                   max_frag_frac: float = 0.4, min_cont: float = 0.85):
+                   max_frag_frac: float = 0.4, min_cont: float = 0.85,
+                   cut_fragments: bool = False):
     """Drop mask regions beyond deep convexity-defect necks (tails, merged blobs).
 
     A deep defect marks a neck where the mask protrudes away from the body
@@ -669,7 +671,7 @@ def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
         "fragments": round(100.0 * frag_px / total, 1),
         "containment": round(containment(kept, text_xyxy), 3),
     }
-    return kept.astype(np.uint8) * 255, fragments, stats
+    return (kept.astype(np.uint8) * 255 if cut_fragments else outer.copy()), fragments, stats
 
 
 MERGE_COVER = 0.3  # neighbour-text containment above this means one merged blob
@@ -1005,7 +1007,7 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
     outer = expand_to_outer(inner, stroke_w, gray=gray)
     if not outer.any():
         return None
-    outer, fragments, trim_stats = trim_fragments(outer, text_xyxy)
+    outer, fragments, trim_stats = trim_fragments(outer, text_xyxy, cut_fragments=False)
     borders = find_panel_borders(gray, outer)
     return {
         "interior": inner,
@@ -1030,8 +1032,12 @@ def expand_mask(outer: np.ndarray, px: int, borders: dict[str, int] | None = Non
     """
     if px <= 0:
         return outer.copy()
+    has_tail = fragments is not None and (fragments > 0).any()
+    body = (outer > 0) & (fragments == 0) if has_tail else (outer > 0)
+    if not body.any():
+        body = (outer > 0)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * px + 1, 2 * px + 1))
-    body_exp = cv2.dilate(outer, kernel)
+    body_exp = cv2.dilate(body.astype(np.uint8) * 255, kernel)
 
     m_body = (body_exp > 0).astype(np.uint8)
     dt_in_body = cv2.distanceTransform(m_body, cv2.DIST_L2, 5)
@@ -1168,23 +1174,32 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         else:
             base_inner = outer
 
-    inner_full = base_inner.copy()
-    if fragments is not None and (fragments > 0).any():
-        inner_full = cv2.bitwise_or(inner_full, fragments)
+    has_tail = fragments is not None and (fragments > 0).any()
+    body_mask = (base_inner > 0) & (fragments == 0) if has_tail else (base_inner > 0)
+    if not (body_mask > 0).any():
+        body_mask = (base_inner > 0)
 
-    # 1. Clean source: wipe inside text to avoid stretching glyphs during warp
-    src_clean = rgb.copy()
-    k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    inner_eroded = cv2.erode((base_inner > 0).astype(np.uint8), k3)
-    src_clean[inner_eroded > 0] = f
+    # 1. Tail metrics: L_tail, px_eff, use_tail_anchor
+    d_from_body = cv2.distanceTransform((body_mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    L_tail = float(d_from_body[fragments > 0].max()) if has_tail else 0.0
 
-    # Signed distance field phi: < 0 inside bubble, == 0 at inner edge of stroke, > 0 outside
-    dt_out = cv2.distanceTransform((inner_full == 0).astype(np.uint8), cv2.DIST_L2, 5)
-    dt_in = cv2.distanceTransform((inner_full > 0).astype(np.uint8), cv2.DIST_L2, 5)
-    phi = dt_out - dt_in
+    px_eff = float(px)
+    use_tail_anchor = True
+    if has_tail:
+        if L_tail < 2.0 * px:
+            # Rule C: short tail shifts entirely without anchor
+            use_tail_anchor = False
+        else:
+            # Rule D: Jacobian limit to ensure max |dD| in tail <= 0.45
+            if px_eff > 0.4 * L_tail:
+                px_eff = 0.4 * L_tail
 
-    # 2. Ultra-smooth normal direction field (nx, ny)
-    phi_smooth = cv2.GaussianBlur(phi, (0, 0), sigmaX=8.0, sigmaY=8.0)
+    # 2. Step A: Phi and normal direction field computed ONLY on body_mask
+    dt_out = cv2.distanceTransform((body_mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    dt_in = cv2.distanceTransform((body_mask > 0).astype(np.uint8), cv2.DIST_L2, 5)
+    phi_body = dt_out - dt_in
+
+    phi_smooth = cv2.GaussianBlur(phi_body, (0, 0), sigmaX=8.0, sigmaY=8.0)
     gy, gx = np.gradient(phi_smooth)
     hyp = np.hypot(gx, gy)
     hyp[hyp < 1e-6] = 1.0
@@ -1198,39 +1213,69 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     nx /= hyp2
     ny /= hyp2
 
-    # 3. Tail and border weighting
-    w_tail = np.ones_like(phi, dtype=np.float32)
-    if fragments is not None and (fragments > 0).any():
-        body_mask = (base_inner > 0) & (fragments == 0)
-        if (body_mask > 0).any():
-            d_from_body = cv2.distanceTransform((body_mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
-        else:
-            d_from_body = np.zeros_like(phi)
-        d_to_tail = cv2.distanceTransform((fragments == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    Dx_body = px_eff * nx
+    Dy_body = px_eff * ny
 
+    Dx = Dx_body.copy()
+    Dy = Dy_body.copy()
+
+    tip_x, tip_y = 0.0, 0.0
+    if has_tail:
+        # tail_zone = dilate(fragments, k_stroke)
+        k_stroke = int(round(effective_stroke_w)) + 3
+        k_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k_stroke + 1, 2 * k_stroke + 1))
+        tail_zone = cv2.dilate((fragments > 0).astype(np.uint8), k_elem) > 0
+
+        # Nearest body point via distance_transform_edt
+        _, indices = ndi.distance_transform_edt(~body_mask, return_indices=True)
+        iy, ix = indices[0], indices[1]
+
+        Dx_tail = Dx_body[iy, ix]
+        Dy_tail = Dy_body[iy, ix]
+
+        # Tail axis vector (base to tip)
         ys_t, xs_t = np.where(fragments > 0)
+        touch = cv2.dilate((fragments > 0).astype(np.uint8), np.ones((3, 3), np.uint8)) & body_mask
+        if touch.any():
+            ys_touch, xs_touch = np.where(touch > 0)
+            base_x, base_y = float(xs_touch.mean()), float(ys_touch.mean())
+        else:
+            min_idx = np.argmin(d_from_body[ys_t, xs_t])
+            base_x, base_y = float(xs_t[min_idx]), float(ys_t[min_idx])
+
         tip_idx = np.argmax(d_from_body[ys_t, xs_t])
-        tip_y, tip_x = ys_t[tip_idx], xs_t[tip_idx]
-        max_body_dist = d_from_body[tip_y, tip_x]
+        tip_x, tip_y = float(xs_t[tip_idx]), float(ys_t[tip_idx])
 
-        tail_prog = np.clip(d_from_body / max(1.0, max_body_dist - 4.0), 0.0, 1.0)
-        w_along_tail = 0.7 * (1.0 - tail_prog)
+        v_axis = np.array([tip_x - base_x, tip_y - base_y], dtype=np.float32)
+        v_axis /= max(1e-4, np.linalg.norm(v_axis))
 
-        dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
-        tail_influence = np.clip(1.0 - d_to_tail / 25.0, 0.0, 1.0)
-        tip_influence = np.clip(1.0 - dist_tip / 25.0, 0.0, 1.0)
-        combined_influence = np.maximum(tail_influence, tip_influence)
+        t = np.clip(d_from_body / max(1.0, L_tail), 0.0, 1.0)
 
-        w_tail = 1.0 - combined_influence * (1.0 - w_along_tail)
-        w_tail[dist_tip < 15.0] = 0.0
-        w_blur = cv2.GaussianBlur(w_tail, (0, 0), sigmaX=8.0, sigmaY=8.0)
-        w_tail = np.clip((w_blur - 0.02) / 0.98, 0.0, 1.0)
-        w_tail = (w_tail * np.clip((dist_tip - 2.0) / 8.0, 0.0, 1.0)).astype(np.float32)
+        # Smoothly align displacement along the tail with the tail axis
+        body_disp_mag = np.hypot(Dx_tail, Dy_tail)
+        Dx_axis = body_disp_mag * v_axis[0]
+        Dy_axis = body_disp_mag * v_axis[1]
 
-    # 4. Inverse displacement field Dx, Dy
-    Dx = float(px) * w_tail * nx
-    Dy = float(px) * w_tail * ny
+        dir_blend = np.clip(t / 0.35, 0.0, 1.0)
+        Dx_tail = (1.0 - dir_blend) * Dx_tail + dir_blend * Dx_axis
+        Dy_tail = (1.0 - dir_blend) * Dy_tail + dir_blend * Dy_axis
 
+        # Step B: w_tail smoothstep decay along tail
+        if use_tail_anchor:
+            w_smoothstep = 1.0 - (3.0 * t**2 - 2.0 * t**3)
+            Dx_tail = Dx_tail * w_smoothstep
+            Dy_tail = Dy_tail * w_smoothstep
+
+        Dx[tail_zone] = Dx_tail[tail_zone]
+        Dy[tail_zone] = Dy_tail[tail_zone]
+
+        if use_tail_anchor:
+            dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
+            tip_mask = dist_tip <= 2.0
+            Dx[tip_mask] = 0.0
+            Dy[tip_mask] = 0.0
+
+    # Panel border clamping
     grid_y, grid_x = np.mgrid[0:H, 0:W].astype(np.float32)
     if borders:
         if "right" in borders:
@@ -1242,19 +1287,29 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         if "bottom" in borders:
             Dy = np.where(grid_y >= borders["bottom"] - 1, 0.0, Dy).astype(np.float32)
 
-    Dx = cv2.GaussianBlur(Dx, (0, 0), sigmaX=6.0, sigmaY=6.0)
-    Dy = cv2.GaussianBlur(Dy, (0, 0), sigmaX=6.0, sigmaY=6.0)
+    Dx = cv2.GaussianBlur(Dx, (0, 0), sigmaX=3.0, sigmaY=3.0)
+    Dy = cv2.GaussianBlur(Dy, (0, 0), sigmaX=3.0, sigmaY=3.0)
 
     map_x = (grid_x - Dx).astype(np.float32)
     map_y = (grid_y - Dy).astype(np.float32)
 
+    # 3. Clean source (wipe inside text)
+    src_clean = rgb.copy()
+    k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    inner_eroded = cv2.erode((base_inner > 0).astype(np.uint8), k3)
+    src_clean[inner_eroded > 0] = f
+
     warped_rgb = cv2.remap(src_clean, map_x, map_y, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
 
-    # 5. Layered compositing: soft alpha mask of bubble + stroke + AA
-    effective_stroke_w = float(stroke_w) if (stroke_w is not None and stroke_w > 0) else float(wmax)
-    effective_stroke_w = max(effective_stroke_w, 0.0)
+    # 4. Layered compositing: soft alpha mask of full bubble (body + tail) + stroke + AA
+    inner_full = base_inner.copy()
+    if has_tail:
+        inner_full = cv2.bitwise_or(inner_full, fragments)
+    dt_out_f = cv2.distanceTransform((inner_full == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    dt_in_f = cv2.distanceTransform((inner_full > 0).astype(np.uint8), cv2.DIST_L2, 5)
+    phi_full = dt_out_f - dt_in_f
 
-    bubble_alpha_src = np.clip((effective_stroke_w + 0.8 - phi) / 1.4, 0.0, 1.0).astype(np.float32)
+    bubble_alpha_src = np.clip((effective_stroke_w + 0.8 - phi_full) / 1.4, 0.0, 1.0).astype(np.float32)
     bubble_alpha_warped = cv2.remap(bubble_alpha_src, map_x, map_y, interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
     bubble_alpha_warped = np.clip(bubble_alpha_warped, 0.0, 1.0).astype(np.float32)
 
@@ -1272,11 +1327,17 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     out = alpha_3d * warped_rgb.astype(np.float32) + (1.0 - alpha_3d) * rgb.astype(np.float32)
     out = np.clip(out, 0, 255).astype(np.uint8)
 
-    # 6. Core fixing: eliminate Lanczos ringing and guarantee clean flat interior
-    phi_warped = cv2.remap(phi, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    # 5. Core fixing: eliminate Lanczos ringing and guarantee clean flat interior
+    phi_warped = cv2.remap(phi_full, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     out[phi_warped < -1.5] = f
     if inner is not None:
         out[(inner > 0) & (phi_warped < 0)] = f
+
+    # 6. Tail tip preservation (strictly diff=0 when anchored)
+    if has_tail and use_tail_anchor:
+        dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
+        tip_mask = dist_tip <= 1.5
+        out[tip_mask] = rgb[tip_mask]
 
     # 7. Exact frame line and gutter preservation
     if borders:
