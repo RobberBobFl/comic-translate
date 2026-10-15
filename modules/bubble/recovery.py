@@ -1137,134 +1137,148 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     whether ``outer`` was passed as inner or outer contour.
     """
     out = rgb.copy()
+    if px <= 0:
+        return out
     subm = (expanded > 0).astype(np.uint8)
-    if not subm.any() or px <= 0:
+    if not subm.any():
         return out
 
-    H, W = subm.shape
-    base = (outer > 0).astype(np.uint8)
+    H, W = rgb.shape[:2]
     f = tuple(int(np.clip(v, 0, 255)) for v in fill)
-    f_arr = np.array(f, dtype=np.float32)
 
-    if stroke_w is not None and stroke_w > 0:
-        effective_stroke_w = float(stroke_w)
+    effective_stroke_w = float(stroke_w) if (stroke_w is not None and stroke_w > 0) else float(wmax)
+    effective_stroke_w = max(effective_stroke_w, 0.0)
+
+    # Base inner and full inner (with tails)
+    if inner is not None:
+        base_inner = inner
     else:
-        effective_stroke_w = float(wmax)
-    effective_stroke_w = max(effective_stroke_w, 2.0)
-    ring_depth = effective_stroke_w + 3.0
+        # Check if outer mask was passed with ink stroke inside the contour
+        dt_in_m = cv2.distanceTransform((outer > 0).astype(np.uint8), cv2.DIST_L2, 5)
+        dt_out_m = cv2.distanceTransform((outer == 0).astype(np.uint8), cv2.DIST_L2, 5)
+        band_in_m = (dt_in_m > 0.5) & (dt_in_m <= max(2.0, effective_stroke_w))
+        band_out_m = (dt_out_m > 0.5) & (dt_out_m <= max(2.0, effective_stroke_w))
+        gray_src = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        l_in = float(gray_src[band_in_m].mean()) if band_in_m.any() else 255.0
+        l_out = float(gray_src[band_out_m].mean()) if band_out_m.any() else 255.0
+        if l_in < l_out and l_in < 180.0:
+            rad = int(round(effective_stroke_w))
+            k_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * rad + 1, 2 * rad + 1))
+            base_inner = cv2.erode((outer > 0).astype(np.uint8), k_erode)
+        else:
+            base_inner = outer
 
-    # 1. Distance transform and inward normals of expanded mask
-    dist_exp = cv2.distanceTransform(subm, cv2.DIST_L2, 5)
-    dist_exp_smooth = cv2.GaussianBlur(dist_exp, (0, 0), sigmaX=1.5, sigmaY=1.5)
-
-    gx = cv2.Sobel(dist_exp_smooth, cv2.CV_32F, 1, 0, ksize=3)
-    gy = cv2.Sobel(dist_exp_smooth, cv2.CV_32F, 0, 1, ksize=3)
-    mag = np.hypot(gx, gy)
-    mag[mag < 1e-6] = 1.0
-    nx, ny = gx / mag, gy / mag  # inward normal
-
-    # 2. Ring
-    ring = (subm > 0) & (dist_exp <= ring_depth + aa_width)
-    core = (subm > 0) & (dist_exp > ring_depth + aa_width)
-    out[core] = f
-
-    if not ring.any():
-        return out
-
-    yy, xx = np.mgrid[0:H, 0:W]
-    rx = xx[ring].astype(np.float32)
-    ry = yy[ring].astype(np.float32)
-    d_exp = dist_exp[ring].astype(np.float32)
-    rnx = nx[ring]
-    rny = ny[ring]
-
-    # Map expanded ring pixels back to base boundary on original image
-    r_boundary_x = rx - d_exp * rnx
-    r_boundary_y = ry - d_exp * rny
-    base_b_x = r_boundary_x + px * rnx
-    base_b_y = r_boundary_y + px * rny
-
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
-
-    # 3. Locate real center of ink gravity along ray on original image
-    scan_limit = max(3.5, effective_stroke_w + 1.0)
-    scan_ts = np.linspace(-scan_limit, scan_limit, 21)
-    scan_lumas = []
-    for t in scan_ts:
-        sx_t = np.clip(np.round(base_b_x + t * rnx).astype(int), 0, W - 1)
-        sy_t = np.clip(np.round(base_b_y + t * rny).astype(int), 0, H - 1)
-        scan_lumas.append(gray[sy_t, sx_t])
-    scan_lumas = np.array(scan_lumas)
-
-    fill_luma = 0.299 * f[0] + 0.587 * f[1] + 0.114 * f[2]
-    min_luma = np.min(scan_lumas, axis=0)
-    has_ink = (fill_luma - min_luma) >= 20.0
-
-    # Center of ink gravity across the stroke plateau
-    ink_thresh = 0.5 * (fill_luma + min_luma)
-    is_ink = (scan_lumas < ink_thresh[None, :])
-    ink_count = np.sum(is_ink, axis=0)
-    t_center = np.sum(scan_ts[:, None] * is_ink, axis=0) / np.maximum(1, ink_count)
-    t_center[~has_ink] = 0.0
-
-    # Smooth ink center displacement field across the ring
-    t_grid = np.zeros((H, W), dtype=np.float32)
-    w_grid = np.zeros((H, W), dtype=np.float32)
-    t_grid[ring] = t_center
-    w_grid[ring] = 1.0
-    t_smooth = cv2.GaussianBlur(t_grid, (0, 0), sigmaX=3.0, sigmaY=3.0)
-    w_smooth = cv2.GaussianBlur(w_grid, (0, 0), sigmaX=3.0, sigmaY=3.0)
-    w_smooth[w_smooth < 1e-4] = 1.0
-    t_min_smooth = (t_smooth / w_smooth)[ring]
-
-    center_of_ink_x = base_b_x + t_min_smooth * rnx
-    center_of_ink_y = base_b_y + t_min_smooth * rny
-
-    # 4. Sampling position along the profile
-    stroke_center = effective_stroke_w * 0.5 + aa_width * 0.5
-    offset = d_exp - stroke_center
-    sample_pos_x = np.clip(center_of_ink_x + offset * rnx, 0.0, W - 1.0)
-    sample_pos_y = np.clip(center_of_ink_y + offset * rny, 0.0, H - 1.0)
-
-    # 5. Bilinear sampling
-    x0 = np.clip(np.floor(sample_pos_x).astype(int), 0, W - 1)
-    y0 = np.clip(np.floor(sample_pos_y).astype(int), 0, H - 1)
-    x1 = np.clip(x0 + 1, 0, W - 1)
-    y1 = np.clip(y0 + 1, 0, H - 1)
-    fx = (sample_pos_x - x0).astype(np.float32)
-    fy = (sample_pos_y - y0).astype(np.float32)
-
-    src = rgb.astype(np.float32)
-    samp = (src[y0, x0] * (1 - fx[:, None]) * (1 - fy[:, None])
-            + src[y0, x1] * fx[:, None] * (1 - fy[:, None])
-            + src[y1, x0] * (1 - fx[:, None]) * fy[:, None]
-            + src[y1, x1] * fx[:, None] * fy[:, None])
-
-    # 6. Smooth shoulder fade to fill on the inner edge of stroke
-    text_fade_start = effective_stroke_w + 0.5
-    text_fade_end = effective_stroke_w + 2.0
-    text_blend = np.clip((d_exp - text_fade_start) / (text_fade_end - text_fade_start), 0.0, 1.0)
-    samp = samp * (1.0 - text_blend[:, None]) + f_arr[None, :] * text_blend[:, None]
-
-    # 7. Alpha blend on outer edge
-    alpha = np.clip(d_exp / aa_width, 0.0, 1.0).astype(np.float32)
-
-    # 8. Portal / tail cut suppression: do not paint outline across open cuts or tails
+    inner_full = base_inner.copy()
     if fragments is not None and (fragments > 0).any():
-        portal_dist = cv2.distanceTransform((fragments == 0).astype(np.uint8), cv2.DIST_L2, 5)
-        portal_suppress = np.clip((portal_dist[ring] - 1.0) / 4.0, 0.0, 1.0).astype(np.float32)
-        alpha = alpha * portal_suppress
+        inner_full = cv2.bitwise_or(inner_full, fragments)
 
-    bg = rgb[ring].astype(np.float32)
-    out[ring] = np.round(samp * alpha[:, None] + bg * (1.0 - alpha[:, None])).astype(np.uint8)
+    # 1. Clean source: wipe inside text to avoid stretching glyphs during warp
+    src_clean = rgb.copy()
+    k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    inner_eroded = cv2.erode((base_inner > 0).astype(np.uint8), k3)
+    src_clean[inner_eroded > 0] = f
 
-    # 9. Inside wipe guarantee: unconditionally fill inner + core deeper than stroke_w
-    wipe_mask = (subm > 0) & (dist_exp > effective_stroke_w + aa_width)
-    if inner is not None and (inner > 0).any():
-        wipe_mask = wipe_mask | ((inner > 0) & (subm > 0))
-    out[wipe_mask] = f
+    # Signed distance field phi: < 0 inside bubble, == 0 at inner edge of stroke, > 0 outside
+    dt_out = cv2.distanceTransform((inner_full == 0).astype(np.uint8), cv2.DIST_L2, 5)
+    dt_in = cv2.distanceTransform((inner_full > 0).astype(np.uint8), cv2.DIST_L2, 5)
+    phi = dt_out - dt_in
 
-    # 10. Frame line preservation: restore original panel borders
+    # 2. Ultra-smooth normal direction field (nx, ny)
+    phi_smooth = cv2.GaussianBlur(phi, (0, 0), sigmaX=8.0, sigmaY=8.0)
+    gy, gx = np.gradient(phi_smooth)
+    hyp = np.hypot(gx, gy)
+    hyp[hyp < 1e-6] = 1.0
+    nx = (gx / hyp).astype(np.float32)
+    ny = (gy / hyp).astype(np.float32)
+
+    nx = cv2.GaussianBlur(nx, (0, 0), sigmaX=6.0, sigmaY=6.0)
+    ny = cv2.GaussianBlur(ny, (0, 0), sigmaX=6.0, sigmaY=6.0)
+    hyp2 = np.hypot(nx, ny)
+    hyp2[hyp2 < 1e-6] = 1.0
+    nx /= hyp2
+    ny /= hyp2
+
+    # 3. Tail and border weighting
+    w_tail = np.ones_like(phi, dtype=np.float32)
+    if fragments is not None and (fragments > 0).any():
+        body_mask = (base_inner > 0) & (fragments == 0)
+        if (body_mask > 0).any():
+            d_from_body = cv2.distanceTransform((body_mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
+        else:
+            d_from_body = np.zeros_like(phi)
+        d_to_tail = cv2.distanceTransform((fragments == 0).astype(np.uint8), cv2.DIST_L2, 5)
+
+        ys_t, xs_t = np.where(fragments > 0)
+        tip_idx = np.argmax(d_from_body[ys_t, xs_t])
+        tip_y, tip_x = ys_t[tip_idx], xs_t[tip_idx]
+        max_body_dist = d_from_body[tip_y, tip_x]
+
+        tail_prog = np.clip(d_from_body / max(1.0, max_body_dist - 4.0), 0.0, 1.0)
+        w_along_tail = 0.7 * (1.0 - tail_prog)
+
+        dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
+        tail_influence = np.clip(1.0 - d_to_tail / 25.0, 0.0, 1.0)
+        tip_influence = np.clip(1.0 - dist_tip / 25.0, 0.0, 1.0)
+        combined_influence = np.maximum(tail_influence, tip_influence)
+
+        w_tail = 1.0 - combined_influence * (1.0 - w_along_tail)
+        w_tail[dist_tip < 15.0] = 0.0
+        w_blur = cv2.GaussianBlur(w_tail, (0, 0), sigmaX=8.0, sigmaY=8.0)
+        w_tail = np.clip((w_blur - 0.02) / 0.98, 0.0, 1.0)
+        w_tail = (w_tail * np.clip((dist_tip - 2.0) / 8.0, 0.0, 1.0)).astype(np.float32)
+
+    # 4. Inverse displacement field Dx, Dy
+    Dx = float(px) * w_tail * nx
+    Dy = float(px) * w_tail * ny
+
+    grid_y, grid_x = np.mgrid[0:H, 0:W].astype(np.float32)
+    if borders:
+        if "right" in borders:
+            Dx = np.where(grid_x >= borders["right"] - 1, 0.0, Dx).astype(np.float32)
+        if "left" in borders:
+            Dx = np.where(grid_x <= borders["left"] + 1, 0.0, Dx).astype(np.float32)
+        if "top" in borders:
+            Dy = np.where(grid_y <= borders["top"] + 1, 0.0, Dy).astype(np.float32)
+        if "bottom" in borders:
+            Dy = np.where(grid_y >= borders["bottom"] - 1, 0.0, Dy).astype(np.float32)
+
+    Dx = cv2.GaussianBlur(Dx, (0, 0), sigmaX=6.0, sigmaY=6.0)
+    Dy = cv2.GaussianBlur(Dy, (0, 0), sigmaX=6.0, sigmaY=6.0)
+
+    map_x = (grid_x - Dx).astype(np.float32)
+    map_y = (grid_y - Dy).astype(np.float32)
+
+    warped_rgb = cv2.remap(src_clean, map_x, map_y, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+
+    # 5. Layered compositing: soft alpha mask of bubble + stroke + AA
+    effective_stroke_w = float(stroke_w) if (stroke_w is not None and stroke_w > 0) else float(wmax)
+    effective_stroke_w = max(effective_stroke_w, 0.0)
+
+    bubble_alpha_src = np.clip((effective_stroke_w + 0.8 - phi) / 1.4, 0.0, 1.0).astype(np.float32)
+    bubble_alpha_warped = cv2.remap(bubble_alpha_src, map_x, map_y, interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+    bubble_alpha_warped = np.clip(bubble_alpha_warped, 0.0, 1.0).astype(np.float32)
+
+    if borders:
+        if "right" in borders:
+            bubble_alpha_warped[:, borders["right"] + 1:] = 0.0
+        if "left" in borders:
+            bubble_alpha_warped[:, :borders["left"]] = 0.0
+        if "top" in borders:
+            bubble_alpha_warped[:borders["top"], :] = 0.0
+        if "bottom" in borders:
+            bubble_alpha_warped[borders["bottom"] + 1:, :] = 0.0
+
+    alpha_3d = bubble_alpha_warped[..., None]
+    out = alpha_3d * warped_rgb.astype(np.float32) + (1.0 - alpha_3d) * rgb.astype(np.float32)
+    out = np.clip(out, 0, 255).astype(np.uint8)
+
+    # 6. Core fixing: eliminate Lanczos ringing and guarantee clean flat interior
+    phi_warped = cv2.remap(phi, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    out[phi_warped < -1.5] = f
+    if inner is not None:
+        out[(inner > 0) & (phi_warped < 0)] = f
+
+    # 7. Exact frame line and gutter preservation
     if borders:
         if "right" in borders:
             out[:, borders["right"]:] = rgb[:, borders["right"]:]
