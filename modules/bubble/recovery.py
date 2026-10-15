@@ -18,6 +18,7 @@ optional detector bubble box. Nothing here touches the automatic pipeline.
 from __future__ import annotations
 
 import cv2
+import heapq
 import numpy as np
 import scipy.ndimage as ndi
 
@@ -160,7 +161,7 @@ def _interior_roi(text_xyxy, bubble_xyxy, shape):
         # no detector bubble box (or a user-drawn box where bubble == text):
         # search a generous region around the text instead
         return inflate(text_xyxy, 0.6, 30, shape=shape)
-    return inflate(bubble_xyxy, 0.12, 8, shape=shape)
+    return inflate(bubble_xyxy, 0.55, 70, shape=shape)
 
 
 def _union_roi(text_xyxy, others, shape, pad: int = 30, bubble_xyxy=None):
@@ -517,6 +518,94 @@ def _narrows_to_tip(frag: np.ndarray, origin: np.ndarray, axis: np.ndarray,
     base = widths[:q].mean()
     tip = widths[-q:].mean()
     return tip < base * 0.65
+
+
+def geodesic_distance_tail(mask: np.ndarray, seed_mask: np.ndarray) -> np.ndarray:
+    """Compute exact 8-connected geodesic distance inside binary mask from seed_mask."""
+    H, W = mask.shape
+    dist = np.full((H, W), np.inf, dtype=np.float32)
+    ys, xs = np.where(seed_mask & mask)
+    if len(ys) == 0:
+        return dist
+    pq = []
+    for y, x in zip(ys, xs):
+        dist[y, x] = 0.0
+        heapq.heappush(pq, (0.0, y, x))
+    moves = [(-1, 0, 1.0), (1, 0, 1.0), (0, -1, 1.0), (0, 1, 1.0),
+             (-1, -1, 1.4142), (-1, 1, 1.4142), (1, -1, 1.4142), (1, 1, 1.4142)]
+    while pq:
+        d, y, x = heapq.heappop(pq)
+        if d > dist[y, x]:
+            continue
+        for dy, dx, w in moves:
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < H and 0 <= nx < W and mask[ny, nx]:
+                nd = d + w
+                if nd < dist[ny, nx]:
+                    dist[ny, nx] = nd
+                    heapq.heappush(pq, (nd, ny, nx))
+    return dist
+
+
+def extract_tail_robust(white_region: np.ndarray) -> tuple[np.ndarray | None, tuple[int, int] | None, tuple[int, int] | None, float, np.ndarray | None, np.ndarray]:
+    """Robust tail separation using morphological opening and geodesic distance.
+
+    1. Fills holes in the interior white region (e.g. from internal text).
+    2. Performs morphological opening with r ~ 0.45 * r_inscribed (distance transform max)
+       so the tail cleanly detaches from the convex balloon body.
+    3. Finds tail components that touch the dilated body, with area >= 35 px.
+    4. Computes geodesic distance inside the tail from the junction base seed.
+    5. Returns (tail_mask, base_point, tip_point, L_tail, geodesic_dist_map, body_mask).
+    """
+    white_filled = fill_holes(white_region)
+    dt = cv2.distanceTransform(white_filled, cv2.DIST_L2, 5)
+    rmax = float(dt.max())
+    if rmax < 8.0:
+        return None, None, None, 0.0, None, white_filled
+
+    r = max(4, int(round(0.45 * rmax)))
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
+    body = cv2.morphologyEx(white_filled, cv2.MORPH_OPEN, k)
+    nb, lb, sb, _ = cv2.connectedComponentsWithStats(body)
+    if nb <= 1:
+        return None, None, None, 0.0, None, white_filled
+    main_idx = 1 + np.argmax(sb[1:, cv2.CC_STAT_AREA])
+    body = (lb == main_idx).astype(np.uint8) * 255
+
+    tail_candidates = white_filled & (~body)
+    k_touch = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    body_dil = cv2.dilate(body, k_touch)
+
+    nt, lt, st, _ = cv2.connectedComponentsWithStats(tail_candidates)
+    best_tail = None
+    best_L = 0.0
+    best_tip = None
+    best_base = None
+    best_gdist = None
+
+    for c in range(1, nt):
+        cmask = (lt == c).astype(np.uint8)
+        if not (cmask & (body_dil > 0)).any() or st[c, cv2.CC_STAT_AREA] < 35:
+            continue
+        base_seed = cmask & (body_dil > 0)
+        if not base_seed.any():
+            continue
+        gdist = geodesic_distance_tail(cmask > 0, base_seed > 0)
+        valid = gdist[cmask > 0]
+        finite = valid[np.isfinite(valid)]
+        if len(finite) == 0:
+            continue
+        L = float(finite.max())
+        if L > best_L and L >= 10.0:
+            best_L = L
+            best_tail = cmask
+            best_gdist = gdist
+            tip_idx = np.where(gdist == L)
+            best_tip = (int(tip_idx[1][0]), int(tip_idx[0][0]))
+            curr_bys, curr_bxs = np.where(base_seed > 0)
+            best_base = (int(round(float(curr_bxs.mean()))), int(round(float(curr_bys.mean()))))
+
+    return best_tail, best_base, best_tip, best_L, best_gdist, body
 
 
 def trim_fragments(outer: np.ndarray, text_xyxy, thresh: float = 0.22,
@@ -1007,18 +1096,32 @@ def recover_bubble(rgb: np.ndarray, text_xyxy, bubble_xyxy=None,
     outer = expand_to_outer(inner, stroke_w, gray=gray)
     if not outer.any():
         return None
-    outer, fragments, trim_stats = trim_fragments(outer, text_xyxy, cut_fragments=False)
+    outer, _, _ = trim_fragments(outer, text_xyxy, cut_fragments=False)
+
+    # Robust whole-tail extraction via morphological opening & geodesic distance
+    tail, base_pt, tip_pt, L_tail, gdist, body_mask = extract_tail_robust(inner)
+    fragments = tail if tail is not None else np.zeros_like(inner)
+    tail_info = (tail, base_pt, tip_pt, L_tail, gdist, body_mask)
+    trim_stats = {
+        "trimmed": False,
+        "fragments": float(fragments.sum()),
+        "containment": containment(outer, text_xyxy),
+        "L_tail": L_tail,
+    }
+
     borders = find_panel_borders(gray, outer)
     return {
         "interior": inner,
         "outer": outer,
         "fragments": fragments,
+        "tail_info": tail_info,
         "stroke_w": stroke_w,
         "method": method,
         "fill": estimate_fill(rgb, inner, gray),
         "trim": trim_stats,
         "split": split,
         "borders": borders,
+        "other_texts": others,
     }
 
 
@@ -1130,17 +1233,18 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
                        aa_width: float = 1.4,
                        fragments: np.ndarray | None = None,
                        inner: np.ndarray | None = None,
-                       borders: dict[str, int] | None = None) -> np.ndarray:
-    """Flat fill + original outline transplanted outward by ``px`` (variant A).
+                       borders: dict[str, int] | None = None,
+                       tail_info: tuple | None = None,
+                       other_texts: list | None = None) -> np.ndarray:
+    """Flat fill + original outline transplanted outward by ``px`` (diffeomorphic image warping).
 
-    ``outer`` is the pre-expansion body mask, ``expanded`` the dilated mask.
-    The whole expanded interior is filled with ``fill`` (this erases the old
-    outline, which would otherwise stay behind as a ghost ring, plus the
-    source glyphs so translated text lands on a clean plate). The new edge
-    ring is copied from the true original edge strip: every new-edge pixel
-    samples the ink profile relative to the detected ink core on the source image,
-    automatically aligning the ray to the true center of ink gravity regardless of
-    whether ``outer`` was passed as inner or outer contour.
+    Uses continuous smooth displacement field remap with:
+    - Body-only SDF and normal field calculation
+    - Nearest-body displacement extrapolation into tail zone
+    - Geodesic tail distance and smoothstep decay along the tail spine
+    - INTER_CUBIC remap in the tail zone with zero Lanczos ringing
+    - Strict zero tip diff in window +-(stroke_w + 3)
+    - Smoothstep neighbor bubble ink avoidance
     """
     out = rgb.copy()
     if px <= 0:
@@ -1150,16 +1254,17 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         return out
 
     H, W = rgb.shape[:2]
+    grid_y, grid_x = np.mgrid[0:H, 0:W].astype(np.float32)
     f = tuple(int(np.clip(v, 0, 255)) for v in fill)
 
     effective_stroke_w = float(stroke_w) if (stroke_w is not None and stroke_w > 0) else float(wmax)
     effective_stroke_w = max(effective_stroke_w, 0.0)
+    win = int(round(effective_stroke_w + 3.0))
 
     # Base inner and full inner (with tails)
     if inner is not None:
         base_inner = inner
     else:
-        # Check if outer mask was passed with ink stroke inside the contour
         dt_in_m = cv2.distanceTransform((outer > 0).astype(np.uint8), cv2.DIST_L2, 5)
         dt_out_m = cv2.distanceTransform((outer == 0).astype(np.uint8), cv2.DIST_L2, 5)
         band_in_m = (dt_in_m > 0.5) & (dt_in_m <= max(2.0, effective_stroke_w))
@@ -1175,14 +1280,36 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
             base_inner = outer
 
     has_tail = fragments is not None and (fragments > 0).any()
-    body_mask = (base_inner > 0) & (fragments == 0) if has_tail else (base_inner > 0)
+    tail_mask = fragments if has_tail else None
+    base_pt = None
+    tip_pt = None
+    L_tail = 0.0
+    gdist = None
+
+    if tail_info is not None:
+        tail_mask, base_pt, tip_pt, L_tail, gdist, _ = tail_info
+        has_tail = tail_mask is not None and (tail_mask > 0).any()
+
+    body_mask = (base_inner > 0) & (tail_mask == 0) if has_tail else (base_inner > 0)
     if not (body_mask > 0).any():
         body_mask = (base_inner > 0)
 
-    # 1. Tail metrics: L_tail, px_eff, use_tail_anchor
-    d_from_body = cv2.distanceTransform((body_mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
-    L_tail = float(d_from_body[fragments > 0].max()) if has_tail else 0.0
+    if has_tail and (base_pt is None or tip_pt is None or L_tail <= 0.0):
+        body_dil_temp = cv2.dilate(body_mask.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        base_seed = (tail_mask > 0) & (body_dil_temp > 0)
+        if base_seed.any():
+            gdist = geodesic_distance_tail(tail_mask > 0, base_seed > 0)
+            valid = gdist[tail_mask > 0]
+            finite = valid[np.isfinite(valid)]
+            L_tail = float(finite.max()) if len(finite) > 0 else 0.0
+            tip_idx = np.where(gdist == L_tail)
+            tip_pt = (int(tip_idx[1][0]), int(tip_idx[0][0]))
+            bys, bxs = np.where(base_seed > 0)
+            base_pt = (int(round(float(bxs.mean()))), int(round(float(bys.mean()))))
+        else:
+            has_tail = False
 
+    # 1. Tail metrics: L_tail, px_eff, use_tail_anchor
     px_eff = float(px)
     use_tail_anchor = True
     if has_tail:
@@ -1219,12 +1346,13 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     Dx = Dx_body.copy()
     Dy = Dy_body.copy()
 
-    tip_x, tip_y = 0.0, 0.0
+    tail_zone = np.zeros((H, W), dtype=bool)
+    w_tail = np.ones((H, W), dtype=np.float32)
+
     if has_tail:
-        # tail_zone = dilate(fragments, k_stroke)
         k_stroke = int(round(effective_stroke_w)) + 3
         k_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k_stroke + 1, 2 * k_stroke + 1))
-        tail_zone = cv2.dilate((fragments > 0).astype(np.uint8), k_elem) > 0
+        tail_zone = cv2.dilate((tail_mask > 0).astype(np.uint8), k_elem) > 0
 
         # Nearest body point via distance_transform_edt
         _, indices = ndi.distance_transform_edt(~body_mask, return_indices=True)
@@ -1233,23 +1361,12 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         Dx_tail = Dx_body[iy, ix]
         Dy_tail = Dy_body[iy, ix]
 
-        # Tail axis vector (base to tip)
-        ys_t, xs_t = np.where(fragments > 0)
-        touch = cv2.dilate((fragments > 0).astype(np.uint8), np.ones((3, 3), np.uint8)) & body_mask
-        if touch.any():
-            ys_touch, xs_touch = np.where(touch > 0)
-            base_x, base_y = float(xs_touch.mean()), float(ys_touch.mean())
-        else:
-            min_idx = np.argmin(d_from_body[ys_t, xs_t])
-            base_x, base_y = float(xs_t[min_idx]), float(ys_t[min_idx])
-
-        tip_idx = np.argmax(d_from_body[ys_t, xs_t])
-        tip_x, tip_y = float(xs_t[tip_idx]), float(ys_t[tip_idx])
-
-        v_axis = np.array([tip_x - base_x, tip_y - base_y], dtype=np.float32)
+        v_axis = np.array([tip_pt[0] - base_pt[0], tip_pt[1] - base_pt[1]], dtype=np.float32)
         v_axis /= max(1e-4, np.linalg.norm(v_axis))
 
-        t = np.clip(d_from_body / max(1.0, L_tail), 0.0, 1.0)
+        base_seed_zone = (tail_mask > 0) & cv2.dilate(body_mask.astype(np.uint8), np.ones((3, 3), np.uint8))
+        gdist_zone = geodesic_distance_tail(tail_zone, base_seed_zone > 0)
+        t = np.clip(gdist_zone / max(1.0, L_tail), 0.0, 1.0)
 
         # Smoothly align displacement along the tail with the tail axis
         body_disp_mag = np.hypot(Dx_tail, Dy_tail)
@@ -1265,18 +1382,37 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
             w_smoothstep = 1.0 - (3.0 * t**2 - 2.0 * t**3)
             Dx_tail = Dx_tail * w_smoothstep
             Dy_tail = Dy_tail * w_smoothstep
+            w_tail[tail_zone] = w_smoothstep[tail_zone]
 
         Dx[tail_zone] = Dx_tail[tail_zone]
         Dy[tail_zone] = Dy_tail[tail_zone]
 
         if use_tail_anchor:
-            dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
-            tip_mask = dist_tip <= 2.0
-            Dx[tip_mask] = 0.0
-            Dy[tip_mask] = 0.0
+            tip_win_mask = (abs(grid_x - tip_pt[0]) <= win) & (abs(grid_y - tip_pt[1]) <= win)
+            Dx[tip_win_mask] = 0.0
+            Dy[tip_win_mask] = 0.0
+            w_tail[tip_win_mask] = 0.0
+
+    # Neighbor bubble avoidance (item 6)
+    if other_texts:
+        gray_page = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        ink_page = (gray_page < 85).astype(np.uint8)
+        neighbor_mask = np.zeros((H, W), dtype=bool)
+        for nb in other_texts:
+            nx1, ny1, nx2, ny2 = (int(v) for v in nb)
+            nx1, ny1 = max(0, nx1 - 15), max(0, ny1 - 15)
+            nx2, ny2 = min(W, nx2 + 15), min(H, ny2 + 15)
+            neighbor_mask[ny1:ny2, nx1:nx2] = True
+        neighbor_ink = (ink_page > 0) & neighbor_mask
+        if neighbor_ink.any():
+            dist_to_neighbor = cv2.distanceTransform((neighbor_ink == 0).astype(np.uint8), cv2.DIST_L2, 5)
+            d_thresh = px + effective_stroke_w + 2.0
+            s_nb = np.clip(dist_to_neighbor / max(1.0, d_thresh), 0.0, 1.0)
+            w_neighbor = (3.0 * s_nb**2 - 2.0 * s_nb**3).astype(np.float32)
+            Dx *= w_neighbor
+            Dy *= w_neighbor
 
     # Panel border clamping
-    grid_y, grid_x = np.mgrid[0:H, 0:W].astype(np.float32)
     if borders:
         if "right" in borders:
             Dx = np.where(grid_x >= borders["right"] - 1, 0.0, Dx).astype(np.float32)
@@ -1290,21 +1426,38 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
     Dx = cv2.GaussianBlur(Dx, (0, 0), sigmaX=3.0, sigmaY=3.0)
     Dy = cv2.GaussianBlur(Dy, (0, 0), sigmaX=3.0, sigmaY=3.0)
 
+    # Re-apply strict tip zero after gaussian blur
+    if has_tail and use_tail_anchor:
+        tip_win_mask = (abs(grid_x - tip_pt[0]) <= win) & (abs(grid_y - tip_pt[1]) <= win)
+        Dx[tip_win_mask] = 0.0
+        Dy[tip_win_mask] = 0.0
+
     map_x = (grid_x - Dx).astype(np.float32)
     map_y = (grid_y - Dy).astype(np.float32)
 
-    # 3. Clean source (wipe inside text)
+    # 3. Clean source (wipe inside text, avoid wiping inside tail_zone)
     src_clean = rgb.copy()
     k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     inner_eroded = cv2.erode((base_inner > 0).astype(np.uint8), k3)
+    if has_tail:
+        inner_eroded = inner_eroded & (~tail_zone)
     src_clean[inner_eroded > 0] = f
 
-    warped_rgb = cv2.remap(src_clean, map_x, map_y, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+    # Item 5: Use INTER_CUBIC for tail zone to eliminate Lanczos ringing
+    warped_lanczos = cv2.remap(src_clean, map_x, map_y, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+    warped_cubic = cv2.remap(src_clean, map_x, map_y, interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+    warped_rgb = warped_lanczos.copy()
+    if has_tail:
+        warped_rgb[tail_zone] = warped_cubic[tail_zone]
+
+    alpha_tail_blend = np.clip(w_tail / 0.15, 0.0, 1.0)[:, :, None]
+    warped_rgb = (alpha_tail_blend * warped_rgb.astype(np.float32) + (1.0 - alpha_tail_blend) * rgb.astype(np.float32)).astype(np.uint8)
 
     # 4. Layered compositing: soft alpha mask of full bubble (body + tail) + stroke + AA
     inner_full = base_inner.copy()
     if has_tail:
-        inner_full = cv2.bitwise_or(inner_full, fragments)
+        inner_full = cv2.bitwise_or(inner_full, tail_mask)
     dt_out_f = cv2.distanceTransform((inner_full == 0).astype(np.uint8), cv2.DIST_L2, 5)
     dt_in_f = cv2.distanceTransform((inner_full > 0).astype(np.uint8), cv2.DIST_L2, 5)
     phi_full = dt_out_f - dt_in_f
@@ -1323,21 +1476,25 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
         if "bottom" in borders:
             bubble_alpha_warped[borders["bottom"] + 1:, :] = 0.0
 
+    if other_texts and neighbor_ink.any():
+        bubble_alpha_warped[dist_to_neighbor <= 1.0] = 0.0
+
     alpha_3d = bubble_alpha_warped[..., None]
     out = alpha_3d * warped_rgb.astype(np.float32) + (1.0 - alpha_3d) * rgb.astype(np.float32)
     out = np.clip(out, 0, 255).astype(np.uint8)
 
-    # 5. Core fixing: eliminate Lanczos ringing and guarantee clean flat interior
+    # 5. Core flat fill: do NOT apply forced fill inside tail_zone!
     phi_warped = cv2.remap(phi_full, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    out[phi_warped < -1.5] = f
+    body_fill_area = (phi_warped < -1.5) & (~tail_zone)
+    out[body_fill_area] = f
     if inner is not None:
-        out[(inner > 0) & (phi_warped < 0)] = f
+        inner_body_area = (inner > 0) & (phi_warped < 0) & (~tail_zone)
+        out[inner_body_area] = f
 
-    # 6. Tail tip preservation (strictly diff=0 when anchored)
+    # 6. Tail tip preservation (strictly diff=0 in tip window)
     if has_tail and use_tail_anchor:
-        dist_tip = np.hypot(np.arange(W)[None, :] - tip_x, np.arange(H)[:, None] - tip_y)
-        tip_mask = dist_tip <= 1.5
-        out[tip_mask] = rgb[tip_mask]
+        tip_win_mask = (abs(grid_x - tip_pt[0]) <= win) & (abs(grid_y - tip_pt[1]) <= win)
+        out[tip_win_mask] = rgb[tip_win_mask]
 
     # 7. Exact frame line and gutter preservation
     if borders:
@@ -1349,6 +1506,12 @@ def repaint_transplant(rgb: np.ndarray, outer: np.ndarray, expanded: np.ndarray,
             out[:borders["top"] + 1, :] = rgb[:borders["top"] + 1, :]
         if "bottom" in borders:
             out[borders["bottom"]:, :] = rgb[borders["bottom"]:, :]
+
+    # 8. Strict neighbor text box preservation
+    if other_texts:
+        for nb in other_texts:
+            nx1, ny1, nx2, ny2 = (int(v) for v in nb)
+            out[ny1:ny2, nx1:nx2] = rgb[ny1:ny2, nx1:nx2]
 
     return out
 

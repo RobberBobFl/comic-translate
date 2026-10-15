@@ -209,6 +209,8 @@ class BubbleExpandController:
             fragments=res.get("fragments"),
             inner=res.get("interior"),
             borders=res.get("borders"),
+            tail_info=res.get("tail_info"),
+            other_texts=res.get("other_texts"),
         )
 
         self._apply_patch(repainted, expanded, stroke_w)
