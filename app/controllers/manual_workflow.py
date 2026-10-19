@@ -544,17 +544,18 @@ class ManualWorkflowController:
         dedicated review model and store per-block suggestions in page state.
 
         Without *force*, pages that already carry a stored review are not
-        re-sent to the model: in manual mode clicking Review simply reopens
-        the review window for the current page; in semi-auto only pages
-        without a stored review are run.
+        re-sent to the model: clicking Review on a page that already has a
+        stored review simply reopens the review window for it.  In manual
+        mode the selection in the page list is respected (same as OCR /
+        translate); in semi-auto mode all pages are considered.
         """
         from modules.translation.reviewer import TranslationReviewer
 
-        if not getattr(self.main, "semi_auto_mode", False):
-            current = self._current_file_path()
+        current = self._current_file_path()
+        selected_paths = self._filter_skipped(self._selected_page_paths())
+        if not selected_paths:
+            # Fallback: at minimum review the displayed page.
             selected_paths = [current] if current else []
-        else:
-            selected_paths = self._filter_skipped(self._selected_page_paths())
         if not selected_paths:
             return
 
@@ -565,17 +566,18 @@ class ManualWorkflowController:
             return bool(blocks)
 
         if not force:
-            if not getattr(self.main, "semi_auto_mode", False):
-                if current and has_stored_review(current):
-                    # Stored review exists for the displayed page: just show it.
-                    self.main.review_ctrl.show_results(current)
-                    return
-            else:
-                pending = [p for p in selected_paths if not has_stored_review(p)]
-                if selected_paths and not pending:
-                    self.main.review_ctrl.show_results(self._current_file_path())
-                    return
-                selected_paths = pending
+            # If the currently displayed page already has a stored review,
+            # show it immediately regardless of mode.
+            if current and has_stored_review(current):
+                self.main.review_ctrl.show_results(current)
+                return
+            # Skip pages that were already reviewed; only send the rest.
+            pending = [p for p in selected_paths if not has_stored_review(p)]
+            if selected_paths and not pending:
+                # Every selected page is already reviewed - show current page's.
+                self.main.review_ctrl.show_results(current)
+                return
+            selected_paths = pending
 
         settings_page = self.main.settings_page
         llm_settings = settings_page.get_llm_settings()
